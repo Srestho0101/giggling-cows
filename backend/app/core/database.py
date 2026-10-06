@@ -7,17 +7,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.core.config import settings
 
-# Engine configuration
-# If sqlite, use connect_args to allow thread access
-connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.async_database_url,
     echo=settings.DEBUG,
     future=True,
-    connect_args=connect_args,
+    connect_args=settings.database_connect_args,
+    pool_pre_ping=True,
 )
 
 async_session_maker = async_sessionmaker(

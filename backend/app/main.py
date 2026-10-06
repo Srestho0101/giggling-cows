@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -10,9 +11,14 @@ from app.core.database import engine, Base
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure database schema is created on startup if using SQLite/local dev
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Keep SQLite convenient for local development. PostgreSQL schemas are
+    # managed through Alembic so application startup never changes Supabase.
+    if settings.DATABASE_URL.startswith("sqlite"):
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    else:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
     yield
     await engine.dispose()
 

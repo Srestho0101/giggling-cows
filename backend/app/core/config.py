@@ -1,6 +1,11 @@
+from pathlib import Path
 from typing import List, Union
+from urllib.parse import urlsplit
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
@@ -42,11 +47,33 @@ class Settings(BaseSettings):
     DEFAULT_LOCALE: str = "en"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Load the project-level .env regardless of whether commands are run
+        # from the repository root or the backend directory.
+        env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore"
     )
+
+    @property
+    def async_database_url(self) -> str:
+        """Return a URL accepted by SQLAlchemy's async engine."""
+        if self.DATABASE_URL.startswith("postgres://"):
+            return self.DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+        if self.DATABASE_URL.startswith("postgresql://"):
+            return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return self.DATABASE_URL
+
+    @property
+    def database_connect_args(self) -> dict:
+        """Require TLS for Supabase connections; retain SQLite thread options."""
+        if self.DATABASE_URL.startswith("sqlite"):
+            return {"check_same_thread": False}
+
+        host = urlsplit(self.DATABASE_URL).hostname or ""
+        if host.endswith(".supabase.com"):
+            return {"ssl": "require"}
+        return {}
 
 
 settings = Settings()

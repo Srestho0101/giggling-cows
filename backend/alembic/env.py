@@ -25,8 +25,9 @@ if config.config_file_name is not None:
 # Set target metadata for autogenerate
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url with app configuration
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Override sqlalchemy.url with the async driver URL. Alembic's config parser
+# treats percent signs as interpolation markers, so escape encoded URL values.
+config.set_main_option("sqlalchemy.url", settings.async_database_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
@@ -61,6 +62,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=settings.database_connect_args,
     )
 
     async with connectable.connect() as connection:
