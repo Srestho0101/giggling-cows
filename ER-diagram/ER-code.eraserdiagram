@@ -1,0 +1,276 @@
+title Cow Farm Management System - ER Diagram v0.4
+
+// HERD / FARM STRUCTURE
+Warehouse [color: "#3498db"] {
+  warehouse_id int pk
+  name varchar
+  housing_type varchar
+  capacity int
+}
+
+Supplier [color: "#3498db"] {
+  supplier_id int pk
+  name varchar
+  phone varchar
+  supplier_type varchar
+}
+
+// acquisition_type: 'born_on_farm' | 'bought_from_supplier' | 'bought_from_bazar'
+// born_on_farm        -> supplier_id must be NULL; dam_id / sire_id are filled
+// bought_*            -> dam_id / sire_id are NULL; supplier_id filled (optional for bazar if vendor unknown)
+Cow [color: "#3498db"] {
+  cow_id int pk
+  current_tag_number varchar
+  sex varchar
+  category varchar
+  birth_date date
+  acquisition_type varchar
+  acquisition_date date
+  purchase_price decimal
+  supplier_id int
+  dam_id int
+  sire_id int
+  warehouse_id int
+  status varchar
+}
+
+CowIDHistory [color: "#3498db"] {
+  history_id int pk
+  cow_id int
+  tag_number varchar
+  tag_type varchar
+  assigned_date date
+  removed_date date
+  reason text
+}
+
+CowWarehouseHistory [color: "#3498db"] {
+  movement_id int pk
+  cow_id int
+  warehouse_id int
+  moved_in_date date
+  moved_out_date date
+  reason varchar
+}
+
+WeightRecord [color: "#3498db"] {
+  weight_id int pk
+  cow_id int
+  weigh_date date
+  weight_kg decimal
+}
+
+// PURCHASE EVALUATION (buy / return decision)
+// Done BEFORE a cow is accepted, so it is not tied to Cow until bought.
+// growth_potential 'good' -> net_weight_percent 60-62 ; 'poor' (skinny) -> 54-55
+// est_net_weight_kg = live_weight_kg * net_weight_percent / 100
+// net_price_per_kg  = offered_price / est_net_weight_kg
+// is_profitable     = net_price_per_kg < market_price_per_kg
+// decision: 'bought' (cow_id set) | 'returned' (cow_id stays NULL, cow goes back to seller)
+MarketPrice [color: "#16a085"] {
+  market_price_id int pk
+  price_date date
+  price_per_kg_net decimal
+  source varchar
+}
+
+PurchaseEvaluation [color: "#16a085"] {
+  evaluation_id int pk
+  evaluation_date date
+  supplier_id int
+  live_weight_kg decimal
+  growth_potential varchar
+  net_weight_percent decimal
+  est_net_weight_kg decimal
+  offered_price decimal
+  net_price_per_kg decimal
+  market_price_id int
+  market_price_per_kg decimal
+  is_profitable boolean
+  decision varchar
+  cow_id int
+  notes text
+}
+
+// FEED & EXPENSES
+// category_group: 'food' | 'miscellaneous'
+// food: Feed, Green Grass (কাঁচা ঘাস), Dry Straw (শুকনা খড়), Vitamin (ভিটামিন), Molasses (মলাসেস/লালি গুড়)
+// miscellaneous: Cow Rope (গরুর রশি), Tag, Shoes, Cow Mats, Chaff Cutter Repair (কাঁরি কাটার মেশিন), Electronic Items, Electric Bill
+ExpenseCategory [color: "#e67e22"] {
+  category_id int pk
+  name varchar
+  name_bn varchar
+  category_group varchar
+}
+
+FeedType [color: "#e67e22"] {
+  feed_type_id int pk
+  category_id int
+  name varchar
+  name_bn varchar
+  unit varchar
+  unit_cost decimal
+}
+
+FeedingRecord [color: "#e67e22"] {
+  feeding_id int pk
+  feed_type_id int
+  cow_id int
+  feeding_date date
+  quantity decimal
+  cost decimal
+}
+
+Expense [color: "#e67e22"] {
+  expense_id int pk
+  warehouse_id int
+  cow_id int
+  category_id int
+  expense_date date
+  amount decimal
+  description text
+}
+
+// WORKERS & LABOR EXPENSES
+Worker [color: "#8e44ad"] {
+  worker_id int pk
+  name varchar
+  phone varchar
+  role varchar
+  join_date date
+  monthly_salary decimal
+  status varchar
+}
+
+// One row per worker per day. Everyone defaults to present;
+// the data entry person unchecks (is_present = false) absent workers.
+// Unique: (worker_id, attendance_date)
+WorkerAttendance [color: "#8e44ad"] {
+  attendance_id int pk
+  worker_id int
+  attendance_date date
+  is_present boolean
+  note text
+}
+
+SalaryPayment [color: "#8e44ad"] {
+  payment_id int pk
+  worker_id int
+  pay_month date
+  base_salary decimal
+  absence_deduction decimal
+  bonus decimal
+  net_paid decimal
+  paid_date date
+}
+
+// charge_type: 'worker_food' | 'substitute_worker' | 'other'
+// substitute_worker: a one-day hire when a worker is absent (absent_worker_id = who was absent)
+MillCharge [color: "#8e44ad"] {
+  mill_charge_id int pk
+  charge_date date
+  charge_type varchar
+  amount decimal
+//   absent_worker_id int
+  substitute_name varchar
+  description text
+}
+
+// HEALTH
+HealthRecord [color: "#e74c3c"] {
+  health_id int pk
+  cow_id int
+  record_type varchar
+  record_date date
+  vet_name varchar
+  details text
+  cost decimal
+  next_due_date date
+}
+
+// PREGNANCY / REPRODUCTION
+// A cow in heat is given semen by injection (artificial insemination).
+// sire_id is set when the bull is on the farm; semen_code is used for purchased semen.
+BreedingRecord [color: "#e84393"] {
+  breeding_id int pk
+  cow_id int
+  heat_date date
+  seed_date date
+  conception_date date
+  method varchar
+//   semen_code varchar
+  sire_id int
+  doctor_name varchar
+  cost decimal
+  outcome varchar
+  notes text
+}
+
+PregnancyReport [color: "#e84393"] {
+  pregnancy_id int pk
+  cow_id int
+  breeding_id int
+  report_date date
+  status varchar
+  expected_calving_date date
+  actual_calving_date date
+  notes text
+}
+
+// MILK, CUSTOMERS, SALES
+MilkProduction [color: "#27ae60"] {
+  milk_id int pk
+  cow_id int
+  production_date date
+  session varchar
+  liters decimal
+}
+
+Customer [color: "#27ae60"] {
+  customer_id int pk
+  name varchar
+  phone varchar
+  customer_type varchar
+}
+
+// cow_id is nullable: not every sale is attributable to one cow
+Sale [color: "#27ae60"] {
+  sale_id int pk
+  customer_id int
+  cow_id int
+  item_type varchar
+  sale_date date
+  quantity decimal
+  unit_price decimal
+  total_amount decimal
+}
+
+// RELATIONSHIPS
+Cow.warehouse_id > Warehouse.warehouse_id
+Cow.supplier_id > Supplier.supplier_id
+Cow.dam_id > Cow.cow_id
+Cow.sire_id > Cow.cow_id
+CowIDHistory.cow_id > Cow.cow_id
+CowWarehouseHistory.cow_id > Cow.cow_id
+CowWarehouseHistory.warehouse_id > Warehouse.warehouse_id
+WeightRecord.cow_id > Cow.cow_id
+PurchaseEvaluation.supplier_id > Supplier.supplier_id
+PurchaseEvaluation.market_price_id > MarketPrice.market_price_id
+PurchaseEvaluation.cow_id > Cow.cow_id
+FeedType.category_id > ExpenseCategory.category_id
+FeedingRecord.feed_type_id > FeedType.feed_type_id
+FeedingRecord.cow_id > Cow.cow_id
+Expense.warehouse_id > Warehouse.warehouse_id
+Expense.cow_id > Cow.cow_id
+Expense.category_id > ExpenseCategory.category_id
+WorkerAttendance.worker_id > Worker.worker_id
+SalaryPayment.worker_id > Worker.worker_id
+MillCharge.absent_worker_id > Worker.worker_id
+HealthRecord.cow_id > Cow.cow_id
+BreedingRecord.cow_id > Cow.cow_id
+BreedingRecord.sire_id > Cow.cow_id
+PregnancyReport.cow_id > Cow.cow_id
+PregnancyReport.breeding_id > BreedingRecord.breeding_id
+MilkProduction.cow_id > Cow.cow_id
+Sale.customer_id > Customer.customer_id
+Sale.cow_id > Cow.cow_id
