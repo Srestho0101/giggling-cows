@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # Localization defaults
     DEFAULT_CURRENCY: str = "BDT"
     DEFAULT_CURRENCY_SYMBOL: str = "৳"
-    DEFAULT_LOCALE: str = "en"
+    DEFAULT_LOCALE: str = "bn"
 
     model_config = SettingsConfigDict(
         # Load the project-level .env regardless of whether commands are run

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.core.database import async_session_maker
 from app.models.feeding import ExpenseCategory, FeedType
 from app.models.herd import Warehouse
-from app.models.evaluation import MarketPrice
+from app.models.evaluation import MarketPrice, PurchaseEvaluation
 from app.models.herd import Cow, Supplier, WeightRecord, CowWarehouseHistory
 from app.models.feeding import FeedingRecord, Expense
 from app.models.health import HealthRecord, BreedingRecord, PregnancyReport

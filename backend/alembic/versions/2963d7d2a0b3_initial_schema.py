@@ -445,6 +445,19 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_pregnancy_reports_expected_calving_date'), ['expected_calving_date'], unique=False)
         batch_op.create_index(batch_op.f('ix_pregnancy_reports_report_date'), ['report_date'], unique=False)
 
+    # These tables live in Supabase's exposed public schema. Keep Data API
+    # access denied by default; the trusted backend connects with its DB role.
+    for table_name in (
+        'customers', 'expense_categories', 'market_prices', 'mill_charges',
+        'suppliers', 'warehouses', 'workers', 'cows', 'feed_types',
+        'salary_payments', 'sales_invoices', 'worker_attendances',
+        'feeding_records', 'expenses', 'health_records', 'breeding_records',
+        'cow_id_histories', 'cow_warehouse_histories', 'weight_records',
+        'milk_productions', 'purchase_evaluations', 'sale_payments',
+        'sales_invoice_lines', 'pregnancy_reports',
+    ):
+        op.execute(sa.text(f'ALTER TABLE "{table_name}" ENABLE ROW LEVEL SECURITY'))
+
     # ### end Alembic commands ###
 
 
