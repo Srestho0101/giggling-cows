@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cow Farm - UI Demo</title>
+<style>
+  :root { box-sizing: border-box; --bg:#f5f6f4; --card:#fff; --line:#dde1da; --text:#222; --muted:#6b7268; --accent:#2f7d4f; --warn:#b5482e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Noto Sans Bengali", "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--text); font-size:14px; height:100%; }
+  .app { display:grid; grid-template-columns: 200px 1fr; min-height:100vh; }
+  aside { background:#1f2a23; color:#dfe7df; padding:16px 0; }
+  aside h1 { font-size:15px; margin:0 16px 16px; }
+  aside a { display:block; padding:9px 16px; color:#cfd9cf; text-decoration:none; cursor:pointer; }
+  aside a.active, aside a:hover { background:#2f3e33; color:#fff; }
+  main { display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); }
+  header .title { font-weight:600; font-size:16px; flex:1; }
+  .date { border:1px solid var(--line); border-radius:6px; padding:6px 10px; }
+  .lang { border:1px solid var(--line); border-radius:6px; padding:6px 10px; color:var(--muted); }
+  .screen { display:none; padding:16px 20px; }
+  .screen.active { display:block; }
+  .grid3 { display:grid; grid-template-columns: 1.4fr 1fr 1fr; gap:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; }
+  .card h2 { font-size:14px; margin:0 0 10px; }
+  .muted { color:var(--muted); font-size:12px; }
+  input, select { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; font:inherit; background:#fff; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; border:1px solid var(--line); border-radius:6px; padding:6px; min-height:38px; margin-bottom:8px; }
+  .chip { background:#e4efe7; color:#1f5a38; padding:3px 8px; border-radius:12px; font-size:12px; }
+  .preview { background:#f0f6f1; border-radius:6px; padding:8px 10px; margin:8px 0; color:#1f5a38; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:7px 12px; font:inherit; cursor:pointer; }
+  button.ghost { background:#fff; color:var(--text); border:1px solid var(--line); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  tr.row-absent td { color:var(--warn); }
+  .tag { display:inline-block; padding:2px 7px; border-radius:10px; font-size:11px; background:#eee; }
+  .tag.good { background:#e4efe7; color:#1f5a38; }
+  .tag.bad { background:#f7e4de; color:#8a3320; }
+  .totals { display:flex; gap:18px; margin-top:10px; font-weight:600; }
+  .big-badge { display:inline-block; padding:10px 16px; border-radius:8px; background:#e4efe7; color:#1f5a38; font-weight:700; font-size:16px; }
+  .row { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
+  .row label { width:130px; color:var(--muted); font-size:12px; }
+  .row > * { flex:1; }
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .filters { display:flex; gap:8px; margin-bottom:12px; }
+  .filters > * { width:auto; min-width:140px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside>
+    <h1>Cow Farm</h1>
+    <a data-target="today" class="active">Today</a>
+    <a data-target="herd">Herd</a>
+    <a data-target="purchases">Purchases</a>
+    <a data-target="breeding">Breeding</a>
+    <a data-target="health">Health</a>
+    <a data-target="expenses">Expenses</a>
+    <a data-target="payroll">Payroll</a>
+    <a data-target="reports">Reports</a>
+    <a data-target="masters">Masters</a>
+  </aside>
+
+  <main>
+    <header>
+      <div class="title" id="page-title">Today</div>
+      <div class="date">◀ &nbsp; 10 Oct 2026 &nbsp; ▶</div>
+      <div class="lang">বাংলা / English</div>
+    </header>
+
+    <!-- TODAY -->
+    <section class="screen active" id="today">
+      <div class="grid3">
+
+        <div class="card">
+          <h2>Milk</h2>
+          <div class="muted">Cow tags (Enter to add)</div>
+          <div class="chips">
+            <span class="chip">1047 ✕</span>
+            <span class="chip">1052 ✕</span>
+            <span class="chip">1061 ✕</span>
+          </div>
+          <div class="row"><label>Total liters</label><input value="42.60"></div>
+          <div class="preview">3 cows · 42.60 L · about 14.20 L each</div>
+          <button>Save group</button>
+          <h2 style="margin-top:16px">Today's groups</h2>
+          <table>
+            <tr><th>Cows</th><th>Total L</th><th>Each</th><th></th></tr>
+            <tr><td>1012, 1019</td><td>28.00</td><td>14.00</td><td class="muted">edit · delete</td></tr>
+            <tr><td>1047, 1052, 1061</td><td>42.60</td><td>14.20</td><td class="muted">edit · delete</td></tr>
+            <tr><td>1030, 1044</td><td>26.10</td><td>13.05</td><td class="muted">edit · delete</td></tr>
+          </table>
+          <div class="totals"><span>Total 96.70 L</span><span>Cows 7</span><span>Avg 13.81 L</span></div>
+        </div>
+
+        <div class="card">
+          <h2>Attendance</h2>
+          <table>
+            <tr><th>Worker</th><th>Status</th></tr>
+            <tr><td>Rahim</td><td><span class="tag good">Present</span></td></tr>
+            <tr class="row-absent"><td>Karim</td><td><span class="tag bad">Absent</span> <span class="muted">sick</span></td></tr>
+            <tr><td>Salam</td><td><span class="tag good">Present</span></td></tr>
+            <tr><td>Jamal</td><td><span class="tag good">Present</span></td></tr>
+          </table>
+          <div class="muted" style="margin:8px 0">Karim absent. Substitute?</div>
+          <button class="ghost">+ Record substitute</button>
+          <button style="margin-left:6px">Save day</button>
+        </div>
+
+        <div class="card">
+          <h2>Sales</h2>
+          <div class="row"><label>Customer</label><select><option>Hotel Golden Sun</option></select></div>
+          <div class="row"><label>Item</label><select><option>Milk (L)</option></select></div>
+          <div class="row"><label>Quantity</label><input value="20"></div>
+          <div class="row"><label>Unit price ৳</label><input value="95"></div>
+          <div class="preview">Total ৳ 1,900.00</div>
+          <button>Add sale</button>
+          <table style="margin-top:10px">
+            <tr><th>Customer</th><th>Item</th><th>৳</th></tr>
+            <tr><td>Hotel Golden Sun</td><td>Milk 20 L</td><td>1,900</td></tr>
+          </table>
+        </div>
+
+        <div class="card" style="grid-column: span 2">
+          <h2>Expenses</h2>
+          <div class="two">
+            <div>
+              <div class="row"><label>Category</label><select><option>Green grass (কাঁচা ঘাস)</option></select></div>
+              <div class="row"><label>Amount ৳</label><input value="350"></div>
+              <div class="row"><label>Warehouse</label><select><option>Shed A</option></select></div>
+              <button>Add expense</button>
+            </div>
+            <table>
+              <tr><th>Category</th><th>Warehouse</th><th>৳</th></tr>
+              <tr><td>Molasses (মলাসেস)</td><td>Shed A</td><td>600</td></tr>
+              <tr><td>Electric bill</td><td>Shed B</td><td>2,400</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Quick search</h2>
+          <input placeholder="Cow tag or name  (Ctrl+K)">
+          <div class="muted" style="margin-top:10px">Recent: 1047 · 1052 · 1061</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- HERD -->
+    <section class="screen" id="herd">
+      <div class="filters">
+        <input placeholder="Search tag">
+        <select><option>All warehouses</option></select>
+        <select><option>All status</option></select>
+        <select><option>All categories</option></select>
+        <button class="ghost">+ New cow</button>
+      </div>
+      <div class="card">
+        <table>
+          <tr><th>Tag</th><th>Category</th><th>Sex</th><th>Age</th><th>Warehouse</th><th>Status</th><th>Latest weight</th></tr>
+          <tr><td>1047</td><td>Milking cow</td><td>F</td><td>5 y</td><td>Shed A</td><td><span class="tag good">Active</span></td><td>412 kg</td></tr>
+          <tr><td>1052</td><td>Milking cow</td><td>F</td><td>4 y</td><td>Shed A</td><td><span class="tag good">Active</span></td><td>398 kg</td></tr>
+          <tr><td>1061</td><td>Heifer</td><td>F</td><td>2 y</td><td>Shed B</td><td><span class="tag">Pregnant</span></td><td>340 kg</td></tr>
+          <tr><td>1030</td><td>Bull calf</td><td>M</td><td>1 y</td><td>Shed B</td><td><span class="tag good">Active</span></td><td>210 kg</td></tr>
+        </table>
+      </div>
+      <div class="muted" style="margin-top:10px">Click a row to open the cow profile.</div>
+    </section>
+
+    <!-- COW PROFILE (shown under Herd) -->
+    <section class="screen" id="cow-profile">
+      <div class="card">
+        <h2>Cow 1047 · Milking cow · Shed A · <span class="tag good">Active</span></h2>
+        <div class="filters" style="margin-top:8px">
+          <span class="tag">Overview</span><span class="tag">Weight</span><span class="tag">Milk</span>
+          <span class="tag">Breeding</span><span class="tag">Health</span><span class="tag">Expenses</span><span class="tag">History</span>
+        </div>
+        <table>
+          <tr><th>Date</th><th>Weight</th></tr>
+          <tr><td>01 Oct 2026</td><td>412 kg</td></tr>
+          <tr><td>24 Sep 2026</td><td>408 kg</td></tr>
+        </table>
+        <div class="muted" style="margin-top:8px">Milk figures are group-based estimates.</div>
+      </div>
+    </section>
+
+    <!-- PURCHASES -->
+    <section class="screen" id="purchases">
+      <div class="grid3" style="grid-template-columns: 1fr 1fr">
+        <div class="card">
+          <h2>Purchase evaluator</h2>
+          <div class="row"><label>Supplier</label><select><option>Bazar vendor</option></select></div>
+          <div class="row"><label>Live weight kg</label><input value="350"></div>
+          <div class="row"><label>Growth potential</label><select><option>Good (60–62%)</option><option>Poor (54–55%)</option></select></div>
+          <div class="row"><label>Offered price ৳</label><input value="105000"></div>
+          <div class="row"><label>Market price ৳/kg</label><input value="520"></div>
+        </div>
+        <div class="card">
+          <h2>Result</h2>
+          <table>
+            <tr><td>Estimated net weight</td><td>210 kg</td></tr>
+            <tr><td>Net price per kg</td><td>৳ 500.00</td></tr>
+            <tr><td>Market price per kg</td><td>৳ 520.00</td></tr>
+          </table>
+          <div style="margin:16px 0"><span class="big-badge">✔ Profitable</span></div>
+          <button>Buy</button> <button class="ghost">Return</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- BREEDING -->
+    <section class="screen" id="breeding">
+      <div class="filters">
+        <select><option>Pending pregnancy check</option><option>Calving in 30 days</option><option>All</option></select>
+        <button>+ New breeding record</button>
+      </div>
+      <div class="card">
+        <table>
+          <tr><th>Cow</th><th>Heat</th><th>Insemination</th><th>Method</th><th>Status</th><th>Action</th></tr>
+          <tr><td>1061</td><td>02 Oct</td><td>03 Oct</td><td>Injection</td><td><span class="tag">Check due 17 Oct</span></td><td><button class="ghost">Confirmed</button> <button class="ghost">Not pregnant</button></td></tr>
+          <tr><td>1052</td><td>28 Sep</td><td>29 Sep</td><td>Injection</td><td><span class="tag good">Confirmed</span></td><td class="muted">Calving 22 Jun 2027</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- HEALTH -->
+    <section class="screen" id="health">
+      <div class="card" style="border-color:#e3b8a8; margin-bottom:14px">
+        <h2>Due soon (next 14 days)</h2>
+        <div>FMD vaccine · Shed A · 12 Oct <span class="tag bad">Overdue 2 days</span></div>
+      </div>
+      <div class="filters"><button>+ New health record</button></div>
+      <div class="card">
+        <table>
+          <tr><th>Date</th><th>Cow</th><th>Type</th><th>Vet</th><th>Cost ৳</th><th>Next due</th></tr>
+          <tr><td>28 Sep</td><td>1030</td><td>Deworming</td><td>Dr. Hasan</td><td>350</td><td>28 Dec</td></tr>
+          <tr><td>10 Sep</td><td>1047, 1052, 1061</td><td>FMD vaccine</td><td>Dr. Hasan</td><td>900</td><td>12 Oct</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- EXPENSES -->
+    <section class="screen" id="expenses">
+      <div class="filters">
+        <input placeholder="Date range">
+        <select><option>All categories</option></select>
+        <select><option>All warehouses</option></select>
+        <button>+ Add expense</button>
+      </div>
+      <div class="card">
+        <table>
+          <tr><th>Date</th><th>Category</th><th>Warehouse</th><th>Cow</th><th>Amount ৳</th><th>Note</th></tr>
+          <tr><td>10 Oct</td><td>Green grass</td><td>Shed A</td><td>—</td><td>350</td><td class="muted">Bundle</td></tr>
+          <tr><td>08 Oct</td><td>Electric bill</td><td>Shed B</td><td>—</td><td>2,400</td><td class="muted">September</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- PAYROLL -->
+    <section class="screen" id="payroll">
+      <div class="filters">
+        <select><option>October 2026</option></select>
+        <button>Mark paid</button>
+      </div>
+      <div class="card">
+        <table>
+          <tr><th>Worker</th><th>Base ৳</th><th>Absence deduction ৳</th><th>Bonus ৳</th><th>Net ৳</th><th>Paid</th></tr>
+          <tr><td>Rahim</td><td>12,000</td><td>0</td><td><input style="width:90px" value="0"></td><td>12,000</td><td><span class="tag">Unpaid</span></td></tr>
+          <tr><td>Karim</td><td>11,000</td><td>-367</td><td><input style="width:90px" value="0"></td><td>10,633</td><td><span class="tag">Unpaid</span></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- REPORTS -->
+    <section class="screen" id="reports">
+      <div class="filters">
+        <select><option>Monthly P&amp;L</option><option>Herd summary</option><option>Milk summary</option></select>
+        <select><option>October 2026</option></select>
+        <button class="ghost">Export Excel</button>
+        <button class="ghost">Export PDF</button>
+      </div>
+      <div class="two">
+        <div class="card">
+          <h2>Profit and loss</h2>
+          <table>
+            <tr><td>Milk and sales revenue</td><td>৳ 186,400</td></tr>
+            <tr><td>Expenses</td><td>৳ −42,100</td></tr>
+            <tr><td>Salaries</td><td>৳ −31,000</td></tr>
+            <tr><td>Purchases</td><td>৳ −0</td></tr>
+            <tr><th>Net</th><th>৳ 113,300</th></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h2>Herd summary</h2>
+          <table>
+            <tr><td>Milking cows</td><td>7</td></tr>
+            <tr><td>Heifers</td><td>3</td></tr>
+            <tr><td>Calves</td><td>2</td></tr>
+            <tr><td>Average weight</td><td>365 kg</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- MASTERS -->
+    <section class="screen" id="masters">
+      <div class="filters">
+        <select><option>Warehouses</option><option>Suppliers</option><option>Customers</option><option>Expense categories</option><option>Market prices</option></select>
+        <button>+ Add</button>
+      </div>
+      <div class="card">
+        <table>
+          <tr><th>Name</th><th>Name (বাংলা)</th><th>Type</th><th></th></tr>
+          <tr><td>Shed A</td><td>শেড এ</td><td>Housing</td><td class="muted">edit</td></tr>
+          <tr><td>Shed B</td><td>শেড বি</td><td>Housing</td><td class="muted">edit</td></tr>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  const links = document.querySelectorAll('aside a');
+  const titles = { today:'Today', herd:'Herd', purchases:'Purchases', breeding:'Breeding', health:'Health', expenses:'Expenses', payroll:'Payroll', reports:'Reports', masters:'Masters' };
+  links.forEach(a => a.addEventListener('click', () => {
+    links.forEach(l => l.classList.remove('active'));
+    a.classList.add('active');
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    const id = a.dataset.target;
+    document.getElementById(id).classList.add('active');
+    document.getElementById('page-title').textContent = titles[id];
+  }));
+  document.querySelector('#herd table tr:nth-child(2)') && document.querySelectorAll('#herd tr').forEach((tr, i) => {
+    if (i > 0) tr.addEventListener('click', () => {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('cow-profile').classList.add('active');
+      document.getElementById('page-title').textContent = 'Cow profile';
+    });
+  });
+</script>
+</body>
+</html>
