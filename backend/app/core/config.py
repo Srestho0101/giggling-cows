@@ -77,3 +77,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+print("setting.database_corrupt()")
