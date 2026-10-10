@@ -1,0 +1,103 @@
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API_PREFIX = "/api/v1";
+
+export type ApiRequestOptions = Omit<RequestInit, "body"> & {
+  body?: unknown;
+  accessToken?: string;
+};
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly payload: unknown;
+
+  constructor(status: number, message: string, payload: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+export function apiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE_URL}${API_PREFIX}${normalizedPath}`;
+}
+
+export function apiQuery(path: string, values: Record<string, string | number | boolean | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const suffix = query.toString();
+  return suffix ? `${path}?${suffix}` : path;
+}
+
+export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const { accessToken, headers, body, ...requestOptions } = options;
+  const requestHeaders = new Headers(headers);
+
+  if (body !== undefined && !requestHeaders.has("Content-Type")) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
+  if (accessToken) requestHeaders.set("Authorization", `Bearer ${accessToken}`);
+
+  const response = await fetch(apiUrl(path), {
+    ...requestOptions,
+    headers: requestHeaders,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined);
+    const message = getErrorMessage(payload) ?? `API request failed (${response.status})`;
+    throw new ApiError(response.status, message, payload);
+  }
+
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+function getErrorMessage(payload: unknown): string | undefined {
+  if (typeof payload !== "object" || payload === null || !("detail" in payload)) return undefined;
+  const detail = payload.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => typeof item === "object" && item !== null && "msg" in item ? String(item.msg) : "Invalid request").join(" ");
+  }
+  return undefined;
+}
+
+export const apiRoutes = {
+  auth: { me: "/auth/me" },
+  herd: {
+    cows: "/herd/cows", cow: (id: string) => `/herd/cows/${id}`,
+    weight: (id: string) => `/herd/cows/${id}/weight`, move: (id: string) => `/herd/cows/${id}/move`,
+    warehouses: "/herd/warehouses", warehouse: (id: string) => `/herd/warehouses/${id}`,
+    suppliers: "/herd/suppliers", supplier: (id: string) => `/herd/suppliers/${id}`,
+  },
+  evaluations: {
+    root: "/evaluations", preview: "/evaluations/calculate-preview", marketPrices: "/evaluations/market-prices",
+    update: (id: string) => `/evaluations/${id}`, convert: (id: string) => `/evaluations/${id}/convert-to-cow`,
+  },
+  feeding: {
+    expenses: "/feeding/expenses", categories: "/feeding/categories", feedTypes: "/feeding/feed-types",
+    feedType: (id: string) => `/feeding/feed-types/${id}`,
+    records: "/feeding/feeding-records",
+  },
+  labor: {
+    workers: "/labor/workers", attendance: "/labor/attendance", attendanceBatch: "/labor/attendance/batch",
+    salaries: "/labor/salary-payments", substitutes: "/labor/mill-charges",
+  },
+  health: { records: "/health/records", breeding: "/health/breeding", pregnancy: "/health/pregnancy" },
+  sales: {
+    customers: "/sales/customers", customer: (id: string) => `/sales/customers/${id}`,
+    invoices: "/sales/invoices", invoice: (id: string) => `/sales/invoices/${id}`,
+    invoiceStatus: (id: string) => `/sales/invoices/${id}/status`, invoicePayments: (id: string) => `/sales/invoices/${id}/payments`,
+    milk: "/sales/milk",
+  },
+  reports: {
+    dashboard: "/reports/dashboard",
+    profitability: "/reports/profitability",
+    profitabilityCsv: "/reports/profitability/csv",
+  },
+} as const;
