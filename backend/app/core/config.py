@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import List, Union
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -57,12 +57,27 @@ class Settings(BaseSettings):
 
     @property
     def async_database_url(self) -> str:
-        """Return a URL accepted by SQLAlchemy's async engine."""
-        if self.DATABASE_URL.startswith("postgres://"):
-            return self.DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-        if self.DATABASE_URL.startswith("postgresql://"):
-            return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return self.DATABASE_URL
+        """Return a URL accepted by SQLAlchemy's async engine, including Supabase pooler settings."""
+        url = self.DATABASE_URL.strip()
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        candidate = urlsplit(url)
+        if candidate.scheme and candidate.hostname:
+            params = dict(parse_qsl(candidate.query, keep_blank_values=True))
+            if candidate.hostname.endswith(".supabase.com") or candidate.port == 6543:
+                params.setdefault("pgbouncer", "true")
+                params.setdefault("sslmode", "require")
+                return urlunsplit((
+                    candidate.scheme,
+                    candidate.netloc,
+                    candidate.path,
+                    urlencode(params),
+                    candidate.fragment,
+                ))
+        return url
 
     @property
     def database_connect_args(self) -> dict:
@@ -71,10 +86,10 @@ class Settings(BaseSettings):
             return {"check_same_thread": False}
 
         host = urlsplit(self.DATABASE_URL).hostname or ""
-        if host.endswith(".supabase.com"):
+        port = urlsplit(self.DATABASE_URL).port
+        if host.endswith(".supabase.com") or port == 6543:
             return {"ssl": "require"}
         return {}
 
 
 settings = Settings()
-print("setting.database_corrupt()")

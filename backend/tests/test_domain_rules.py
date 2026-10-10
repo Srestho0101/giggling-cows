@@ -3,7 +3,17 @@ from decimal import Decimal
 import pytest
 from httpx import AsyncClient
 
+from app.core.config import Settings
 from app.services.evaluation_service import calculate_evaluation_metrics
+
+
+def test_supabase_pooler_url_configuration():
+    settings = Settings(
+        DATABASE_URL="postgresql://postgres:secret@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+    )
+
+    assert settings.async_database_url.endswith("postgres?pgbouncer=true&sslmode=require")
+    assert settings.database_connect_args["ssl"] == "require"
 
 
 @pytest.mark.asyncio

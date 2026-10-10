@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { apiRequest, ApiError } from "@/lib/api";
 
@@ -56,39 +57,45 @@ export function DataWorkbench({
   deletePath,
   onDelete,
 }: DataWorkbenchProps) {
-  const [rows, setRows] = useState<RecordRow[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [remoteOptions, setRemoteOptions] = useState<Record<string, { value: string; label: string }[]>>({});
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<RecordRow | null>(null);
+  const queryClient = useQueryClient();
   const sourceSignature = fields.filter((field) => field.sourcePath).map((field) => `${field.sourcePath}:${field.sourceValue ?? "id"}:${field.sourceLabel ?? "name"}`).join("|");
   // Config arrays are often declared inline by a parent; the signature is their relevant stable identity.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const sourceFields = useMemo(() => fields.filter((field) => field.sourcePath), [sourceSignature]);
 
-  const loadRows = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
+  const queryKey = useMemo(() => ["data-workbench", path, query] as const, [path, query]);
+  const rowsQuery = useQuery({
+    queryKey,
+    queryFn: async () => {
       const data = await apiRequest<unknown>(query ? `${path}?${query}` : path);
       const nextRows = Array.isArray(data) ? data as RecordRow[] : [];
-      setRows(nextRows);
-      onRows?.(nextRows);
+      return nextRows;
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    retry: 1,
+  });
+
+  const rows = useMemo(() => rowsQuery.data ?? [], [rowsQuery.data]);
+  const loading = rowsQuery.isLoading;
+
+  useEffect(() => { onRows?.(rows); }, [rows, onRows]);
+
+  const loadRows = useCallback(async () => {
+    setError("");
+    try {
+      await queryClient.invalidateQueries({ queryKey, refetchType: "active" });
     } catch (cause) {
       setError(errorText(cause));
-    } finally {
-      setLoading(false);
     }
-  }, [path, query, onRows]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => { void loadRows(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadRows]);
+  }, [queryClient, queryKey]);
 
   useEffect(() => {
     const sources = [...new Set(sourceFields.flatMap((field) => field.sourcePath ? [field.sourcePath] : []))];
@@ -233,7 +240,23 @@ export function DataWorkbench({
           <p className="text-sm font-medium text-stone-700">Records</p>
           <span className="text-xs text-stone-400">{loading ? "Loading…" : `${rows.length} records`}</span>
         </div>
-        {loading ? <div className="px-4 py-12 text-center text-sm text-stone-400">Loading records…</div> : rows.length === 0 ? <div className="px-4 py-12 text-center text-sm text-stone-400">{emptyMessage}</div> : (
+        {loading ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="bg-stone-50 text-[11px] uppercase tracking-wide text-stone-500">
+                <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">{column.label}</th>)}{(rowActions || updatePath) && <th className="px-4 py-3 font-medium">Actions</th>}</tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <tr key={`skeleton-${index}`} className="animate-pulse">
+                    {columns.map((column) => <td key={column.key} className="whitespace-nowrap px-4 py-3"><div className="h-4 w-24 rounded bg-stone-200" /></td>)}
+                    {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-4 py-3"><div className="h-4 w-20 rounded bg-stone-200" /></td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : rows.length === 0 ? <div className="px-4 py-12 text-center text-sm text-stone-400">{emptyMessage}</div> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="bg-stone-50 text-[11px] uppercase tracking-wide text-stone-500">
