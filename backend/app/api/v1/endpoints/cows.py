@@ -101,26 +101,6 @@ async def update_warehouse(
     return w_read
 
 
-@router.delete("/warehouses/{warehouse_id}", response_model=WarehouseRead)
-async def archive_warehouse(
-    warehouse_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
-):
-    warehouse = await db.get(Warehouse, warehouse_id)
-    if not warehouse:
-        raise HTTPException(status_code=404, detail="Warehouse not found")
-
-    warehouse.is_archived = True
-    warehouse.updated_by = current_user.id
-
-    await db.commit()
-    await db.refresh(warehouse)
-    w_read = WarehouseRead.model_validate(warehouse)
-    w_read.current_occupancy = 0
-    return w_read
-
-
 # ---------------------- SUPPLIERS ----------------------
 @router.get("/suppliers", response_model=List[SupplierRead])
 async def list_suppliers(
@@ -168,24 +148,6 @@ async def update_supplier(
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(supplier, field, val)
-    supplier.updated_by = current_user.id
-
-    await db.commit()
-    await db.refresh(supplier)
-    return supplier
-
-
-@router.delete("/suppliers/{supplier_id}", response_model=SupplierRead)
-async def archive_supplier(
-    supplier_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
-):
-    supplier = await db.get(Supplier, supplier_id)
-    if not supplier:
-        raise HTTPException(status_code=404, detail="Supplier not found")
-
-    supplier.is_archived = True
     supplier.updated_by = current_user.id
 
     await db.commit()
@@ -454,24 +416,6 @@ async def update_cow(
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(cow, field, val)
-    cow.updated_by = current_user.id
-
-    await db.commit()
-    return await get_cow_detail(cow.cow_id, db, current_user)
-
-
-@router.delete("/cows/{cow_id}", response_model=CowDetailRead)
-async def archive_cow(
-    cow_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
-):
-    cow = await db.get(Cow, cow_id)
-    if not cow:
-        raise HTTPException(status_code=404, detail="Cow not found")
-
-    cow.is_archived = True
-    cow.status = "archived"
     cow.updated_by = current_user.id
 
     await db.commit()

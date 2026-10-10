@@ -36,8 +36,6 @@ type DataWorkbenchProps = {
   showCreate?: boolean;
   rowActions?: (row: RecordRow) => React.ReactNode;
   updatePath?: (row: RecordRow) => string;
-  deletePath?: (row: RecordRow) => string;
-  onDelete?: (row: RecordRow) => Promise<void> | void;
 };
 
 export function DataWorkbench({
@@ -54,8 +52,6 @@ export function DataWorkbench({
   showCreate = true,
   rowActions,
   updatePath,
-  deletePath,
-  onDelete,
 }: DataWorkbenchProps) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [remoteOptions, setRemoteOptions] = useState<Record<string, { value: string; label: string }[]>>({});
@@ -170,24 +166,6 @@ export function DataWorkbench({
     setFormOpen(true);
   }
 
-  async function removeRow(row: RecordRow) {
-    if (!deletePath && !onDelete) return;
-    const confirmed = window.confirm("Archive this record? This hides it from the default list.");
-    if (!confirmed) return;
-
-    try {
-      if (onDelete) {
-        await onDelete(row);
-      } else if (deletePath) {
-        await apiRequest(deletePath(row), { method: "DELETE" });
-      }
-      setNotice("Record archived.");
-      await loadRows();
-    } catch (cause) {
-      setError(errorText(cause));
-    }
-  }
-
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -269,7 +247,7 @@ export function DataWorkbench({
                     const value = formatCell(row[column.key], column.key);
                     return <td key={column.key} className="whitespace-nowrap px-4 py-3 text-stone-700">{columnIndex === 0 && href ? <Link href={href} className="font-medium text-emerald-800 hover:underline">{value}</Link> : value}</td>;
                   })}
-                  {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-4 py-3"><div className="flex items-center gap-3">{rowActions?.(row)}{updatePath && <button type="button" onClick={() => startEdit(row)} className="text-xs font-medium text-emerald-800 hover:underline">Edit</button>}{(deletePath || onDelete) && <button type="button" onClick={() => void removeRow(row)} className="text-xs font-medium text-rose-700 hover:underline">Archive</button>}</div></td>}
+                  {(rowActions || updatePath) && <td className="whitespace-nowrap px-4 py-3"><div className="flex items-center gap-3">{rowActions?.(row)}{updatePath && <button type="button" onClick={() => startEdit(row)} className="text-xs font-medium text-emerald-800 hover:underline">Edit</button>}</div></td>}
                 </tr>)}
               </tbody>
             </table>

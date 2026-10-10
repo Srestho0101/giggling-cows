@@ -85,15 +85,10 @@ export const apiRoutes = {
     records: "/feeding/feeding-records",
   },
   labor: {
-    workers: "/labor/workers", worker: (id: string) => `/labor/workers/${id}`,
-    attendance: "/labor/attendance", attendanceBatch: "/labor/attendance/batch",
+    workers: "/labor/workers", attendance: "/labor/attendance", attendanceBatch: "/labor/attendance/batch",
     salaries: "/labor/salary-payments", substitutes: "/labor/mill-charges",
   },
-  health: {
-    records: "/health/records", record: (id: string) => `/health/records/${id}`,
-    breeding: "/health/breeding", breedingRecord: (id: string) => `/health/breeding/${id}`,
-    pregnancy: "/health/pregnancy", pregnancyReport: (id: string) => `/health/pregnancy/${id}`,
-  },
+  health: { records: "/health/records", breeding: "/health/breeding", pregnancy: "/health/pregnancy" },
   sales: {
     customers: "/sales/customers", customer: (id: string) => `/sales/customers/${id}`,
     invoices: "/sales/invoices", invoice: (id: string) => `/sales/invoices/${id}`,
