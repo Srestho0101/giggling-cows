@@ -3,344 +3,370 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Cow Farm - UI Demo</title>
+<title>Cow Farm</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap">
 <style>
-  :root { box-sizing: border-box; --bg:#f5f6f4; --card:#fff; --line:#dde1da; --text:#222; --muted:#6b7268; --accent:#2f7d4f; --warn:#b5482e; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: "Noto Sans Bengali", "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--text); font-size:14px; height:100%; }
-  .app { display:grid; grid-template-columns: 200px 1fr; min-height:100vh; }
-  aside { background:#1f2a23; color:#dfe7df; padding:16px 0; }
-  aside h1 { font-size:15px; margin:0 16px 16px; }
-  aside a { display:block; padding:9px 16px; color:#cfd9cf; text-decoration:none; cursor:pointer; }
-  aside a.active, aside a:hover { background:#2f3e33; color:#fff; }
-  main { display:flex; flex-direction:column; }
-  header { display:flex; align-items:center; gap:16px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); }
-  header .title { font-weight:600; font-size:16px; flex:1; }
-  .date { border:1px solid var(--line); border-radius:6px; padding:6px 10px; }
-  .lang { border:1px solid var(--line); border-radius:6px; padding:6px 10px; color:var(--muted); }
-  .screen { display:none; padding:16px 20px; }
-  .screen.active { display:block; }
-  .grid3 { display:grid; grid-template-columns: 1.4fr 1fr 1fr; gap:14px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; }
-  .card h2 { font-size:14px; margin:0 0 10px; }
-  .muted { color:var(--muted); font-size:12px; }
-  input, select { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; font:inherit; background:#fff; }
-  .chips { display:flex; flex-wrap:wrap; gap:6px; border:1px solid var(--line); border-radius:6px; padding:6px; min-height:38px; margin-bottom:8px; }
-  .chip { background:#e4efe7; color:#1f5a38; padding:3px 8px; border-radius:12px; font-size:12px; }
-  .preview { background:#f0f6f1; border-radius:6px; padding:8px 10px; margin:8px 0; color:#1f5a38; }
-  button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:7px 12px; font:inherit; cursor:pointer; }
-  button.ghost { background:#fff; color:var(--text); border:1px solid var(--line); }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); }
-  th { color:var(--muted); font-weight:500; font-size:12px; }
-  tr.row-absent td { color:var(--warn); }
-  .tag { display:inline-block; padding:2px 7px; border-radius:10px; font-size:11px; background:#eee; }
-  .tag.good { background:#e4efe7; color:#1f5a38; }
-  .tag.bad { background:#f7e4de; color:#8a3320; }
-  .totals { display:flex; gap:18px; margin-top:10px; font-weight:600; }
-  .big-badge { display:inline-block; padding:10px 16px; border-radius:8px; background:#e4efe7; color:#1f5a38; font-weight:700; font-size:16px; }
-  .row { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
-  .row label { width:130px; color:var(--muted); font-size:12px; }
-  .row > * { flex:1; }
-  .two { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
-  .filters { display:flex; gap:8px; margin-bottom:12px; }
-  .filters > * { width:auto; min-width:140px; }
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#eef2f6;--card:#fff;--line:#dbe2ea;--text:#16212e;--muted:#66758a;--nav:#13202f;--navtxt:#b7c4d4;--accent:#2e8b3d;--accent-soft:#e1f2e3;--hay:#e9b824;--warn:#c2432b;--warn-soft:#fbe5df;--field:#f6f8fb;--milk:#dff0ff;--milk2:#9fd0f5;--bar:color-mix(in srgb,var(--bg) 85%,transparent);--on-accent:#fff;--navhi:#fff;--amber:#7a5a00;--amber-soft:#fbf0c9;--toast-bg:#16212e;--toast-fg:#fff;--hover:rgba(22,33,46,.04);color-scheme:light}
+/* Dark theme after Material Design: #121212 base, elevation = lighter surface (white overlays 1dp 5%, 4dp 9%, 8dp 12%), 87%/60% white text, desaturated light-tone accents, dark on-colors on accent fills */
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121212;--card:#1e1e1e;--field:#262626;--bar:#272727;--nav:#2e2e2e;--navtxt:rgba(255,255,255,.6);--navhi:rgba(255,255,255,.87);--line:rgba(255,255,255,.12);--text:rgba(255,255,255,.87);--muted:rgba(255,255,255,.6);--hover:rgba(255,255,255,.04);--accent:#81c784;--accent-soft:rgba(129,199,132,.16);--on-accent:rgba(0,0,0,.87);--hay:#e0c070;--amber:#e0c070;--amber-soft:rgba(224,192,112,.16);--warn:#cf6679;--warn-soft:rgba(207,102,121,.16);--milk:rgba(127,181,222,.22);--milk2:#7fb5de;--toast-bg:#2e2e2e;--toast-fg:rgba(255,255,255,.87);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121212;--card:#1e1e1e;--field:#262626;--bar:#272727;--nav:#2e2e2e;--navtxt:rgba(255,255,255,.6);--navhi:rgba(255,255,255,.87);--line:rgba(255,255,255,.12);--text:rgba(255,255,255,.87);--muted:rgba(255,255,255,.6);--hover:rgba(255,255,255,.04);--accent:#81c784;--accent-soft:rgba(129,199,132,.16);--on-accent:rgba(0,0,0,.87);--hay:#e0c070;--amber:#e0c070;--amber-soft:rgba(224,192,112,.16);--warn:#cf6679;--warn-soft:rgba(207,102,121,.16);--milk:rgba(127,181,222,.22);--milk2:#7fb5de;--toast-bg:#2e2e2e;--toast-fg:rgba(255,255,255,.87);color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Hind Siliguri","Noto Sans Bengali","Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.app{display:grid;grid-template-columns:216px 1fr;min-height:100vh}
+aside{background:var(--nav);color:var(--navtxt);padding:18px 12px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:2px}
+.brand{display:flex;align-items:center;gap:10px;padding:2px 8px 18px;color:var(--navhi);font-weight:700;font-size:17px}
+.brand i{width:30px;height:30px;border-radius:9px;background:var(--hay);display:grid;place-items:center;font-style:normal;font-size:17px}
+aside a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:inherit;cursor:pointer;font-weight:500;transition:background .15s,color .15s;user-select:none}
+aside a svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+aside a:hover{background:rgba(255,255,255,.07);color:var(--navhi)}
+aside a.active{background:rgba(255,255,255,.12);color:var(--navhi);box-shadow:inset 3px 0 0 var(--hay)}
+aside .badge{margin-left:auto;background:var(--warn);color:var(--on-accent);border-radius:10px;font-size:11px;padding:0 7px;font-weight:600}
+.side-foot{margin-top:auto;padding:10px;font-size:12px;color:var(--navtxt);opacity:.75}
+main{min-width:0}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 24px;background:var(--bar);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header h1{font-size:20px;margin:0;flex:1;font-weight:700}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:2px}
+.seg button{background:none;border:0;color:var(--muted);padding:5px 10px;border-radius:7px;cursor:pointer;font:inherit;font-weight:500}
+.seg button.on{background:var(--accent);color:var(--on-accent)}
+.seg button:hover:not(.on){color:var(--text)}
+.date{display:flex;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:9px}
+.date button{background:none;color:var(--muted);padding:5px 10px}
+.date span{font-weight:600;min-width:104px;text-align:center}
+.search{position:relative}
+.search input{width:190px;padding-left:12px}
+.search kbd{position:absolute;right:8px;top:50%;transform:translateY(-50%);font:11px inherit;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:0 5px;background:var(--card)}
+.screen{display:none;padding:20px 24px 40px;max-width:1240px}
+.screen.active{display:block;animation:in .2s ease}
+@keyframes in{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.screen.active{animation:none}*{transition:none!important}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{font-size:15px;margin:0 0 12px;font-weight:700;display:flex;align-items:center;gap:8px}
+.card h2 small{font-weight:500;color:var(--muted);font-size:12px;margin-left:auto}
+.muted{color:var(--muted);font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat b{display:block;font-size:22px;line-height:1.2;margin-top:2px}
+.stat.hot{border-left:4px solid var(--hay)}
+.grid{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;align-items:start}
+.stack{display:grid;gap:14px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--field);color:var(--text);transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,button:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+button{background:var(--accent);color:var(--on-accent);border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer;transition:filter .15s,transform .05s}
+button:hover{filter:brightness(1.08)}button:active{transform:translateY(1px)}
+button.ghost{background:var(--card);color:var(--text);border:1px solid var(--line)}
+button.sm{padding:3px 9px;font-size:12px}
+button.danger{background:var(--warn-soft);color:var(--warn)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;border:1px solid var(--line);background:var(--field);border-radius:8px;padding:6px;min-height:42px;cursor:text}
+.chips:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+.chips input{border:0;background:none;box-shadow:none!important;width:110px;flex:1;padding:3px 4px}
+.chip{background:var(--accent-soft);color:var(--accent);padding:3px 4px 3px 10px;border-radius:14px;font-weight:600;display:flex;gap:4px;align-items:center}
+.chip button{background:none;color:inherit;padding:0 5px;font-size:15px;line-height:1}
+.preview{background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:9px 12px;margin:10px 0;font-weight:600}
+.row{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:9px}
+.row label{color:var(--muted);font-size:12.5px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500;font-size:12px}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--hover)}
+tr.clickable{cursor:pointer}
+td.num,th.num{text-align:right}
+.tag{display:inline-block;padding:1px 9px;border-radius:10px;font-size:12px;font-weight:600;background:var(--field);color:var(--muted);border:1px solid var(--line)}
+.tag.good{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.tag.bad{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.tag.warn{background:var(--amber-soft);color:var(--amber);border-color:transparent}
+.filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.filters>*{width:auto;min-width:150px}
+.filters .grow{flex:1}
+/* tank gauge: the one memorable thing */
+.tank{display:flex;gap:16px;align-items:center}
+.gauge{width:84px;height:150px;border:2px solid var(--line);border-radius:14px 14px 22px 22px;position:relative;overflow:hidden;background:var(--field);flex:none}
+.gauge .fill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(var(--milk2),var(--milk));transition:height .6s cubic-bezier(.3,.8,.3,1)}
+.gauge .fill::before{content:"";position:absolute;left:0;right:0;top:-1px;height:3px;background:var(--milk2)}
+.gauge span{position:absolute;left:0;right:0;border-top:1px dashed var(--muted);font-size:10px;color:var(--muted);padding-left:3px}
+.tank .big{font-size:34px;font-weight:700;line-height:1}
+.worker{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.worker:last-of-type{border-bottom:0}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700}
+.worker.absent .avatar{background:var(--warn-soft);color:var(--warn)}
+.switch{margin-left:auto;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.switch button{border-radius:0;background:var(--card);color:var(--muted);padding:4px 10px;font-size:12px}
+.switch button.on.p{background:var(--accent);color:var(--on-accent)}.switch button.on.a{background:var(--warn);color:var(--on-accent)}
+.verdict{display:flex;gap:12px;align-items:center;padding:14px;border-radius:10px;margin:14px 0;font-weight:700;font-size:17px}
+.verdict.yes{background:var(--accent-soft);color:var(--accent)}.verdict.no{background:var(--warn-soft);color:var(--warn)}
+.verdict small{display:block;font-weight:500;font-size:12px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:10px 0 14px;overflow-x:auto}
+.tabs button{background:none;color:var(--muted);border-radius:0;padding:8px 12px;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--text);border-bottom-color:var(--hay)}
+.alert{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:10px;background:var(--warn-soft);color:var(--warn);margin-bottom:14px;font-weight:600}
+.alert span{margin-left:auto}
+.bar{height:8px;border-radius:4px;background:var(--field);overflow:hidden;margin-top:4px}.bar i{display:block;height:100%;background:var(--accent)}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--toast-bg);color:var(--toast-fg);padding:10px 16px;border-radius:10px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:20}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.scroll{overflow-x:auto}
+@media(max-width:900px){
+ .app{grid-template-columns:1fr}
+ aside{position:static;height:auto;flex-direction:row;overflow-x:auto;padding:8px}
+ aside .brand,.side-foot{display:none}aside a{white-space:nowrap}
+ header{flex-wrap:wrap;padding:10px 14px}.search{display:none}
+ .stats{grid-template-columns:1fr 1fr}.grid,.two{grid-template-columns:1fr}.screen{padding:14px}
+}
 </style>
 </head>
 <body>
 <div class="app">
+<aside id="nav">
+  <div class="brand"><i>🐄</i>Cow Farm</div>
+</aside>
+<main>
+<header>
+  <h1 id="title">Today</h1>
+  <div class="search"><input id="q" placeholder="Find cow by tag"><kbd>Ctrl K</kbd></div>
+  <div class="date"><button class="ghost" id="prev" style="border:0">◀</button><span id="dt"></span><button class="ghost" id="next" style="border:0">▶</button></div>
+  <div class="seg" id="lang"><button class="on">বাংলা</button><button>English</button></div>
+  <div class="seg" id="theme" aria-label="Theme"><button data-m="system" class="on">Auto</button><button data-m="light">Light</button><button data-m="dark">Dark</button></div>
+</header>
 
-  <aside>
-    <h1>Cow Farm</h1>
-    <a data-target="today" class="active">Today</a>
-    <a data-target="herd">Herd</a>
-    <a data-target="purchases">Purchases</a>
-    <a data-target="breeding">Breeding</a>
-    <a data-target="health">Health</a>
-    <a data-target="expenses">Expenses</a>
-    <a data-target="payroll">Payroll</a>
-    <a data-target="reports">Reports</a>
-    <a data-target="masters">Masters</a>
-  </aside>
-
-  <main>
-    <header>
-      <div class="title" id="page-title">Today</div>
-      <div class="date">◀ &nbsp; 10 Oct 2026 &nbsp; ▶</div>
-      <div class="lang">বাংলা / English</div>
-    </header>
-
-    <!-- TODAY -->
-    <section class="screen active" id="today">
-      <div class="grid3">
-
-        <div class="card">
-          <h2>Milk</h2>
-          <div class="muted">Cow tags (Enter to add)</div>
-          <div class="chips">
-            <span class="chip">1047 ✕</span>
-            <span class="chip">1052 ✕</span>
-            <span class="chip">1061 ✕</span>
+<!-- TODAY -->
+<section class="screen active" id="today">
+  <div class="stats">
+    <div class="stat hot"><span class="muted">Milk today</span><b id="s-milk">0 L</b></div>
+    <div class="stat"><span class="muted">Sales</span><b id="s-sales">৳ 0</b></div>
+    <div class="stat"><span class="muted">Spent today</span><b id="s-exp">৳ 0</b></div>
+    <div class="stat"><span class="muted">Workers present</span><b id="s-att">0 / 0</b></div>
+  </div>
+  <div class="grid">
+    <div class="stack">
+      <div class="card">
+        <h2>Record milk <small>Type a tag, press Enter</small></h2>
+        <div class="two" style="grid-template-columns:1.4fr 1fr">
+          <div>
+            <div class="chips" id="chips"><input id="tagin" placeholder="Cow tag" inputmode="numeric"></div>
+            <div class="row" style="margin-top:10px"><label>Total liters</label><input id="lit" value="42.60" inputmode="decimal"></div>
+            <div class="preview" id="mprev"></div>
+            <button id="savegrp">Save group</button>
           </div>
-          <div class="row"><label>Total liters</label><input value="42.60"></div>
-          <div class="preview">3 cows · 42.60 L · about 14.20 L each</div>
-          <button>Save group</button>
-          <h2 style="margin-top:16px">Today's groups</h2>
-          <table>
-            <tr><th>Cows</th><th>Total L</th><th>Each</th><th></th></tr>
-            <tr><td>1012, 1019</td><td>28.00</td><td>14.00</td><td class="muted">edit · delete</td></tr>
-            <tr><td>1047, 1052, 1061</td><td>42.60</td><td>14.20</td><td class="muted">edit · delete</td></tr>
-            <tr><td>1030, 1044</td><td>26.10</td><td>13.05</td><td class="muted">edit · delete</td></tr>
-          </table>
-          <div class="totals"><span>Total 96.70 L</span><span>Cows 7</span><span>Avg 13.81 L</span></div>
-        </div>
-
-        <div class="card">
-          <h2>Attendance</h2>
-          <table>
-            <tr><th>Worker</th><th>Status</th></tr>
-            <tr><td>Rahim</td><td><span class="tag good">Present</span></td></tr>
-            <tr class="row-absent"><td>Karim</td><td><span class="tag bad">Absent</span> <span class="muted">sick</span></td></tr>
-            <tr><td>Salam</td><td><span class="tag good">Present</span></td></tr>
-            <tr><td>Jamal</td><td><span class="tag good">Present</span></td></tr>
-          </table>
-          <div class="muted" style="margin:8px 0">Karim absent. Substitute?</div>
-          <button class="ghost">+ Record substitute</button>
-          <button style="margin-left:6px">Save day</button>
-        </div>
-
-        <div class="card">
-          <h2>Sales</h2>
-          <div class="row"><label>Customer</label><select><option>Hotel Golden Sun</option></select></div>
-          <div class="row"><label>Item</label><select><option>Milk (L)</option></select></div>
-          <div class="row"><label>Quantity</label><input value="20"></div>
-          <div class="row"><label>Unit price ৳</label><input value="95"></div>
-          <div class="preview">Total ৳ 1,900.00</div>
-          <button>Add sale</button>
-          <table style="margin-top:10px">
-            <tr><th>Customer</th><th>Item</th><th>৳</th></tr>
-            <tr><td>Hotel Golden Sun</td><td>Milk 20 L</td><td>1,900</td></tr>
-          </table>
-        </div>
-
-        <div class="card" style="grid-column: span 2">
-          <h2>Expenses</h2>
-          <div class="two">
-            <div>
-              <div class="row"><label>Category</label><select><option>Green grass (কাঁচা ঘাস)</option></select></div>
-              <div class="row"><label>Amount ৳</label><input value="350"></div>
-              <div class="row"><label>Warehouse</label><select><option>Shed A</option></select></div>
-              <button>Add expense</button>
-            </div>
-            <table>
-              <tr><th>Category</th><th>Warehouse</th><th>৳</th></tr>
-              <tr><td>Molasses (মলাসেস)</td><td>Shed A</td><td>600</td></tr>
-              <tr><td>Electric bill</td><td>Shed B</td><td>2,400</td></tr>
-            </table>
+          <div class="tank">
+            <div class="gauge" id="gauge"><div class="fill" id="fill"></div><span style="bottom:100%;top:auto"></span></div>
+            <div><div class="big" id="gl">0</div><div class="muted">liters of 120 L target</div><div class="muted" id="gc" style="margin-top:6px"></div></div>
           </div>
         </div>
-
-        <div class="card">
-          <h2>Quick search</h2>
-          <input placeholder="Cow tag or name  (Ctrl+K)">
-          <div class="muted" style="margin-top:10px">Recent: 1047 · 1052 · 1061</div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- HERD -->
-    <section class="screen" id="herd">
-      <div class="filters">
-        <input placeholder="Search tag">
-        <select><option>All warehouses</option></select>
-        <select><option>All status</option></select>
-        <select><option>All categories</option></select>
-        <button class="ghost">+ New cow</button>
+        <table style="margin-top:12px"><thead><tr><th>Cows</th><th class="num">Total L</th><th class="num">Each</th><th></th></tr></thead><tbody id="groups"></tbody></table>
       </div>
       <div class="card">
-        <table>
-          <tr><th>Tag</th><th>Category</th><th>Sex</th><th>Age</th><th>Warehouse</th><th>Status</th><th>Latest weight</th></tr>
-          <tr><td>1047</td><td>Milking cow</td><td>F</td><td>5 y</td><td>Shed A</td><td><span class="tag good">Active</span></td><td>412 kg</td></tr>
-          <tr><td>1052</td><td>Milking cow</td><td>F</td><td>4 y</td><td>Shed A</td><td><span class="tag good">Active</span></td><td>398 kg</td></tr>
-          <tr><td>1061</td><td>Heifer</td><td>F</td><td>2 y</td><td>Shed B</td><td><span class="tag">Pregnant</span></td><td>340 kg</td></tr>
-          <tr><td>1030</td><td>Bull calf</td><td>M</td><td>1 y</td><td>Shed B</td><td><span class="tag good">Active</span></td><td>210 kg</td></tr>
-        </table>
-      </div>
-      <div class="muted" style="margin-top:10px">Click a row to open the cow profile.</div>
-    </section>
-
-    <!-- COW PROFILE (shown under Herd) -->
-    <section class="screen" id="cow-profile">
-      <div class="card">
-        <h2>Cow 1047 · Milking cow · Shed A · <span class="tag good">Active</span></h2>
-        <div class="filters" style="margin-top:8px">
-          <span class="tag">Overview</span><span class="tag">Weight</span><span class="tag">Milk</span>
-          <span class="tag">Breeding</span><span class="tag">Health</span><span class="tag">Expenses</span><span class="tag">History</span>
-        </div>
-        <table>
-          <tr><th>Date</th><th>Weight</th></tr>
-          <tr><td>01 Oct 2026</td><td>412 kg</td></tr>
-          <tr><td>24 Sep 2026</td><td>408 kg</td></tr>
-        </table>
-        <div class="muted" style="margin-top:8px">Milk figures are group-based estimates.</div>
-      </div>
-    </section>
-
-    <!-- PURCHASES -->
-    <section class="screen" id="purchases">
-      <div class="grid3" style="grid-template-columns: 1fr 1fr">
-        <div class="card">
-          <h2>Purchase evaluator</h2>
-          <div class="row"><label>Supplier</label><select><option>Bazar vendor</option></select></div>
-          <div class="row"><label>Live weight kg</label><input value="350"></div>
-          <div class="row"><label>Growth potential</label><select><option>Good (60–62%)</option><option>Poor (54–55%)</option></select></div>
-          <div class="row"><label>Offered price ৳</label><input value="105000"></div>
-          <div class="row"><label>Market price ৳/kg</label><input value="520"></div>
-        </div>
-        <div class="card">
-          <h2>Result</h2>
-          <table>
-            <tr><td>Estimated net weight</td><td>210 kg</td></tr>
-            <tr><td>Net price per kg</td><td>৳ 500.00</td></tr>
-            <tr><td>Market price per kg</td><td>৳ 520.00</td></tr>
-          </table>
-          <div style="margin:16px 0"><span class="big-badge">✔ Profitable</span></div>
-          <button>Buy</button> <button class="ghost">Return</button>
+        <h2>Expenses today</h2>
+        <div class="two">
+          <div>
+            <div class="row"><label>Category</label><select id="ecat"><option>Green grass (কাঁচা ঘাস)</option><option>Molasses (মলাসেস)</option><option>Dry straw (শুকনা খড়)</option><option>Electric bill</option></select></div>
+            <div class="row"><label>Amount ৳</label><input id="eamt" value="350" inputmode="numeric"></div>
+            <div class="row"><label>Warehouse</label><select id="ewh"><option>Shed A</option><option>Shed B</option></select></div>
+            <button id="addexp">Add expense</button>
+          </div>
+          <table><thead><tr><th>Category</th><th>Shed</th><th class="num">৳</th></tr></thead><tbody id="exps"></tbody></table>
         </div>
       </div>
-    </section>
-
-    <!-- BREEDING -->
-    <section class="screen" id="breeding">
-      <div class="filters">
-        <select><option>Pending pregnancy check</option><option>Calving in 30 days</option><option>All</option></select>
-        <button>+ New breeding record</button>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <h2>Attendance <small id="attn"></small></h2>
+        <div id="workers"></div>
+        <div id="subnote" class="muted" style="margin:10px 0"></div>
+        <button class="ghost" id="sub">+ Record substitute</button> <button id="saveday">Save day</button>
       </div>
       <div class="card">
-        <table>
-          <tr><th>Cow</th><th>Heat</th><th>Insemination</th><th>Method</th><th>Status</th><th>Action</th></tr>
-          <tr><td>1061</td><td>02 Oct</td><td>03 Oct</td><td>Injection</td><td><span class="tag">Check due 17 Oct</span></td><td><button class="ghost">Confirmed</button> <button class="ghost">Not pregnant</button></td></tr>
-          <tr><td>1052</td><td>28 Sep</td><td>29 Sep</td><td>Injection</td><td><span class="tag good">Confirmed</span></td><td class="muted">Calving 22 Jun 2027</td></tr>
-        </table>
+        <h2>Sales</h2>
+        <div class="row"><label>Customer</label><select id="scust"><option>Hotel Golden Sun</option><option>Rahman Sweets</option><option>Walk-in</option></select></div>
+        <div class="row"><label>Item</label><select><option>Milk (L)</option><option>Cow dung (bag)</option></select></div>
+        <div class="row"><label>Quantity</label><input id="sq" value="20" inputmode="decimal"></div>
+        <div class="row"><label>Unit price ৳</label><input id="sp" value="95" inputmode="decimal"></div>
+        <div class="preview" id="sprev"></div>
+        <button id="addsale">Add sale</button>
+        <table style="margin-top:8px"><tbody id="sales"></tbody></table>
       </div>
-    </section>
+    </div>
+  </div>
+</section>
 
-    <!-- HEALTH -->
-    <section class="screen" id="health">
-      <div class="card" style="border-color:#e3b8a8; margin-bottom:14px">
-        <h2>Due soon (next 14 days)</h2>
-        <div>FMD vaccine · Shed A · 12 Oct <span class="tag bad">Overdue 2 days</span></div>
-      </div>
-      <div class="filters"><button>+ New health record</button></div>
-      <div class="card">
-        <table>
-          <tr><th>Date</th><th>Cow</th><th>Type</th><th>Vet</th><th>Cost ৳</th><th>Next due</th></tr>
-          <tr><td>28 Sep</td><td>1030</td><td>Deworming</td><td>Dr. Hasan</td><td>350</td><td>28 Dec</td></tr>
-          <tr><td>10 Sep</td><td>1047, 1052, 1061</td><td>FMD vaccine</td><td>Dr. Hasan</td><td>900</td><td>12 Oct</td></tr>
-        </table>
-      </div>
-    </section>
+<!-- HERD -->
+<section class="screen" id="herd">
+  <div class="filters">
+    <input class="grow" id="hq" placeholder="Search tag">
+    <select id="hw"><option value="">All warehouses</option><option>Shed A</option><option>Shed B</option></select>
+    <select id="hs"><option value="">All status</option><option>Active</option><option>Pregnant</option></select>
+    <button>+ New cow</button>
+  </div>
+  <div class="card scroll"><table><thead><tr><th>Tag</th><th>Category</th><th>Sex</th><th>Age</th><th>Warehouse</th><th>Status</th><th class="num">Latest weight</th></tr></thead><tbody id="herdrows"></tbody></table></div>
+  <div class="muted" style="margin-top:10px">Click a row to open the cow profile.</div>
+</section>
 
-    <!-- EXPENSES -->
-    <section class="screen" id="expenses">
-      <div class="filters">
-        <input placeholder="Date range">
-        <select><option>All categories</option></select>
-        <select><option>All warehouses</option></select>
-        <button>+ Add expense</button>
-      </div>
-      <div class="card">
-        <table>
-          <tr><th>Date</th><th>Category</th><th>Warehouse</th><th>Cow</th><th>Amount ৳</th><th>Note</th></tr>
-          <tr><td>10 Oct</td><td>Green grass</td><td>Shed A</td><td>—</td><td>350</td><td class="muted">Bundle</td></tr>
-          <tr><td>08 Oct</td><td>Electric bill</td><td>Shed B</td><td>—</td><td>2,400</td><td class="muted">September</td></tr>
-        </table>
-      </div>
-    </section>
+<section class="screen" id="cow">
+  <button class="ghost sm" id="back">◀ Back to herd</button>
+  <div class="card" style="margin-top:12px">
+    <h2 id="cowh"></h2>
+    <div class="tabs" id="ctabs"></div>
+    <div id="cbody"></div>
+  </div>
+</section>
 
-    <!-- PAYROLL -->
-    <section class="screen" id="payroll">
-      <div class="filters">
-        <select><option>October 2026</option></select>
-        <button>Mark paid</button>
-      </div>
-      <div class="card">
-        <table>
-          <tr><th>Worker</th><th>Base ৳</th><th>Absence deduction ৳</th><th>Bonus ৳</th><th>Net ৳</th><th>Paid</th></tr>
-          <tr><td>Rahim</td><td>12,000</td><td>0</td><td><input style="width:90px" value="0"></td><td>12,000</td><td><span class="tag">Unpaid</span></td></tr>
-          <tr><td>Karim</td><td>11,000</td><td>-367</td><td><input style="width:90px" value="0"></td><td>10,633</td><td><span class="tag">Unpaid</span></td></tr>
-        </table>
-      </div>
-    </section>
+<!-- PURCHASES -->
+<section class="screen" id="purchases">
+  <div class="two">
+    <div class="card">
+      <h2>Purchase evaluator</h2>
+      <div class="row"><label>Supplier</label><select><option>Bazar vendor</option><option>Haque Traders</option></select></div>
+      <div class="row"><label>Live weight kg</label><input id="pw" value="350" inputmode="decimal"></div>
+      <div class="row"><label>Growth potential</label><select id="pg"><option value="60">Good (60–62%)</option><option value="54">Poor (54–55%)</option></select></div>
+      <div class="row"><label>Offered price ৳</label><input id="pp" value="105000" inputmode="decimal"></div>
+      <div class="row"><label>Market ৳/kg</label><input id="pm" value="520" inputmode="decimal"></div>
+    </div>
+    <div class="card">
+      <h2>Result</h2>
+      <table><tbody id="pres"></tbody></table>
+      <div class="verdict" id="pv"></div>
+      <button id="buy">Buy</button> <button class="ghost" id="ret">Return to seller</button>
+    </div>
+  </div>
+</section>
 
-    <!-- REPORTS -->
-    <section class="screen" id="reports">
-      <div class="filters">
-        <select><option>Monthly P&amp;L</option><option>Herd summary</option><option>Milk summary</option></select>
-        <select><option>October 2026</option></select>
-        <button class="ghost">Export Excel</button>
-        <button class="ghost">Export PDF</button>
-      </div>
-      <div class="two">
-        <div class="card">
-          <h2>Profit and loss</h2>
-          <table>
-            <tr><td>Milk and sales revenue</td><td>৳ 186,400</td></tr>
-            <tr><td>Expenses</td><td>৳ −42,100</td></tr>
-            <tr><td>Salaries</td><td>৳ −31,000</td></tr>
-            <tr><td>Purchases</td><td>৳ −0</td></tr>
-            <tr><th>Net</th><th>৳ 113,300</th></tr>
-          </table>
-        </div>
-        <div class="card">
-          <h2>Herd summary</h2>
-          <table>
-            <tr><td>Milking cows</td><td>7</td></tr>
-            <tr><td>Heifers</td><td>3</td></tr>
-            <tr><td>Calves</td><td>2</td></tr>
-            <tr><td>Average weight</td><td>365 kg</td></tr>
-          </table>
-        </div>
-      </div>
-    </section>
+<!-- BREEDING -->
+<section class="screen" id="breeding">
+  <div class="filters"><select><option>Pending pregnancy check</option><option>Calving in 30 days</option><option>All</option></select><button>+ New breeding record</button></div>
+  <div class="card scroll"><table><thead><tr><th>Cow</th><th>Heat</th><th>Insemination</th><th>Method</th><th>Status</th><th>Action</th></tr></thead><tbody id="brows"></tbody></table></div>
+</section>
 
-    <!-- MASTERS -->
-    <section class="screen" id="masters">
-      <div class="filters">
-        <select><option>Warehouses</option><option>Suppliers</option><option>Customers</option><option>Expense categories</option><option>Market prices</option></select>
-        <button>+ Add</button>
-      </div>
-      <div class="card">
-        <table>
-          <tr><th>Name</th><th>Name (বাংলা)</th><th>Type</th><th></th></tr>
-          <tr><td>Shed A</td><td>শেড এ</td><td>Housing</td><td class="muted">edit</td></tr>
-          <tr><td>Shed B</td><td>শেড বি</td><td>Housing</td><td class="muted">edit</td></tr>
-        </table>
-      </div>
-    </section>
+<!-- HEALTH -->
+<section class="screen" id="health">
+  <div class="alert">⚠ FMD vaccine · Shed A · due 12 Oct <span>Overdue 2 days</span></div>
+  <div class="filters"><button>+ New health record</button></div>
+  <div class="card scroll"><table><thead><tr><th>Date</th><th>Cow</th><th>Type</th><th>Vet</th><th class="num">Cost ৳</th><th>Next due</th></tr></thead><tbody>
+    <tr><td>28 Sep</td><td>1030</td><td>Deworming</td><td>Dr. Hasan</td><td class="num">350</td><td>28 Dec</td></tr>
+    <tr><td>10 Sep</td><td>1047, 1052, 1061</td><td>FMD vaccine</td><td>Dr. Hasan</td><td class="num">900</td><td><span class="tag bad">12 Oct</span></td></tr></tbody></table></div>
+</section>
 
-  </main>
+<!-- EXPENSES -->
+<section class="screen" id="expenses">
+  <div class="filters"><input placeholder="Date range"><select><option>All categories</option></select><select><option>All warehouses</option></select><button>+ Add expense</button></div>
+  <div class="card scroll"><table><thead><tr><th>Date</th><th>Category</th><th>Warehouse</th><th>Cow</th><th class="num">Amount ৳</th><th>Note</th></tr></thead><tbody>
+    <tr><td>10 Oct</td><td>Green grass</td><td>Shed A</td><td>—</td><td class="num">350</td><td class="muted">Bundle</td></tr>
+    <tr><td>08 Oct</td><td>Electric bill</td><td>Shed B</td><td>—</td><td class="num">2,400</td><td class="muted">September</td></tr></tbody></table></div>
+</section>
+
+<!-- PAYROLL -->
+<section class="screen" id="payroll">
+  <div class="filters"><select><option>October 2026</option></select><button id="paid">Mark all paid</button></div>
+  <div class="card scroll"><table><thead><tr><th>Worker</th><th class="num">Base ৳</th><th class="num">Absence ৳</th><th>Bonus ৳</th><th class="num">Net ৳</th><th>Paid</th></tr></thead><tbody id="prow"></tbody></table></div>
+</section>
+
+<!-- REPORTS -->
+<section class="screen" id="reports">
+  <div class="filters"><select><option>Monthly P&amp;L</option><option>Herd summary</option></select><select><option>October 2026</option></select><button class="ghost">Export Excel</button><button class="ghost">Export PDF</button></div>
+  <div class="two">
+    <div class="card"><h2>Profit and loss</h2>
+      <table><tbody id="pl"></tbody></table></div>
+    <div class="card"><h2>Herd summary</h2>
+      <table><tbody>
+        <tr><td>Milking cows</td><td class="num">7</td></tr><tr><td>Heifers</td><td class="num">3</td></tr>
+        <tr><td>Calves</td><td class="num">2</td></tr><tr><td>Average weight</td><td class="num">365 kg</td></tr></tbody></table></div>
+  </div>
+</section>
+
+<!-- MASTERS -->
+<section class="screen" id="masters">
+  <div class="filters"><select><option>Warehouses</option><option>Suppliers</option><option>Customers</option><option>Expense categories</option><option>Market prices</option></select><button>+ Add</button></div>
+  <div class="card"><table><thead><tr><th>Name</th><th>Name (বাংলা)</th><th>Type</th><th></th></tr></thead><tbody>
+    <tr><td>Shed A</td><td>শেড এ</td><td>Housing</td><td class="muted">Edit</td></tr>
+    <tr><td>Shed B</td><td>শেড বি</td><td>Housing</td><td class="muted">Edit</td></tr></tbody></table></div>
+</section>
+</main>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
-  const links = document.querySelectorAll('aside a');
-  const titles = { today:'Today', herd:'Herd', purchases:'Purchases', breeding:'Breeding', health:'Health', expenses:'Expenses', payroll:'Payroll', reports:'Reports', masters:'Masters' };
-  links.forEach(a => a.addEventListener('click', () => {
-    links.forEach(l => l.classList.remove('active'));
-    a.classList.add('active');
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    const id = a.dataset.target;
-    document.getElementById(id).classList.add('active');
-    document.getElementById('page-title').textContent = titles[id];
-  }));
-  document.querySelector('#herd table tr:nth-child(2)') && document.querySelectorAll('#herd tr').forEach((tr, i) => {
-    if (i > 0) tr.addEventListener('click', () => {
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-      document.getElementById('cow-profile').classList.add('active');
-      document.getElementById('page-title').textContent = 'Cow profile';
-    });
-  });
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const money=n=>'৳ '+fmt(n,0);
+let tm;function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(tm);tm=setTimeout(()=>e.classList.remove('show'),1800)}
+const I=p=>`<svg viewBox="0 0 24 24">${p}</svg>`;
+const NAV=[['today','Today','<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/>'],['herd','Herd','<path d="M4 8l3-3h10l3 3v6a4 4 0 01-4 4H8a4 4 0 01-4-4z"/><path d="M9 12v.01M15 12v.01"/>'],['purchases','Purchases','<path d="M5 7h14l-1 12H6zM9 7a3 3 0 016 0"/>'],['breeding','Breeding','<path d="M12 20s-7-4.5-7-10a4 4 0 017-2.5A4 4 0 0119 10c0 5.500-7 10-7 10z"/>'],['health','Health','<path d="M12 5v14M5 12h14"/>'],['expenses','Expenses','<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.500"/>'],['payroll','Payroll','<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M17 6a3 3 0 010 6"/>'],['reports','Reports','<path d="M5 20V10M12 20V4M19 20v-8"/>'],['masters','Masters','<path d="M4 6h16M4 12h16M4 18h10"/>']];
+$('#nav').insertAdjacentHTML('beforeend',NAV.map(([id,t,p])=>`<a data-t="${id}" class="${id=='today'?'active':''}">${I(p)}${t}${id=='health'?'<span class="badge">1</span>':''}</a>`).join('')+'<div class="side-foot">Karim is absent today</div>');
+function go(id,title){$$('.screen').forEach(s=>s.classList.toggle('active',s.id==id));$$('aside a').forEach(a=>a.classList.toggle('active',a.dataset.t==id||(id=='cow'&&a.dataset.t=='herd')));$('#title').textContent=title||NAV.find(n=>n[0]==id)[1];scrollTo(0,0)}
+$$('aside a').forEach(a=>a.onclick=()=>go(a.dataset.t));
+
+// date
+let d=new Date(2026,9,10);const showD=()=>$('#dt').textContent=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+$('#prev').onclick=()=>{d.setDate(d.getDate()-1);showD()};$('#next').onclick=()=>{d.setDate(d.getDate()+1);showD()};showD();
+$$('#lang button').forEach(b=>b.onclick=()=>{$$('#lang button').forEach(x=>x.classList.remove('on'));b.classList.add('on')});
+$$('#theme button').forEach(b=>b.onclick=()=>{$$('#theme button').forEach(x=>x.classList.toggle('on',x==b));const m=b.dataset.m,r=document.documentElement;m=='system'?r.removeAttribute('data-theme'):r.dataset.theme=m});
+addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key=='k'){e.preventDefault();$('#q').focus()}});
+$('#q').onkeydown=e=>{if(e.key=='Enter'){const c=COWS.find(c=>c.tag==e.target.value.trim());c?openCow(c):toast('No cow with that tag');}};
+
+// milk
+let tags=['1047','1052','1061'],groups=[{c:['1012','1019'],l:28},{c:['1047','1052','1061'],l:42.6},{c:['1030','1044'],l:26.1}],sales=[{c:'Hotel Golden Sun',i:'Milk 20 L',t:1900}],exps=[{c:'Molasses (মলাসেস)',w:'Shed A',a:600},{c:'Electric bill',w:'Shed B',a:2400}];
+function renderTags(){$$('.chip').forEach(c=>c.remove());$('#tagin').insertAdjacentHTML('beforebegin',tags.map((t,i)=>`<span class="chip">${t}<button data-i="${i}" aria-label="Remove ${t}">✕</button></span>`).join(''));prevMilk()}
+function prevMilk(){const l=parseFloat($('#lit').value)||0;$('#mprev').textContent=tags.length?`${tags.length} cows · ${fmt(l)} L · about ${fmt(l/tags.length)} L each`:'Add at least one cow tag'}
+$('#chips').onclick=e=>{if(e.target.dataset.i!==undefined){tags.splice(e.target.dataset.i,1);renderTags()}$('#tagin').focus()};
+$('#tagin').onkeydown=e=>{const v=e.target.value.trim();if(e.key=='Enter'&&v){if(tags.includes(v))toast('Tag '+v+' is already in this group');else{tags.push(v);renderTags()}e.target.value=''}else if(e.key=='Backspace'&&!e.target.value){tags.pop();renderTags()}};
+$('#lit').oninput=prevMilk;
+$('#savegrp').onclick=()=>{const l=parseFloat($('#lit').value);if(!tags.length||!l)return toast('Add cow tags and liters first');groups.push({c:[...tags],l});tags=[];$('#lit').value='';renderTags();renderToday();toast('Group saved')};
+function renderToday(){
+ $('#groups').innerHTML=groups.map((g,i)=>`<tr><td>${g.c.join(', ')}</td><td class="num">${fmt(g.l)}</td><td class="num">${fmt(g.l/g.c.length)}</td><td class="num"><button class="ghost sm" data-e="${i}">Edit</button> <button class="danger sm" data-x="${i}">Delete</button></td></tr>`).join('')||'<tr><td colspan="4" class="muted">No milk recorded yet. Add the first group above.</td></tr>';
+ const L=groups.reduce((s,g)=>s+g.l,0),C=groups.reduce((s,g)=>s+g.c.length,0);
+ $('#s-milk').textContent=fmt(L)+' L';$('#gl').textContent=fmt(L,1);$('#fill').style.height=Math.min(100,L/120*100)+'%';$('#gc').textContent=C?`${C} cows · avg ${fmt(L/C)} L`:'';
+ $('#exps').innerHTML=exps.map(x=>`<tr><td>${x.c}</td><td>${x.w}</td><td class="num">${fmt(x.a,0)}</td></tr>`).join('');
+ $('#s-exp').textContent=money(exps.reduce((s,x)=>s+x.a,0));
+ $('#sales').innerHTML=sales.map(x=>`<tr><td>${x.c}</td><td>${x.i}</td><td class="num">${fmt(x.t,0)}</td></tr>`).join('');
+ $('#s-sales').textContent=money(sales.reduce((s,x)=>s+x.t,0));
+ $('#pl').innerHTML=`<tr><td>Milk and sales revenue</td><td class="num">৳ 186,400</td></tr><tr><td>Expenses</td><td class="num">৳ −42,100</td></tr><tr><td>Salaries</td><td class="num">৳ −31,000</td></tr><tr><td>Purchases</td><td class="num">৳ 0</td></tr><tr><th>Net</th><th class="num" style="color:var(--accent);font-size:15px">৳ 113,300</th></tr>`}
+$('#groups').onclick=e=>{const b=e.target;if(b.dataset.x!==undefined){groups.splice(b.dataset.x,1);renderToday();toast('Group deleted')}if(b.dataset.e!==undefined){const g=groups.splice(b.dataset.e,1)[0];tags=g.c;$('#lit').value=g.l;renderTags();renderToday();toast('Editing group: change it, then save')}};
+$('#addexp').onclick=()=>{const a=parseFloat($('#eamt').value);if(!a)return toast('Enter an amount');exps.unshift({c:$('#ecat').value,w:$('#ewh').value,a});renderToday();toast('Expense added')};
+const prevSale=()=>$('#sprev').textContent='Total '+fmt((parseFloat($('#sq').value)||0)*(parseFloat($('#sp').value)||0));
+$('#sq').oninput=$('#sp').oninput=prevSale;
+$('#addsale').onclick=()=>{const q=parseFloat($('#sq').value),p=parseFloat($('#sp').value);if(!q||!p)return toast('Enter quantity and price');sales.push({c:$('#scust').value,i:'Milk '+q+' L',t:q*p});renderToday();toast('Sale added')};
+
+// attendance
+const W=[{n:'Rahim',p:1},{n:'Karim',p:0,note:'sick'},{n:'Salam',p:1},{n:'Jamal',p:1}];
+function renderW(){$('#workers').innerHTML=W.map((w,i)=>`<div class="worker ${w.p?'':'absent'}"><div class="avatar">${w.n[0]}</div><div><div style="font-weight:600">${w.n}</div>${w.p?'':`<div class="muted">${w.note||'absent'}</div>`}</div><div class="switch"><button class="p ${w.p?'on':''}" data-i="${i}" data-v="1">Present</button><button class="a ${w.p?'':'on'}" data-i="${i}" data-v="0">Absent</button></div></div>`).join('');
+ const n=W.filter(w=>w.p).length;$('#s-att').textContent=n+' / '+W.length;$('#attn').textContent=n+' present';const ab=W.filter(w=>!w.p);$('#subnote').textContent=ab.length?ab.map(w=>w.n).join(', ')+' absent. Hired a substitute?':'Everyone is present.'}
+$('#workers').onclick=e=>{const b=e.target.closest('button');if(b){W[b.dataset.i].p=+b.dataset.v;renderW()}};
+$('#sub').onclick=()=>toast('Substitute recorded as a mill charge');$('#saveday').onclick=()=>toast('Attendance saved');
+
+// herd
+const COWS=[['1047','Milking cow','F','5 y','Shed A','Active',412],['1052','Milking cow','F','4 y','Shed A','Active',398],['1061','Heifer','F','2 y','Shed B','Pregnant',340],['1030','Bull calf','M','1 y','Shed B','Active',210]].map(a=>({tag:a[0],cat:a[1],sex:a[2],age:a[3],wh:a[4],st:a[5],wt:a[6]}));
+function renderHerd(){const q=$('#hq').value.trim(),w=$('#hw').value,s=$('#hs').value;const r=COWS.filter(c=>c.tag.includes(q)&&(!w||c.wh==w)&&(!s||c.st==s));
+ $('#herdrows').innerHTML=r.map(c=>`<tr class="clickable" data-tag="${c.tag}"><td><b>${c.tag}</b></td><td>${c.cat}</td><td>${c.sex}</td><td>${c.age}</td><td>${c.wh}</td><td><span class="tag ${c.st=='Active'?'good':'warn'}">${c.st}</span></td><td class="num">${c.wt} kg</td></tr>`).join('')||'<tr><td colspan="7" class="muted">No cows match these filters.</td></tr>'}
+['#hq','#hw','#hs'].forEach(s=>$(s).oninput=renderHerd);
+$('#herdrows').onclick=e=>{const tr=e.target.closest('tr');if(tr&&tr.dataset.tag)openCow(COWS.find(c=>c.tag==tr.dataset.tag))};
+$('#back').onclick=()=>go('herd');
+const TABS=['Overview','Weight','Milk','Breeding','Health','Expenses','History'];let cur;
+function openCow(c){cur=c;go('cow','Cow '+c.tag);$('#cowh').innerHTML=`Cow ${c.tag} <span class="tag">${c.cat}</span><span class="tag">${c.wh}</span><span class="tag ${c.st=='Active'?'good':'warn'}">${c.st}</span>`;tab('Overview')}
+function tab(t){$('#ctabs').innerHTML=TABS.map(x=>`<button class="${x==t?'on':''}" data-t="${x}">${x}</button>`).join('');const c=cur;
+ const wts=[c.wt-14,c.wt-9,c.wt-4,c.wt],mx=Math.max(...wts),mn=Math.min(...wts)-10;
+ const spark=`<svg viewBox="0 0 200 60" style="width:240px;max-width:100%"><polyline fill="none" stroke="var(--accent)" stroke-width="2.500" points="${wts.map((w,i)=>`${10+i*60},${55-(w-mn)/(mx-mn)*48}`).join(' ')}"/></svg>`;
+ $('#cbody').innerHTML={Overview:`<div class="stats" style="margin:0"><div class="stat"><span class="muted">Weight</span><b>${c.wt} kg</b></div><div class="stat"><span class="muted">Age</span><b>${c.age}</b></div><div class="stat"><span class="muted">Sex</span><b>${c.sex}</b></div><div class="stat"><span class="muted">Source</span><b>Born on farm</b></div></div>`,Weight:`${spark}<table><thead><tr><th>Date</th><th class="num">Weight</th></tr></thead><tbody><tr><td>01 Oct 2026</td><td class="num">${wts[3]} kg</td></tr><tr><td>24 Sep 2026</td><td class="num">${wts[2]} kg</td></tr><tr><td>17 Sep 2026</td><td class="num">${wts[1]} kg</td></tr></tbody></table>`,Milk:'<div class="preview">Milk figures are group-based estimates, split evenly across the cows in each group.</div>',Breeding:'<div class="muted">See the Breeding screen for this cow\'s records.</div>',Health:'<div class="muted">FMD vaccine on 10 Sep. Next due 12 Oct.</div>',Expenses:'<div class="muted">No cow-specific expenses this month.</div>',History:'<div class="muted">Tag 1047 assigned on birth. Moved to Shed A on 03 Jan 2025.</div>'}[t]}
+$('#ctabs').onclick=e=>e.target.dataset.t&&tab(e.target.dataset.t);
+
+// purchase
+function evalP(){const w=+$('#pw').value||0,pc=+$('#pg').value,o=+$('#pp').value||0,m=+$('#pm').value||0,net=w*pc/100,npk=net?o/net:0,ok=npk<m;
+ $('#pres').innerHTML=`<tr><td>Estimated net weight</td><td class="num">${fmt(net,0)} kg</td></tr><tr><td>Net price per kg</td><td class="num">৳ ${fmt(npk)}</td></tr><tr><td>Market price per kg</td><td class="num">৳ ${fmt(m)}</td></tr>`;
+ $('#pv').className='verdict '+(ok?'yes':'no');$('#pv').innerHTML=ok?`✔ <div>Profitable<small>৳ ${fmt(m-npk)} per kg below market</small></div>`:`✖ <div>Not profitable<small>৳ ${fmt(npk-m)} per kg above market</small></div>`}
+['#pw','#pg','#pp','#pm'].forEach(s=>$(s).oninput=evalP);
+$('#buy').onclick=()=>toast('Marked as bought. Add the cow to the herd');$('#ret').onclick=()=>toast('Marked as returned to seller');
+
+// breeding
+const B=[{c:'1061',h:'02 Oct',i:'03 Oct',s:'p'},{c:'1052',h:'28 Sep',i:'29 Sep',s:'y'}];
+function renderB(){$('#brows').innerHTML=B.map((b,i)=>`<tr><td><b>${b.c}</b></td><td>${b.h}</td><td>${b.i}</td><td>Injection</td><td>${b.s=='p'?'<span class="tag warn">Check due 17 Oct</span>':b.s=='y'?'<span class="tag good">Confirmed</span>':'<span class="tag bad">Not pregnant</span>'}</td><td>${b.s=='p'?`<button class="ghost sm" data-i="${i}" data-v="y">Confirmed</button> <button class="ghost sm" data-i="${i}" data-v="n">Not pregnant</button>`:b.s=='y'?'<span class="muted">Calving 22 Jun 2027</span>':'<span class="muted">Ready to re-breed</span>'}</td></tr>`).join('')}
+$('#brows').onclick=e=>{const b=e.target;if(b.dataset.v){B[b.dataset.i].s=b.dataset.v;renderB();toast('Pregnancy check saved')}};
+
+// payroll
+const P=[{n:'Rahim',b:12000,a:0,bo:0,paid:0},{n:'Karim',b:11000,a:367,bo:0,paid:0}];
+function renderP(){$('#prow').innerHTML=P.map((p,i)=>`<tr><td><b>${p.n}</b></td><td class="num">${fmt(p.b,0)}</td><td class="num" style="color:var(--warn)">${p.a?'−'+p.a:'0'}</td><td><input data-i="${i}" style="width:90px" value="${p.bo}" inputmode="numeric"></td><td class="num"><b>${fmt(p.b-p.a+p.bo,0)}</b></td><td><span class="tag ${p.paid?'good':''}">${p.paid?'Paid':'Unpaid'}</span></td></tr>`).join('')}
+$('#prow').oninput=e=>{P[e.target.dataset.i].bo=+e.target.value||0;const f=e.target;const row=f.closest('tr');row.children[4].innerHTML='<b>'+fmt(P[f.dataset.i].b-P[f.dataset.i].a+P[f.dataset.i].bo,0)+'</b>'};
+$('#paid').onclick=()=>{P.forEach(p=>p.paid=1);renderP();toast('Salaries marked as paid')};
+
+renderTags();renderToday();renderW();renderHerd();evalP();renderB();renderP();prevSale();
 </script>
 </body>
 </html>
