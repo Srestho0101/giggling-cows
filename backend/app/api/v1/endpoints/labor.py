@@ -35,6 +35,8 @@ async def list_workers(
     stmt = select(Worker)
     if status:
         stmt = stmt.where(Worker.status == status)
+    else:
+        stmt = stmt.where(Worker.status == "active")
     return (await db.execute(stmt)).scalars().all()
 
 
@@ -74,6 +76,24 @@ async def update_worker(
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(worker, field, val)
+    worker.updated_by = current_user.id
+
+    await db.commit()
+    await db.refresh(worker)
+    return worker
+
+
+@router.delete("/workers/{worker_id}", response_model=WorkerRead)
+async def archive_worker(
+    worker_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    worker = await db.get(Worker, worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    worker.status = "inactive"
     worker.updated_by = current_user.id
 
     await db.commit()

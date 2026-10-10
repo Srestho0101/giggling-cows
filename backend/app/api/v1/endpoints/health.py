@@ -111,6 +111,37 @@ async def create_health_record(
     )
 
 
+@router.delete("/records/{health_id}", response_model=HealthRecordRead)
+async def delete_health_record(
+    health_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    record = await db.get(HealthRecord, health_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Health record not found")
+
+    response = HealthRecordRead(
+        health_id=record.health_id,
+        cow_id=record.cow_id,
+        cow_tag_number=(await db.get(Cow, record.cow_id)).current_tag_number if await db.get(Cow, record.cow_id) else None,
+        record_type=record.record_type,
+        record_date=record.record_date,
+        vet_name=record.vet_name,
+        details=record.details,
+        cost=record.cost,
+        next_due_date=record.next_due_date,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        created_by=record.created_by,
+        updated_by=record.updated_by,
+    )
+
+    await db.delete(record)
+    await db.commit()
+    return response
+
+
 # ---------------------- BREEDING RECORDS ----------------------
 @router.get("/breeding", response_model=List[BreedingRecordRead])
 async def list_breeding_records(
@@ -221,6 +252,45 @@ async def create_breeding_record(
     )
 
 
+@router.delete("/breeding/{breeding_id}", response_model=BreedingRecordRead)
+async def delete_breeding_record(
+    breeding_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    record = await db.get(BreedingRecord, breeding_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Breeding record not found")
+
+    cow = await db.get(Cow, record.cow_id)
+    sire = await db.get(Cow, record.sire_id) if record.sire_id else None
+    response = BreedingRecordRead(
+        breeding_id=record.breeding_id,
+        cow_id=record.cow_id,
+        cow_tag_number=cow.current_tag_number if cow else None,
+        heat_date=record.heat_date,
+        seed_date=record.seed_date,
+        conception_date=record.conception_date,
+        method=record.method,
+        sire_id=record.sire_id,
+        sire_tag_number=sire.current_tag_number if sire else None,
+        semen_code=record.semen_code,
+        semen_provider=record.semen_provider,
+        doctor_name=record.doctor_name,
+        cost=record.cost,
+        outcome=record.outcome,
+        notes=record.notes,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        created_by=record.created_by,
+        updated_by=record.updated_by,
+    )
+
+    await db.delete(record)
+    await db.commit()
+    return response
+
+
 # ---------------------- PREGNANCY REPORTS ----------------------
 @router.get("/pregnancy", response_model=List[PregnancyReportRead])
 async def list_pregnancy_reports(
@@ -302,3 +372,35 @@ async def create_pregnancy_report(
         created_by=report.created_by,
         updated_by=report.updated_by,
     )
+
+
+@router.delete("/pregnancy/{pregnancy_id}", response_model=PregnancyReportRead)
+async def delete_pregnancy_report(
+    pregnancy_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    report = await db.get(PregnancyReport, pregnancy_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Pregnancy report not found")
+
+    cow = await db.get(Cow, report.cow_id)
+    response = PregnancyReportRead(
+        pregnancy_id=report.pregnancy_id,
+        cow_id=report.cow_id,
+        cow_tag_number=cow.current_tag_number if cow else None,
+        breeding_id=report.breeding_id,
+        report_date=report.report_date,
+        status=report.status,
+        expected_calving_date=report.expected_calving_date,
+        actual_calving_date=report.actual_calving_date,
+        notes=report.notes,
+        created_at=report.created_at,
+        updated_at=report.updated_at,
+        created_by=report.created_by,
+        updated_by=report.updated_by,
+    )
+
+    await db.delete(report)
+    await db.commit()
+    return response

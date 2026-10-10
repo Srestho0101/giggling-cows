@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frontend development
 
-## Getting Started
+The frontend is a Next.js App Router project using React, TypeScript, and Tailwind CSS. It is intentionally a clean foundation; implement screens from `../Plans/frontend-plan.md` and use `../Plans/Cow Farm - UI Demo.html` as a visual reference.
 
-First, run the development server:
+## Setup
 
 ```bash
+cd frontend
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000>. Set `NEXT_PUBLIC_API_URL` in `.env.local` to the FastAPI origin (default `http://localhost:8000`). API routes are versioned under `/api/v1`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Run the backend separately from `../backend`; its default CORS configuration already allows `http://localhost:3000`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## App foundation
 
-## Learn More
+- The workspace shell contains the planned section navigation, date controls, language toggle, and Ctrl+K cow-search dialog.
+- Each section has its own route. Today combines dashboard indicators with daily milk, attendance, invoice, and expense entry; Reports includes dashboard summaries and period profitability; Masters manages reference lists supported by the API.
+- `src/lib/api.ts` provides `apiRequest<T>()`, `ApiError`, and route constants matching the FastAPI `/api/v1` endpoints. It accepts an optional bearer token; local requests work with the backend's development auth default. Production sign-in/token wiring remains a separate step.
 
-To learn more about Next.js, take a look at the following resources:
+Operational pages include cow registration, status changes, weight and warehouse history; server-calculated purchase evaluations and conversion to cows; breeding and pregnancy records; health records with due alerts; filtered expenses; milk entries, customers and invoice payments; plus worker attendance, salary payments, and substitute charges.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Checks
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```

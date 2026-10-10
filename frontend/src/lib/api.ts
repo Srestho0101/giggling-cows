@@ -1,218 +1,108 @@
-import {
-  BreedingRecord,
-  Cow,
-  CowDetail,
-  Customer,
-  DashboardOverview,
-  EvaluationPreviewResult,
-  Expense,
-  ExpenseCategory,
-  FeedingRecord,
-  FeedType,
-  HealthRecord,
-  MarketPrice,
-  MilkProduction,
-  MillCharge,
-  PregnancyReport,
-  ProfitabilityReport,
-  PurchaseEvaluation,
-  SalaryPayment,
-  SalesInvoice,
-  Supplier,
-  Warehouse,
-  Worker,
-  WorkerAttendance,
-} from "@/types/models";
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API_PREFIX = "/api/v1";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
+export type ApiRequestOptions = Omit<RequestInit, "body"> & {
+  body?: unknown;
+  accessToken?: string;
+};
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-  authHeaders: Record<string, string> = {}
-): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
-  const headers = {
-    "Content-Type": "application/json",
-    ...authHeaders,
-    ...options.headers,
-  };
+export class ApiError extends Error {
+  readonly status: number;
+  readonly payload: unknown;
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
+  constructor(status: number, message: string, payload: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+export function apiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE_URL}${API_PREFIX}${normalizedPath}`;
+}
+
+export function apiQuery(path: string, values: Record<string, string | number | boolean | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const suffix = query.toString();
+  return suffix ? `${path}?${suffix}` : path;
+}
+
+export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const { accessToken, headers, body, ...requestOptions } = options;
+  const requestHeaders = new Headers(headers);
+
+  if (body !== undefined && !requestHeaders.has("Content-Type")) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
+  if (accessToken) requestHeaders.set("Authorization", `Bearer ${accessToken}`);
+
+  const response = await fetch(apiUrl(path), {
+    ...requestOptions,
+    headers: requestHeaders,
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 
   if (!response.ok) {
-    let errorDetail = "API Request Failed";
-    try {
-      const errJson = await response.json();
-      errorDetail = errJson.detail || JSON.stringify(errJson);
-    } catch {
-      errorDetail = await response.text();
-    }
-    throw new Error(errorDetail);
+    const payload = await response.json().catch(() => undefined);
+    const message = getErrorMessage(payload) ?? `API request failed (${response.status})`;
+    throw new ApiError(response.status, message, payload);
   }
 
-  return response.json();
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
 }
 
-export const api = {
-  // DASHBOARD
-  getDashboard: (auth: Record<string, string>) =>
-    request<DashboardOverview>("/reports/dashboard", {}, auth),
+function getErrorMessage(payload: unknown): string | undefined {
+  if (typeof payload !== "object" || payload === null || !("detail" in payload)) return undefined;
+  const detail = payload.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => typeof item === "object" && item !== null && "msg" in item ? String(item.msg) : "Invalid request").join(" ");
+  }
+  return undefined;
+}
 
-  getProfitability: (startDate?: string, endDate?: string, auth: Record<string, string> = {}) => {
-    const params = new URLSearchParams();
-    if (startDate) params.append("start_date", startDate);
-    if (endDate) params.append("end_date", endDate);
-    return request<ProfitabilityReport>(`/reports/profitability?${params.toString()}`, {}, auth);
+export const apiRoutes = {
+  auth: { me: "/auth/me" },
+  herd: {
+    cows: "/herd/cows", cow: (id: string) => `/herd/cows/${id}`,
+    weight: (id: string) => `/herd/cows/${id}/weight`, move: (id: string) => `/herd/cows/${id}/move`,
+    warehouses: "/herd/warehouses", warehouse: (id: string) => `/herd/warehouses/${id}`,
+    suppliers: "/herd/suppliers", supplier: (id: string) => `/herd/suppliers/${id}`,
   },
-
-  getProfitabilityCSVUrl: (startDate?: string, endDate?: string) => {
-    const params = new URLSearchParams();
-    if (startDate) params.append("start_date", startDate);
-    if (endDate) params.append("end_date", endDate);
-    return `${API_BASE_URL}/reports/profitability/csv?${params.toString()}`;
+  evaluations: {
+    root: "/evaluations", preview: "/evaluations/calculate-preview", marketPrices: "/evaluations/market-prices",
+    update: (id: string) => `/evaluations/${id}`, convert: (id: string) => `/evaluations/${id}/convert-to-cow`,
   },
-
-  // HERD
-  getCows: (params: { warehouse_id?: string; status?: string; search?: string } = {}, auth: Record<string, string> = {}) => {
-    const q = new URLSearchParams();
-    if (params.warehouse_id) q.append("warehouse_id", params.warehouse_id);
-    if (params.status) q.append("status", params.status);
-    if (params.search) q.append("search", params.search);
-    return request<Cow[]>(`/herd/cows?${q.toString()}`, {}, auth);
+  feeding: {
+    expenses: "/feeding/expenses", categories: "/feeding/categories", feedTypes: "/feeding/feed-types",
+    feedType: (id: string) => `/feeding/feed-types/${id}`,
+    records: "/feeding/feeding-records",
   },
-
-  getCow: (id: string, auth: Record<string, string> = {}) =>
-    request<CowDetail>(`/herd/cows/${id}`, {}, auth),
-
-  createCow: (data: any, auth: Record<string, string> = {}) =>
-    request<CowDetail>("/herd/cows", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  updateCow: (id: string, data: any, auth: Record<string, string> = {}) =>
-    request<CowDetail>(`/herd/cows/${id}`, { method: "PATCH", body: JSON.stringify(data) }, auth),
-
-  addWeightRecord: (cowId: string, data: { weigh_date: string; weight_kg: number }, auth: Record<string, string> = {}) =>
-    request(`/herd/cows/${cowId}/weight`, { method: "POST", body: JSON.stringify(data) }, auth),
-
-  moveWarehouse: (cowId: string, data: { warehouse_id: string; moved_in_date: string; reason?: string }, auth: Record<string, string> = {}) =>
-    request<CowDetail>(`/herd/cows/${cowId}/move`, { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getWarehouses: (auth: Record<string, string> = {}) =>
-    request<Warehouse[]>("/herd/warehouses", {}, auth),
-
-  getSuppliers: (auth: Record<string, string> = {}) =>
-    request<Supplier[]>("/herd/suppliers", {}, auth),
-
-  // EVALUATIONS
-  getMarketPrices: (auth: Record<string, string> = {}) =>
-    request<MarketPrice[]>("/evaluations/market-prices", {}, auth),
-
-  createMarketPrice: (data: { price_date: string; price_per_kg_net: number; source?: string }, auth: Record<string, string> = {}) =>
-    request<MarketPrice>("/evaluations/market-prices", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  previewEvaluation: (data: any, auth: Record<string, string> = {}) =>
-    request<EvaluationPreviewResult>("/evaluations/calculate-preview", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getEvaluations: (auth: Record<string, string> = {}) =>
-    request<PurchaseEvaluation[]>("/evaluations", {}, auth),
-
-  createEvaluation: (data: any, auth: Record<string, string> = {}) =>
-    request<PurchaseEvaluation>("/evaluations", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  convertEvaluationToCow: (evalId: string, data: any, auth: Record<string, string> = {}) =>
-    request<CowDetail>(`/evaluations/${evalId}/convert-to-cow`, { method: "POST", body: JSON.stringify(data) }, auth),
-
-  // FEEDING & EXPENSES
-  getExpenseCategories: (auth: Record<string, string> = {}) =>
-    request<ExpenseCategory[]>("/feeding/categories", {}, auth),
-
-  getFeedTypes: (auth: Record<string, string> = {}) =>
-    request<FeedType[]>("/feeding/feed-types", {}, auth),
-
-  getFeedingRecords: (auth: Record<string, string> = {}) =>
-    request<FeedingRecord[]>("/feeding/feeding-records", {}, auth),
-
-  createFeedingRecord: (data: any, auth: Record<string, string> = {}) =>
-    request<FeedingRecord>("/feeding/feeding-records", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getExpenses: (auth: Record<string, string> = {}) =>
-    request<Expense[]>("/feeding/expenses", {}, auth),
-
-  createExpense: (data: any, auth: Record<string, string> = {}) =>
-    request<Expense>("/feeding/expenses", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  // LABOR
-  getWorkers: (auth: Record<string, string> = {}) =>
-    request<Worker[]>("/labor/workers", {}, auth),
-
-  createWorker: (data: any, auth: Record<string, string> = {}) =>
-    request<Worker>("/labor/workers", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getDailyAttendance: (dateStr: string, auth: Record<string, string> = {}) =>
-    request<WorkerAttendance[]>(`/labor/attendance?attendance_date=${dateStr}`, {}, auth),
-
-  saveBatchAttendance: (data: { attendance_date: string; records: { worker_id: string; is_present: boolean; note?: string }[] }, auth: Record<string, string> = {}) =>
-    request<WorkerAttendance[]>("/labor/attendance/batch", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getSalaryPayments: (auth: Record<string, string> = {}) =>
-    request<SalaryPayment[]>("/labor/salary-payments", {}, auth),
-
-  createSalaryPayment: (data: any, auth: Record<string, string> = {}) =>
-    request<SalaryPayment>("/labor/salary-payments", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getMillCharges: (auth: Record<string, string> = {}) =>
-    request<MillCharge[]>("/labor/mill-charges", {}, auth),
-
-  createMillCharge: (data: any, auth: Record<string, string> = {}) =>
-    request<MillCharge>("/labor/mill-charges", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  // HEALTH & BREEDING
-  getHealthRecords: (auth: Record<string, string> = {}) =>
-    request<HealthRecord[]>("/health/records", {}, auth),
-
-  createHealthRecord: (data: any, auth: Record<string, string> = {}) =>
-    request<HealthRecord>("/health/records", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getBreedingRecords: (auth: Record<string, string> = {}) =>
-    request<BreedingRecord[]>("/health/breeding", {}, auth),
-
-  createBreedingRecord: (data: any, auth: Record<string, string> = {}) =>
-    request<BreedingRecord>("/health/breeding", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getPregnancyReports: (auth: Record<string, string> = {}) =>
-    request<PregnancyReport[]>("/health/pregnancy", {}, auth),
-
-  createPregnancyReport: (data: any, auth: Record<string, string> = {}) =>
-    request<PregnancyReport>("/health/pregnancy", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  // SALES & INVOICES
-  getCustomers: (auth: Record<string, string> = {}) =>
-    request<Customer[]>("/sales/customers", {}, auth),
-
-  createCustomer: (data: any, auth: Record<string, string> = {}) =>
-    request<Customer>("/sales/customers", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getMilkRecords: (auth: Record<string, string> = {}) =>
-    request<MilkProduction[]>("/sales/milk", {}, auth),
-
-  createMilkRecord: (data: any, auth: Record<string, string> = {}) =>
-    request<MilkProduction>("/sales/milk", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  getInvoices: (auth: Record<string, string> = {}) =>
-    request<SalesInvoice[]>("/sales/invoices", {}, auth),
-
-  getInvoice: (id: string, auth: Record<string, string> = {}) =>
-    request<SalesInvoice>(`/sales/invoices/${id}`, {}, auth),
-
-  createInvoice: (data: any, auth: Record<string, string> = {}) =>
-    request<SalesInvoice>("/sales/invoices", { method: "POST", body: JSON.stringify(data) }, auth),
-
-  updateInvoiceStatus: (id: string, status: string, auth: Record<string, string> = {}) =>
-    request<SalesInvoice>(`/sales/invoices/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }, auth),
-
-  recordPayment: (invoiceId: string, data: any, auth: Record<string, string> = {}) =>
-    request(`/sales/invoices/${invoiceId}/payments`, { method: "POST", body: JSON.stringify(data) }, auth),
-};
+  labor: {
+    workers: "/labor/workers", worker: (id: string) => `/labor/workers/${id}`,
+    attendance: "/labor/attendance", attendanceBatch: "/labor/attendance/batch",
+    salaries: "/labor/salary-payments", substitutes: "/labor/mill-charges",
+  },
+  health: {
+    records: "/health/records", record: (id: string) => `/health/records/${id}`,
+    breeding: "/health/breeding", breedingRecord: (id: string) => `/health/breeding/${id}`,
+    pregnancy: "/health/pregnancy", pregnancyReport: (id: string) => `/health/pregnancy/${id}`,
+  },
+  sales: {
+    customers: "/sales/customers", customer: (id: string) => `/sales/customers/${id}`,
+    invoices: "/sales/invoices", invoice: (id: string) => `/sales/invoices/${id}`,
+    invoiceStatus: (id: string) => `/sales/invoices/${id}/status`, invoicePayments: (id: string) => `/sales/invoices/${id}/payments`,
+    milk: "/sales/milk",
+  },
+  reports: {
+    dashboard: "/reports/dashboard",
+    profitability: "/reports/profitability",
+    profitabilityCsv: "/reports/profitability/csv",
+  },
+} as const;

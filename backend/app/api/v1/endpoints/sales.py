@@ -112,6 +112,28 @@ async def update_customer(
     return CustomerRead.model_validate(customer)
 
 
+@router.delete("/customers/{customer_id}", response_model=CustomerRead)
+async def archive_customer(
+    customer_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    customer = await db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    customer.is_archived = True
+    customer.updated_by = current_user.id
+
+    await db.commit()
+    await db.refresh(customer)
+    r = CustomerRead.model_validate(customer)
+    r.total_invoiced = Decimal("0.00")
+    r.total_paid = Decimal("0.00")
+    r.current_balance = Decimal("0.00")
+    return r
+
+
 # ---------------------- MILK PRODUCTION ----------------------
 @router.get("/milk", response_model=List[MilkProductionRead])
 async def list_milk_production(
