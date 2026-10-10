@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     @property
     def async_database_url(self) -> str:
-        """Return a URL accepted by SQLAlchemy's async engine, including Supabase pooler settings."""
+        """Return a URL accepted by SQLAlchemy's async engine for Supabase or local Postgres."""
         url = self.DATABASE_URL.strip()
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
@@ -68,8 +68,9 @@ class Settings(BaseSettings):
         if candidate.scheme and candidate.hostname:
             params = dict(parse_qsl(candidate.query, keep_blank_values=True))
             if candidate.hostname.endswith(".supabase.com") or candidate.port == 6543:
-                params.setdefault("pgbouncer", "true")
-                params.setdefault("sslmode", "require")
+                # asyncpg does not accept the libpq-only pgbouncer flag; SSL is handled separately.
+                params.pop("pgbouncer", None)
+                params.pop("sslmode", None)
                 return urlunsplit((
                     candidate.scheme,
                     candidate.netloc,
@@ -78,6 +79,16 @@ class Settings(BaseSettings):
                     candidate.fragment,
                 ))
         return url
+
+    @property
+    def supabase_base_url(self) -> str:
+        """Normalize the configured Supabase project URL for client setup."""
+        return self.SUPABASE_URL.rstrip("/")
+
+    @property
+    def supabase_configured(self) -> bool:
+        """Whether the required Supabase credentials are present."""
+        return bool(self.SUPABASE_URL and self.SUPABASE_ANON_KEY)
 
     @property
     def database_connect_args(self) -> dict:
