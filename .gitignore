@@ -40,3 +40,5 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 *.db
+
+text.txt
