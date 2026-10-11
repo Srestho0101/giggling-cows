@@ -138,6 +138,10 @@ cd backend
 pytest -q
 ```
 
+# Live URLs
+[Render Server](https://cow-farm-cakg.onrender.com/api/v1/docs#/Authentication%20%26%20Profile/get_current_user_profile_api_v1_auth_me_get)
+[Vercel Deployment](https://giggling-cows.vercel.app/today)
+
 MIT License
 
 Happy hacking!
