@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/module-page";
-import { MastersWorkspace } from "@/components/planned-pages";
+import { MastersWorkspace } from "@/components/workspaces/masters-workspace";
 
 export default function MastersPage() {
-  return <ModulePage title="Masters" subtitle="Maintain the shared reference data used throughout the farm"><MastersWorkspace /></ModulePage>;
+  return <MastersWorkspace />;
 }

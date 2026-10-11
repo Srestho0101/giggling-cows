@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/module-page";
-import { HerdWorkspace } from "@/components/operational-pages";
+import { HerdWorkspace } from "@/components/workspaces/herd-workspace";
 
 export default function HerdPage() {
-  return <ModulePage title="Herd" subtitle="Manage cow records, housing, and weights."><HerdWorkspace /></ModulePage>;
+  return <HerdWorkspace />;
 }

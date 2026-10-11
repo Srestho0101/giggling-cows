@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/module-page";
-import { ExpensesWorkspace } from "@/components/operational-pages";
+import { ExpensesWorkspace } from "@/components/workspaces/expenses-workspace";
 
 export default function ExpensesPage() {
-  return <ModulePage title="Expenses" subtitle="Review farm spending and record new expenses."><ExpensesWorkspace /></ModulePage>;
+  return <ExpensesWorkspace />;
 }

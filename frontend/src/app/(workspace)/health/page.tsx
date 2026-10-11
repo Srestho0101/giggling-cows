@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/module-page";
-import { HealthWorkspace } from "@/components/operational-pages";
+import { HealthWorkspace } from "@/components/workspaces/health-workspace";
 
 export default function HealthPage() {
-  return <ModulePage title="Health" subtitle="Keep treatment records and follow upcoming care dates."><HealthWorkspace /></ModulePage>;
+  return <HealthWorkspace />;
 }

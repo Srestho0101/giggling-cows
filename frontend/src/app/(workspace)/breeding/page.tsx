@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/module-page";
-import { BreedingWorkspace } from "@/components/operational-pages";
+import { BreedingWorkspace } from "@/components/workspaces/breeding-workspace";
 
 export default function BreedingPage() {
-  return <ModulePage title="Breeding" subtitle="Track breeding attempts and pregnancy checks."><BreedingWorkspace /></ModulePage>;
+  return <BreedingWorkspace />;
 }

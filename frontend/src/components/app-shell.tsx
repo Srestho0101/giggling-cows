@@ -1,212 +1,359 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, useRef, useEffect } from "react";
+import { useFarm } from "@/context/farm-context";
 
-type AppShellProps = { children: React.ReactNode };
-type Language = "en" | "bn";
-type ThemeMode = "system" | "light" | "dark";
+const NAV_ITEMS = [
+  {
+    id: "today",
+    href: "/today",
+    en: "Today",
+    bn: "আজ",
+    svg: (
+      <>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
+      </>
+    ),
+  },
+  {
+    id: "herd",
+    href: "/herd",
+    en: "Herd",
+    bn: "পাল",
+    svg: (
+      <>
+        <path d="M4 8l3-3h10l3 3v6a4 4 0 01-4 4H8a4 4 0 01-4-4z" />
+        <path d="M9 12v.01M15 12v.01" />
+      </>
+    ),
+  },
+  {
+    id: "purchases",
+    href: "/purchases",
+    en: "Purchases",
+    bn: "ক্রয়",
+    svg: (
+      <>
+        <path d="M5 7h14l-1 12H6zM9 7a3 3 0 016 0" />
+      </>
+    ),
+  },
+  {
+    id: "breeding",
+    href: "/breeding",
+    en: "Breeding",
+    bn: "প্রজনন",
+    svg: (
+      <>
+        <path d="M12 20s-7-4.5-7-10a4 4 0 017-2.5A4 4 0 0119 10c0 5.500-7 10-7 10z" />
+      </>
+    ),
+  },
+  {
+    id: "health",
+    href: "/health",
+    en: "Health",
+    bn: "স্বাস্থ্য",
+    badge: 1,
+    svg: (
+      <>
+        <path d="M12 5v14M5 12h14" />
+      </>
+    ),
+  },
+  {
+    id: "expenses",
+    href: "/expenses",
+    en: "Expenses",
+    bn: "খরচ",
+    svg: (
+      <>
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <circle cx="12" cy="12" r="2.5" />
+      </>
+    ),
+  },
+  {
+    id: "payroll",
+    href: "/payroll",
+    en: "Payroll",
+    bn: "বেতন",
+    svg: (
+      <>
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3 20c0-3 3-5 6-5s6 2 6 5M17 6a3 3 0 010 6" />
+      </>
+    ),
+  },
+  {
+    id: "reports",
+    href: "/reports",
+    en: "Reports",
+    bn: "রিপোর্ট",
+    svg: (
+      <>
+        <path d="M5 20V10M12 20V4M19 20v-8" />
+      </>
+    ),
+  },
+  {
+    id: "masters",
+    href: "/masters",
+    en: "Masters",
+    bn: "মৌলিক তথ্য",
+    svg: (
+      <>
+        <path d="M4 6h16M4 12h16M4 18h10" />
+      </>
+    ),
+  },
+];
 
-function getBangladeshCalendarDate() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Dhaka",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return new Date(Number(values.year), Number(values.month) - 1, Number(values.day), 12);
-}
-
-const navigation = [
-  { href: "/today", en: "Today", bn: "আজ", icon: "today" },
-  { href: "/herd", en: "Herd", bn: "পাল", icon: "herd" },
-  { href: "/purchases", en: "Purchases", bn: "ক্রয়", icon: "purchases" },
-  { href: "/breeding", en: "Breeding", bn: "প্রজনন", icon: "breeding" },
-  { href: "/health", en: "Health", bn: "স্বাস্থ্য", icon: "health" },
-  { href: "/expenses", en: "Expenses", bn: "খরচ", icon: "expenses" },
-  { href: "/milk-sales", en: "Milk and Sales", bn: "দুধ ও বিক্রয়", icon: "sales" },
-  { href: "/payroll", en: "Payroll", bn: "বেতন", icon: "payroll" },
-  { href: "/reports", en: "Reports", bn: "রিপোর্ট", icon: "reports" },
-  { href: "/masters", en: "Masters", bn: "মৌলিক তথ্য", icon: "masters" },
-] as const;
-
-function NavIcon({ name }: { name: string }) {
-  const common = {
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.7,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    viewBox: "0 0 24 24",
-    className: "size-[18px] shrink-0",
-    "aria-hidden": true as const,
-  };
-
-  const iconPaths: Record<string, React.ReactNode> = {
-    today: <><path d="M4 10.5 12 4l8 6.5" /><path d="M6.5 9v10h11V9M9.5 19v-6h5v6" /></>,
-    herd: <><path d="M7 8.5 5 6l-2 1v4l2 1M17 8.5 19 6l2 1v4l-2 1" /><path d="M5 11c0-3 2.5-5 7-5s7 2 7 5v4c0 3-2.5 5-7 5s-7-2-7-5zM9 12h.01M15 12h.01M10 16h4" /></>,
-    purchases: <><path d="M4 7h16l-1 13H5L4 7Z" /><path d="M9 9V6a3 3 0 0 1 6 0v3M9 13h6" /></>,
-    breeding: <><path d="M12 20s-7-4.3-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.7-7 10-7 10Z" /><path d="M9.5 12h5" /></>,
-    health: <><path d="M12 21s8-4 8-11V5l-8-3-8 3v5c0 7 8 11 8 11Z" /><path d="M9 12h6M12 9v6" /></>,
-    expenses: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18M7 15h3" /></>,
-    sales: <><path d="M3 5h2l2.2 10.2a2 2 0 0 0 2 1.6h8a2 2 0 0 0 1.9-1.4L21 9H7" /><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /></>,
-    payroll: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h3M8 16h8" /></>,
-    reports: <><path d="M4 19V5M4 19h17" /><path d="m7 15 4-4 3 2 5-6" /></>,
-    masters: <><path d="M4 6h16M4 12h16M4 18h16" /><circle cx="8" cy="6" r="1.5" fill="currentColor" /><circle cx="15" cy="12" r="1.5" fill="currentColor" /><circle cx="10" cy="18" r="1.5" fill="currentColor" /></>,
-  };
-
-  return <svg {...common}>{iconPaths[name]}</svg>;
-}
-
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [language, setLanguage] = useState<Language>("en");
-  const [date, setDate] = useState(getBangladeshCalendarDate);
-  const [theme, setTheme] = useState<ThemeMode>("system");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchInput = useRef<HTMLInputElement>(null);
-  const activePage = navigation.find((item) => pathname.startsWith(item.href)) ?? navigation[0];
+  const router = useRouter();
+  const {
+    language,
+    setLanguage,
+    theme,
+    setTheme,
+    shiftDate,
+    formattedDate,
+    toast,
+    toastMsg,
+    isToastVisible,
+    searchOpen,
+    setSearchOpen,
+    cows,
+    findCowByTag,
+    workers,
+  } = useFarm();
 
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "system") {
-      root.removeAttribute("data-theme");
-      return;
-    }
-    root.setAttribute("data-theme", theme);
-  }, [theme]);
+  const [headerSearch, setHeaderSearch] = useState("");
+  const modalInputRef = useRef<HTMLInputElement>(null);
+  const [modalQuery, setModalQuery] = useState("");
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setSearchOpen(true);
-      }
-      if (event.key === "Escape") setSearchOpen(false);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  const absentWorkers = workers.filter((w) => !w.p);
+  const sideFootText =
+    absentWorkers.length > 0
+      ? language === "bn"
+        ? `${absentWorkers.map((w) => w.n).join(", ")} আজ অনুপস্থিত`
+        : `${absentWorkers.map((w) => w.n).join(", ")} is absent today`
+      : language === "bn"
+      ? "সবাই আজ উপস্থিত"
+      : "Everyone is present today";
 
-  useEffect(() => {
-    if (searchOpen) searchInput.current?.focus();
-  }, [searchOpen]);
-
-  const locale = language === "bn" ? "bn-BD" : "en-GB";
-  const formattedDate = new Intl.DateTimeFormat(locale, {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Dhaka",
-  }).format(date);
-
-  function shiftDate(days: number) {
-    setDate((current) => {
-      const next = new Date(current);
-      next.setDate(next.getDate() + days);
-      return next;
-    });
+  // Determine current page title
+  let currentTitle = language === "bn" ? "আজ" : "Today";
+  const activeNav = NAV_ITEMS.find((item) => pathname.startsWith(item.href));
+  if (activeNav) {
+    currentTitle = language === "bn" ? activeNav.bn : activeNav.en;
+  }
+  if (pathname.startsWith("/herd/")) {
+    const cowTag = pathname.split("/herd/")[1];
+    currentTitle = language === "bn" ? `গরু ${cowTag}` : `Cow ${cowTag}`;
   }
 
+  const handleHeaderSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      const q = headerSearch.trim();
+      if (!q) return;
+      const cow = findCowByTag(q);
+      if (cow) {
+        setHeaderSearch("");
+        router.push(`/herd/${cow.tag}`);
+      } else {
+        toast(language === "bn" ? "এই ট্যাগের কোনো গরু পাওয়া যায়নি" : "No cow with that tag");
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (searchOpen) {
+      setTimeout(() => {
+        modalInputRef.current?.focus();
+      }, 50);
+    } else {
+      setModalQuery("");
+    }
+  }, [searchOpen]);
+
+  const filteredCows = modalQuery.trim()
+    ? cows.filter(
+        (c) =>
+          c.tag.toLowerCase().includes(modalQuery.trim().toLowerCase()) ||
+          c.cat.toLowerCase().includes(modalQuery.trim().toLowerCase()) ||
+          c.wh.toLowerCase().includes(modalQuery.trim().toLowerCase())
+      )
+    : cows.slice(0, 8);
+
   return (
-    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      <aside className="fixed inset-y-0 left-0 z-20 flex w-[160px] flex-col bg-[var(--nav)] px-[8px] py-[12px] text-[var(--navtxt)]">
-        <div className="flex items-center gap-2 px-2 pb-3 text-[var(--navhi)]">
-          <span className="grid size-[24px] place-items-center rounded-[7px] bg-[var(--hay)] text-[13px] font-bold text-[#0f172a]">🐄</span>
-          <span className="text-[14px] font-bold">Cow Farm</span>
+    <div className="app">
+      <aside id="nav">
+        <div className="brand">
+          <i>🐄</i>Cow Farm
         </div>
 
-        <nav aria-label={language === "bn" ? "প্রধান নেভিগেশন" : "Main navigation"} className="flex-1 space-y-[2px] overflow-y-auto">
-          {navigation.map((item) => {
-            const selected = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={selected ? "page" : undefined}
-                className={`flex items-center gap-[9px] rounded-[7px] px-[9px] py-[7px] text-[12px] font-medium transition-colors ${
-                  selected ? "bg-white/10 text-[var(--navhi)] shadow-[inset_3px_0_0_var(--hay)]" : "text-[var(--navtxt)] hover:bg-white/5 hover:text-[var(--navhi)]"
-                }`}
-              >
-                <NavIcon name={item.icon} />
-                <span>{language === "bn" ? item.bn : item.en}</span>
-                {item.href === "/health" && <span className="ml-auto rounded-full bg-[var(--warn)] px-[6px] py-[1px] text-[9px] font-semibold text-[var(--on-accent)]">1</span>}
-              </Link>
-            );
-          })}
-        </nav>
+        {NAV_ITEMS.map((item) => {
+          const isActive =
+            pathname === item.href ||
+            (item.href === "/herd" && pathname.startsWith("/herd")) ||
+            (pathname === "/" && item.href === "/today");
+          return (
+            <Link
+              key={item.id}
+              href={item.href}
+              className={isActive ? "active" : ""}
+            >
+              <svg viewBox="0 0 24 24">{item.svg}</svg>
+              <span>{language === "bn" ? item.bn : item.en}</span>
+              {item.badge ? <span className="badge">{item.badge}</span> : null}
+            </Link>
+          );
+        })}
 
-        <div className="mt-auto border-t border-white/10 px-[8px] pt-[10px] text-[11px] text-[var(--navtxt)] opacity-75">Karim is absent today</div>
+        <div className="side-foot">{sideFootText}</div>
       </aside>
 
-      <div className="ml-[160px] min-h-screen">
-        <header className="sticky top-0 z-10 flex h-[52px] items-center gap-[10px] border-b border-[var(--line)] bg-[var(--bar)] px-[16px] backdrop-blur-md">
-          <h1 className="min-w-[90px] flex-1 text-[17px] font-bold text-[var(--text)]">{language === "bn" ? activePage.bn : activePage.en}</h1>
+      <main>
+        <header>
+          <h1 id="title">{currentTitle}</h1>
 
-          <div className="relative">
+          <div className="search">
             <input
-              type="search"
-              aria-label="Search cows"
-              onFocus={() => setSearchOpen(true)}
-              placeholder={language === "bn" ? "গরু খুঁজুন..." : "Search cows..."}
-              className="h-8 w-[150px] rounded-[8px] border border-[var(--line)] bg-[var(--card)] pl-[11px] pr-[34px] text-[12px] text-[var(--text)] placeholder:text-[var(--muted)]"
+              id="q"
+              placeholder={language === "bn" ? "ট্যাগ দিয়ে গরু খুঁজুন" : "Find cow by tag"}
+              value={headerSearch}
+              onChange={(e) => setHeaderSearch(e.target.value)}
+              onKeyDown={handleHeaderSearchKeyDown}
             />
-            <kbd className="pointer-events-none absolute right-[8px] top-1/2 -translate-y-1/2 rounded-[5px] border border-[var(--line)] bg-[var(--card)] px-[4px] py-[1px] text-[9px] text-[var(--muted)]">Ctrl K</kbd>
+            <kbd onClick={() => setSearchOpen(true)} style={{ cursor: "pointer" }}>
+              Ctrl K
+            </kbd>
           </div>
 
-          <div className="flex items-center rounded-[8px] border border-[var(--line)] bg-[var(--card)]">
-            <button type="button" aria-label="Previous day" onClick={() => shiftDate(-1)} className="h-8 px-[7px] text-[var(--muted)] hover:text-[var(--text)]">‹</button>
-            <span className="min-w-[100px] text-center text-[12px] font-semibold tabular-nums">{formattedDate}</span>
-            <button type="button" aria-label="Next day" onClick={() => shiftDate(1)} className="h-8 px-[7px] text-[var(--muted)] hover:text-[var(--text)]">›</button>
+          <div className="date">
+            <button
+              className="ghost"
+              id="prev"
+              onClick={() => shiftDate(-1)}
+              aria-label="Previous day"
+            >
+              ◀
+            </button>
+            <span id="dt">{formattedDate}</span>
+            <button
+              className="ghost"
+              id="next"
+              onClick={() => shiftDate(1)}
+              aria-label="Next day"
+            >
+              ▶
+            </button>
           </div>
 
-          <div className="flex rounded-[8px] border border-[var(--line)] bg-[var(--card)] p-[2px]">
-            <button type="button" onClick={() => setLanguage("bn")} className={`rounded-[6px] px-[8px] py-[4px] text-[11px] font-medium ${language === "bn" ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--muted)]"}`}>বাংলা</button>
-            <button type="button" onClick={() => setLanguage("en")} className={`rounded-[6px] px-[8px] py-[4px] text-[11px] font-medium ${language === "en" ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--muted)]"}`}>English</button>
+          <div className="seg" id="lang">
+            <button
+              className={language === "bn" ? "on" : ""}
+              onClick={() => setLanguage("bn")}
+            >
+              বাংলা
+            </button>
+            <button
+              className={language === "en" ? "on" : ""}
+              onClick={() => setLanguage("en")}
+            >
+              English
+            </button>
           </div>
 
-          <div className="flex rounded-[8px] border border-[var(--line)] bg-[var(--card)] p-[2px]">
-            {(["system", "light", "dark"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setTheme(mode)}
-                className={`rounded-[6px] px-[8px] py-[4px] text-[10px] font-medium ${theme === mode ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--muted)]"}`}
-              >
-                {mode === "system" ? "Auto" : mode === "light" ? "Light" : "Dark"}
-              </button>
-            ))}
+          <div className="seg" id="theme" aria-label="Theme">
+            <button
+              className={theme === "system" ? "on" : ""}
+              onClick={() => setTheme("system")}
+            >
+              Auto
+            </button>
+            <button
+              className={theme === "light" ? "on" : ""}
+              onClick={() => setTheme("light")}
+            >
+              Light
+            </button>
+            <button
+              className={theme === "dark" ? "on" : ""}
+              onClick={() => setTheme("dark")}
+            >
+              Dark
+            </button>
           </div>
         </header>
 
-        <main>{children}</main>
-      </div>
+        {children}
+      </main>
 
+      {/* Ctrl+K Search Modal */}
       {searchOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/30 px-4 pt-[18vh]" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setSearchOpen(false);
-        }}>
-          <div role="dialog" aria-modal="true" aria-label="Search cows" className="w-full max-w-xl overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--card)] shadow-2xl">
-            <div className="flex items-center gap-3 border-b border-[var(--line)] px-4">
-              <SearchIcon />
-              <input
-                ref={searchInput}
-                type="search"
-                placeholder={language === "bn" ? "ট্যাগ বা নাম দিয়ে খুঁজুন" : "Search by cow tag or name"}
-                className="h-14 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--muted)]"
-              />
-              <button type="button" onClick={() => setSearchOpen(false)} className="rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">ESC</button>
+        <div
+          className="modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSearchOpen(false);
+          }}
+        >
+          <div className="modal-card" style={{ maxWidth: 480 }}>
+            <h2 style={{ margin: "0 0 10px" }}>
+              {language === "bn" ? "গরু অনুসন্ধান" : "Find cow"}
+              <small style={{ cursor: "pointer" }} onClick={() => setSearchOpen(false)}>
+                ESC
+              </small>
+            </h2>
+            <input
+              ref={modalInputRef}
+              placeholder={language === "bn" ? "ট্যাগ নম্বর লিখুন (যেমন: 1047)..." : "Type cow tag (e.g. 1047)..."}
+              value={modalQuery}
+              onChange={(e) => setModalQuery(e.target.value)}
+              style={{ marginBottom: 12 }}
+            />
+            <div style={{ maxHeight: 260, overflowY: "auto" }}>
+              {filteredCows.length > 0 ? (
+                <table>
+                  <tbody>
+                    {filteredCows.map((c) => (
+                      <tr
+                        key={c.cow_id}
+                        className="clickable"
+                        onClick={() => {
+                          setSearchOpen(false);
+                          router.push(`/herd/${c.tag}`);
+                        }}
+                      >
+                        <td>
+                          <b>{c.tag}</b>
+                        </td>
+                        <td>{c.cat}</td>
+                        <td>{c.wh}</td>
+                        <td className="num">{c.wt} kg</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="muted" style={{ padding: "12px 0", textAlign: "center" }}>
+                  {language === "bn" ? "কোনো গরু পাওয়া যায়নি" : "No cow matches this tag."}
+                </div>
+              )}
             </div>
-            <p className="px-4 py-5 text-xs text-[var(--muted)]">{language === "bn" ? "গরু অনুসন্ধান শীঘ্রই যুক্ত হবে" : "Cow search will be connected here."}</p>
           </div>
         </div>
       )}
+
+      {/* Global Toast Notification */}
+      <div className={`toast ${isToastVisible ? "show" : ""}`} id="toast">
+        {toastMsg}
+      </div>
     </div>
   );
-}
-
-function SearchIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-4 shrink-0 text-[var(--muted)]"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" strokeWidth="1.7" /><path d="m16 16 4.3 4.3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>;
 }

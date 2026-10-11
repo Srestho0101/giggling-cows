@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/module-page";
-import { ReportsWorkspace } from "@/components/planned-pages";
+import { ReportsWorkspace } from "@/components/workspaces/reports-workspace";
 
 export default function ReportsPage() {
-  return <ModulePage title="Reports" subtitle="Review herd, milk production, and financial performance"><ReportsWorkspace /></ModulePage>;
+  return <ReportsWorkspace />;
 }

@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/module-page";
-import { PurchasesWorkspace } from "@/components/operational-pages";
+import { PurchasesWorkspace } from "@/components/workspaces/purchases-workspace";
 
 export default function PurchasesPage() {
-  return <ModulePage title="Purchases" subtitle="Evaluate an animal before deciding to buy or return it."><PurchasesWorkspace /></ModulePage>;
+  return <PurchasesWorkspace />;
 }
