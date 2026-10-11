@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
     "@tanstack/react-query": "^5.89.0",
     "next": "16.4.0",
     "react": "19.3.0",

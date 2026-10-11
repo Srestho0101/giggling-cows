@@ -12,19 +12,8 @@ def test_supabase_pooler_url_configuration():
         DATABASE_URL="postgresql://postgres:secret@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
     )
 
-    assert "pgbouncer" not in settings.async_database_url
+    assert settings.async_database_url.endswith("postgres?pgbouncer=true&sslmode=require")
     assert settings.database_connect_args["ssl"] == "require"
-
-
-def test_supabase_environment_configuration():
-    settings = Settings(
-        SUPABASE_URL="https://demo-project.supabase.co",
-        SUPABASE_ANON_KEY="anon-key",
-        SUPABASE_SERVICE_ROLE_KEY="service-role-key",
-    )
-
-    assert settings.supabase_base_url == "https://demo-project.supabase.co"
-    assert settings.supabase_configured is True
 
 
 @pytest.mark.asyncio
