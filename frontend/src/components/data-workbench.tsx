@@ -37,7 +37,7 @@ type DataWorkbenchProps = {
   rowActions?: (row: RecordRow) => React.ReactNode;
   updatePath?: (row: RecordRow) => string;
   deletePath?: (row: RecordRow) => string;
-  onDelete?: (row: RecordRow) => Promise<void> | void;
+  onDelete?: (row: RecordRow) => void | Promise<void>;
 };
 
 export function DataWorkbench({
@@ -170,21 +170,15 @@ export function DataWorkbench({
     setFormOpen(true);
   }
 
-  async function removeRow(row: RecordRow) {
-    if (!deletePath && !onDelete) return;
-    const confirmed = window.confirm("Archive this record? This hides it from the default list.");
-    if (!confirmed) return;
-
-    try {
-      if (onDelete) {
-        await onDelete(row);
-      } else if (deletePath) {
-        await apiRequest(deletePath(row), { method: "DELETE" });
-      }
-      setNotice("Record archived.");
+  async function handleDelete(row: RecordRow) {
+    if (onDelete) {
+      await onDelete(row);
       await loadRows();
-    } catch (cause) {
-      setError(errorText(cause));
+      return;
+    }
+    if (deletePath) {
+      await apiRequest(deletePath(row), { method: "DELETE" });
+      await loadRows();
     }
   }
 
@@ -243,8 +237,8 @@ export function DataWorkbench({
         {loading ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="bg-stone-50 text-[10px] uppercase tracking-wide text-stone-500">
-                <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-3 py-2.5 font-medium">{column.label}</th>)}{(rowActions || updatePath || deletePath || onDelete) && <th className="px-3 py-2.5 font-medium">Actions</th>}</tr>
+              <thead className="bg-stone-50 text-[11px] uppercase tracking-wide text-stone-500">
+                <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">{column.label}</th>)}{(rowActions || updatePath || deletePath || onDelete) && <th className="px-4 py-3 font-medium">Actions</th>}</tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {Array.from({ length: 4 }).map((_, index) => (
@@ -258,9 +252,9 @@ export function DataWorkbench({
           </div>
         ) : rows.length === 0 ? <div className="px-4 py-12 text-center text-sm text-stone-400">{emptyMessage}</div> : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-[12px]">
-              <thead className="bg-stone-50 text-[10px] uppercase tracking-wide text-stone-500">
-                <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-3 py-2.5 font-medium">{column.label}</th>)}{(rowActions || updatePath || deletePath || onDelete) && <th className="px-3 py-2.5 font-medium">Actions</th>}</tr>
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="bg-stone-50 text-[11px] uppercase tracking-wide text-stone-500">
+                <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">{column.label}</th>)}{(rowActions || updatePath || deletePath || onDelete) && <th className="px-4 py-3 font-medium">Actions</th>}</tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {rows.map((row, index) => <tr key={String(row.id ?? row.cow_id ?? row.expense_id ?? row.evaluation_id ?? row.health_id ?? row.breeding_id ?? row.milk_id ?? row.invoice_id ?? row.worker_id ?? row.payment_id ?? index)} className="hover:bg-stone-50/70">
@@ -269,7 +263,7 @@ export function DataWorkbench({
                     const value = formatCell(row[column.key], column.key);
                     return <td key={column.key} className="whitespace-nowrap px-3 py-2.5 text-stone-700">{columnIndex === 0 && href ? <Link href={href} className="font-medium text-emerald-800 hover:underline">{value}</Link> : value}</td>;
                   })}
-                  {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-3 py-2.5"><div className="flex items-center gap-3">{rowActions?.(row)}{updatePath && <button type="button" onClick={() => startEdit(row)} className="text-[11px] font-medium text-emerald-800 hover:underline">Edit</button>}{(deletePath || onDelete) && <button type="button" onClick={() => void removeRow(row)} className="text-[11px] font-medium text-rose-700 hover:underline">Archive</button>}</div></td>}
+                  {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-4 py-3"><div className="flex items-center gap-3">{rowActions?.(row)}{updatePath && <button type="button" onClick={() => startEdit(row)} className="text-xs font-medium text-emerald-800 hover:underline">Edit</button>}{(deletePath || onDelete) && <button type="button" onClick={() => void handleDelete(row)} className="text-xs font-medium text-rose-700 hover:underline">Delete</button>}</div></td>}
                 </tr>)}
               </tbody>
             </table>

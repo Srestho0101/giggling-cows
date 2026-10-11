@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     @property
     def async_database_url(self) -> str:
-        """Return a URL accepted by SQLAlchemy's async engine, including Supabase pooler settings."""
+        """Return a URL accepted by SQLAlchemy's async engine for Supabase or local Postgres."""
         url = self.DATABASE_URL.strip()
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
@@ -68,8 +68,8 @@ class Settings(BaseSettings):
         if candidate.scheme and candidate.hostname:
             params = dict(parse_qsl(candidate.query, keep_blank_values=True))
             if candidate.hostname.endswith(".supabase.com") or candidate.port == 6543:
-                params.setdefault("pgbouncer", "true")
-                params.setdefault("sslmode", "require")
+                params.pop("pgbouncer", None)
+                params.pop("sslmode", None)
                 return urlunsplit((
                     candidate.scheme,
                     candidate.netloc,
