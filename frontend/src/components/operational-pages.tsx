@@ -297,8 +297,8 @@ function RemoteOptions({ path, valueKey, labelKey }: { path: string; valueKey: s
   return <>{items.map((item, index) => <option key={String(item[valueKey] ?? index)} value={String(item[valueKey] ?? "")}>{String(item[labelKey] ?? "")}</option>)}</>;
 }
 
-const inputClass = "w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10";
-const labelClass = "block text-xs font-medium text-stone-600";
+const inputClass = "h-10 w-full rounded-md border border-stone-200 bg-white px-3 text-[12px] text-stone-800 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10";
+const labelClass = "block text-[11px] font-medium text-stone-600";
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date()); }
 function dateAfter(dateValue: string, days: number) { const date = new Date(`${dateValue}T12:00:00+06:00`); date.setDate(date.getDate() + days); return date.toISOString().slice(0, 10); }
 function money(value: unknown) { return value == null ? "—" : `৳ ${new Intl.NumberFormat("en-BD", { maximumFractionDigits: 2 }).format(Number(value))}`; }

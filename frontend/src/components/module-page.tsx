@@ -1,9 +1,9 @@
 export function ModulePage({ title, subtitle, children }: { title: string; subtitle: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="mx-auto min-h-[calc(100vh-5rem)] max-w-[1440px] px-8 py-8">
-      <div className="mb-7 border-b border-stone-200 pb-5">
-        <h1 className="text-2xl font-semibold tracking-tight text-stone-900">{title}</h1>
-        <p className="mt-1.5 text-sm text-stone-500">{subtitle}</p>
+    <section className="mx-auto max-w-[1240px] px-[16px] py-[12px]">
+      <div className="mb-[10px]">
+        <h1 className="text-[17px] font-bold text-[var(--text)]">{title}</h1>
+        <p className="mt-0.5 text-[11px] text-[var(--muted)]">{subtitle}</p>
       </div>
       {children}
     </section>

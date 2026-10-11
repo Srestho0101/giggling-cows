@@ -1,16 +1,85 @@
+@import url("https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 :root {
+  --bg: #eef2f6;
+  --card: #ffffff;
+  --line: #dbe2ea;
+  --text: #16212e;
+  --muted: #66758a;
+  --nav: #13202f;
+  --navtxt: #b7c4d4;
+  --accent: #2e8b3d;
+  --accent-soft: #e1f2e3;
+  --hay: #e9b824;
+  --warn: #c2432b;
+  --warn-soft: #fbe5df;
+  --field: #f6f8fb;
+  --milk: #dff0ff;
+  --milk2: #9fd0f5;
+  --bar: rgba(238, 242, 246, 0.9);
+  --on-accent: #ffffff;
+  --amber: #7a5a00;
+  --amber-soft: #fbf0c9;
   color-scheme: light;
-  font-family: Arial, Helvetica, sans-serif;
-  background: #fafaf9;
-  color: #1c1917;
+  font-family: "Hind Siliguri", "Noto Sans Bengali", "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] {
+  --bg: #121212;
+  --card: #1e1e1e;
+  --field: #262626;
+  --bar: #272727;
+  --nav: #2e2e2e;
+  --navtxt: rgba(255, 255, 255, 0.6);
+  --text: rgba(255, 255, 255, 0.87);
+  --muted: rgba(255, 255, 255, 0.6);
+  --line: rgba(255, 255, 255, 0.12);
+  --accent: #81c784;
+  --accent-soft: rgba(129, 199, 132, 0.16);
+  --warn: #cf6679;
+  --warn-soft: rgba(207, 102, 121, 0.16);
+  --milk: rgba(127, 181, 222, 0.22);
+  --milk2: #7fb5de;
+  --amber: #e0c070;
+  --amber-soft: rgba(224, 192, 112, 0.16);
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Hind Siliguri", "Noto Sans Bengali", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(46, 139, 61, 0.18);
 }

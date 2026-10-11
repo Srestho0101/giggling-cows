@@ -33,25 +33,58 @@ export function TodayWorkspace() {
   }, []);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
   const dateQuery = apiQuery("", { start_date: date, end_date: date }).slice(1);
-  return <div className="space-y-7">
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-      <div><p className="text-sm font-semibold text-stone-800">Daily operations</p><p className="mt-1 text-xs text-stone-500">Choose a date to review or enter that day’s records.</p></div>
-      <div className="flex items-center gap-2"><button aria-label="Previous day" onClick={() => setDate(shiftDate(date, -1))} className={iconButton}>‹</button><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={inputClass} /><button aria-label="Next day" onClick={() => setDate(shiftDate(date, 1))} className={iconButton}>›</button><button onClick={() => setDate(today())} className="rounded-md border border-stone-200 px-3 py-2 text-xs text-stone-600">Today</button></div>
+  return <div className="space-y-[14px]">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--line)] bg-[var(--card)] p-[16px] shadow-sm">
+      <div>
+        <p className="text-[13px] font-semibold text-[var(--text)]">Daily operations</p>
+        <p className="mt-1 text-[12px] text-[var(--muted)]">Choose a date to review or enter that day’s records.</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <button aria-label="Previous day" onClick={() => setDate(shiftDate(date, -1))} className={iconButton}>‹</button>
+        <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={`${inputClass} h-9 w-auto min-w-[140px]`} />
+        <button aria-label="Next day" onClick={() => setDate(shiftDate(date, 1))} className={iconButton}>›</button>
+        <button onClick={() => setDate(today())} className="rounded-md border border-[var(--line)] bg-[var(--card)] px-3 py-2 text-[12px] font-medium text-[var(--text)]">Today</button>
+      </div>
     </div>
+
     {error && <Notice>{error} <button onClick={() => void load()} className="ml-2 underline">Retry</button></Notice>}
+
     <section>
-      <div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-semibold text-stone-800">Farm overview</h2><p className="mt-1 text-xs text-stone-500">Current totals from the dashboard</p></div><button onClick={() => void load()} className="text-xs font-medium text-emerald-800 hover:underline">Refresh</button></div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
-        ["Active herd", loading ? "…" : dashboard?.active_cows ?? "—", `${dashboard?.total_cows ?? "—"} total registered`],
-        ["Milk today", loading ? "…" : `${fmt(dashboard?.milk_today_liters)} L`, `${fmt(dashboard?.milk_this_week_liters)} L this week`],
-        ["Month invoiced", loading ? "…" : money(dashboard?.month_invoiced_revenue), `${money(dashboard?.month_cash_collected)} collected`],
-        ["Unpaid receivables", loading ? "…" : money(dashboard?.total_unpaid_receivables), `${money(dashboard?.month_total_expenses)} expenses this month`],
-      ].map(([label, value, detail]) => <div key={label} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm"><p className="text-xs text-stone-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-stone-900">{value}</p><p className="mt-1 text-xs text-stone-500">{detail}</p></div>)}</div>
+      <div className="mb-[12px] flex items-center justify-between">
+        <div>
+          <h2 className="text-[15px] font-bold text-[var(--text)]">Farm overview</h2>
+          <p className="mt-1 text-[12px] text-[var(--muted)]">Current totals from the dashboard</p>
+        </div>
+        <button onClick={() => void load()} className="text-[12px] font-medium text-[var(--accent)] hover:underline">Refresh</button>
+      </div>
+      <div className="grid gap-[12px] sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["Milk today", loading ? "…" : `${fmt(dashboard?.milk_today_liters)} L`, `${fmt(dashboard?.milk_this_week_liters)} L this week`, "hot"],
+          ["Sales", loading ? "…" : money(dashboard?.month_invoiced_revenue), `${money(dashboard?.month_cash_collected)} collected`, ""],
+          ["Spent today", loading ? "…" : money(dashboard?.month_total_expenses), `${money(dashboard?.total_unpaid_receivables)} receivables`, ""],
+          ["Workers present", loading ? "…" : `${dashboard?.active_cows ?? "—"} / ${dashboard?.total_cows ?? "—"}`, `Herd: ${dashboard?.total_cows ?? "—"} active`, ""],
+        ].map(([label, value, detail, tone]) => (
+          <div key={label} className={`rounded-[12px] border border-[var(--line)] bg-[var(--card)] p-[12px_14px] ${tone === "hot" ? "border-l-[4px] border-l-[var(--hay)]" : ""}`}>
+            <p className="text-[12px] text-[var(--muted)]">{label}</p>
+            <p className="mt-[2px] text-[22px] font-bold tracking-tight text-[var(--text)]">{value}</p>
+            <p className="mt-1 text-[12px] text-[var(--muted)]">{detail}</p>
+          </div>
+        ))}
+      </div>
     </section>
-    <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-5"><div className="flex items-center justify-between"><div><h2 className="text-sm font-semibold text-amber-950">Herd alerts</h2><p className="mt-1 text-xs text-amber-800">Upcoming and overdue care reminders</p></div><span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-amber-900">{dashboard?.alerts.length ?? 0}</span></div>
+
+    <section className="rounded-[12px] border border-amber-200 bg-amber-50/70 p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-[15px] font-bold text-amber-950">Herd alerts</h2>
+          <p className="mt-1 text-[12px] text-amber-800">Upcoming and overdue care reminders</p>
+        </div>
+        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-amber-900">{dashboard?.alerts.length ?? 0}</span>
+      </div>
       {loading ? <p className="mt-4 text-sm text-amber-800">Loading alerts…</p> : dashboard?.alerts.length ? <div className="mt-4 grid gap-2 md:grid-cols-2">{dashboard.alerts.map((alert) => <div key={alert.id} className="rounded-lg border border-amber-200 bg-white p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-stone-800">{alert.description}</p><p className="mt-1 text-xs text-stone-500">Cow {alert.cow_tag} · {alert.item_type.replaceAll("_", " ")}</p></div><span className={`shrink-0 rounded-full px-2 py-1 text-[11px] ${alert.days_overdue > 0 ? "bg-rose-50 text-rose-800" : "bg-amber-100 text-amber-900"}`}>{alert.days_overdue > 0 ? `${alert.days_overdue}d overdue` : alert.due_date}</span></div></div>)}</div> : <p className="mt-4 text-sm text-amber-800">No care alerts right now.</p>}
     </section>
-    <div className="grid gap-7 xl:grid-cols-2">
+
+    <div className="grid gap-[14px] xl:grid-cols-2">
       <DataWorkbench title="Milk production" description={`Add per-cow morning or evening records for ${date}.`} path={apiRoutes.sales.milk} query={dateQuery} columns={[{ key: "cow_tag_number", label: "Cow" }, { key: "session", label: "Session" }, { key: "liters", label: "Liters" }]} fields={[
         { name: "cow_id", label: "Cow", type: "select", sourcePath: apiRoutes.herd.cows, sourceValue: "cow_id", sourceLabel: "current_tag_number", required: true }, { name: "production_date", label: "Date", type: "date", required: true, defaultValue: date }, { name: "session", label: "Session", type: "select", required: true, options: [{ value: "morning", label: "Morning" }, { value: "evening", label: "Evening" }] }, { name: "liters", label: "Liters", type: "number", required: true },
       ]} />

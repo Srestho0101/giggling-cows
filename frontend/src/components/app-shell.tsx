@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 type AppShellProps = { children: React.ReactNode };
 type Language = "en" | "bn";
+type ThemeMode = "system" | "light" | "dark";
 
 function getBangladeshCalendarDate() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -63,9 +64,19 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const [language, setLanguage] = useState<Language>("en");
   const [date, setDate] = useState(getBangladeshCalendarDate);
+  const [theme, setTheme] = useState<ThemeMode>("system");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const activePage = navigation.find((item) => pathname.startsWith(item.href)) ?? navigation[0];
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "system") {
+      root.removeAttribute("data-theme");
+      return;
+    }
+    root.setAttribute("data-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -100,14 +111,14 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f6f4] text-stone-900">
-      <aside className="fixed inset-y-0 left-0 z-20 flex w-[232px] flex-col bg-[#1f2a23] text-[#dfe7df]">
-        <Link href="/today" className="flex h-[68px] items-center gap-3 border-b border-white/10 px-5 text-white">
-          <span className="grid size-9 place-items-center rounded-lg bg-emerald-700 text-xs font-bold tracking-wide text-white">CF</span>
-          <span className="text-[15px] font-semibold tracking-wide">Cow Farm</span>
-        </Link>
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
+      <aside className="fixed inset-y-0 left-0 z-20 flex w-[160px] flex-col bg-[var(--nav)] px-[8px] py-[12px] text-[var(--navtxt)]">
+        <div className="flex items-center gap-2 px-2 pb-3 text-[var(--navhi)]">
+          <span className="grid size-[24px] place-items-center rounded-[7px] bg-[var(--hay)] text-[13px] font-bold text-[#0f172a]">🐄</span>
+          <span className="text-[14px] font-bold">Cow Farm</span>
+        </div>
 
-        <nav aria-label={language === "bn" ? "প্রধান নেভিগেশন" : "Main navigation"} className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
+        <nav aria-label={language === "bn" ? "প্রধান নেভিগেশন" : "Main navigation"} className="flex-1 space-y-[2px] overflow-y-auto">
           {navigation.map((item) => {
             const selected = pathname.startsWith(item.href);
             return (
@@ -115,55 +126,59 @@ export function AppShell({ children }: AppShellProps) {
                 key={item.href}
                 href={item.href}
                 aria-current={selected ? "page" : undefined}
-                className={`flex h-10 items-center gap-3 rounded-md px-3 text-[13px] transition-colors ${
-                  selected ? "bg-[#34443a] font-medium text-white" : "text-[#c3cec4] hover:bg-white/5 hover:text-white"
+                className={`flex items-center gap-[9px] rounded-[7px] px-[9px] py-[7px] text-[12px] font-medium transition-colors ${
+                  selected ? "bg-white/10 text-[var(--navhi)] shadow-[inset_3px_0_0_var(--hay)]" : "text-[var(--navtxt)] hover:bg-white/5 hover:text-[var(--navhi)]"
                 }`}
               >
                 <NavIcon name={item.icon} />
                 <span>{language === "bn" ? item.bn : item.en}</span>
+                {item.href === "/health" && <span className="ml-auto rounded-full bg-[var(--warn)] px-[6px] py-[1px] text-[9px] font-semibold text-[var(--on-accent)]">1</span>}
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-white/10 p-4">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-            <div className="grid size-8 place-items-center rounded-full bg-[#49604f] text-xs font-semibold text-white">CF</div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-white">Farm account</p>
-              <p className="mt-0.5 text-[11px] text-[#aab8ac]">Owner</p>
-            </div>
-            <button type="button" aria-label="Account menu" className="rounded p-1 text-[#c3cec4] hover:bg-white/10">···</button>
-          </div>
-        </div>
+        <div className="mt-auto border-t border-white/10 px-[8px] pt-[10px] text-[11px] text-[var(--navtxt)] opacity-75">Karim is absent today</div>
       </aside>
 
-      <div className="ml-[232px] min-h-screen">
-        <header className="sticky top-0 z-10 flex h-[68px] items-center gap-5 border-b border-[#dde1da] bg-white/95 px-7 backdrop-blur">
-          <h1 className="min-w-36 flex-1 text-[15px] font-semibold text-stone-800">{language === "bn" ? activePage.bn : activePage.en}</h1>
-          <button
-            type="button"
-            onClick={() => setSearchOpen(true)}
-            className="flex h-9 w-[250px] items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-3 text-left text-xs text-stone-500 hover:bg-stone-100"
-          >
-            <SearchIcon />
-            <span className="flex-1">{language === "bn" ? "গরু খুঁজুন..." : "Search cows..."}</span>
-            <kbd className="rounded border border-stone-200 bg-white px-1.5 py-0.5 font-sans text-[10px]">Ctrl K</kbd>
-          </button>
-          <div className="flex h-9 items-center rounded-md border border-stone-200 bg-white">
-            <button type="button" aria-label="Previous day" onClick={() => shiftDate(-1)} className="h-full px-2.5 text-stone-500 hover:text-stone-900">‹</button>
-            <span className="min-w-[112px] text-center text-xs font-medium tabular-nums">{formattedDate}</span>
-            <button type="button" aria-label="Next day" onClick={() => shiftDate(1)} className="h-full px-2.5 text-stone-500 hover:text-stone-900">›</button>
+      <div className="ml-[160px] min-h-screen">
+        <header className="sticky top-0 z-10 flex h-[52px] items-center gap-[10px] border-b border-[var(--line)] bg-[var(--bar)] px-[16px] backdrop-blur-md">
+          <h1 className="min-w-[90px] flex-1 text-[17px] font-bold text-[var(--text)]">{language === "bn" ? activePage.bn : activePage.en}</h1>
+
+          <div className="relative">
+            <input
+              type="search"
+              aria-label="Search cows"
+              onFocus={() => setSearchOpen(true)}
+              placeholder={language === "bn" ? "গরু খুঁজুন..." : "Search cows..."}
+              className="h-8 w-[150px] rounded-[8px] border border-[var(--line)] bg-[var(--card)] pl-[11px] pr-[34px] text-[12px] text-[var(--text)] placeholder:text-[var(--muted)]"
+            />
+            <kbd className="pointer-events-none absolute right-[8px] top-1/2 -translate-y-1/2 rounded-[5px] border border-[var(--line)] bg-[var(--card)] px-[4px] py-[1px] text-[9px] text-[var(--muted)]">Ctrl K</kbd>
           </div>
-          <button
-            type="button"
-            onClick={() => setLanguage((current) => current === "en" ? "bn" : "en")}
-            className="h-9 rounded-md border border-stone-200 px-3 text-xs font-medium text-stone-600 hover:bg-stone-50"
-            aria-label="Change language"
-          >
-            {language === "bn" ? "বাংলা · English" : "English · বাংলা"}
-          </button>
-          <button type="button" aria-label="User menu" className="grid size-9 place-items-center rounded-full bg-[#e4efe7] text-xs font-semibold text-[#1f5a38]">CF</button>
+
+          <div className="flex items-center rounded-[8px] border border-[var(--line)] bg-[var(--card)]">
+            <button type="button" aria-label="Previous day" onClick={() => shiftDate(-1)} className="h-8 px-[7px] text-[var(--muted)] hover:text-[var(--text)]">‹</button>
+            <span className="min-w-[100px] text-center text-[12px] font-semibold tabular-nums">{formattedDate}</span>
+            <button type="button" aria-label="Next day" onClick={() => shiftDate(1)} className="h-8 px-[7px] text-[var(--muted)] hover:text-[var(--text)]">›</button>
+          </div>
+
+          <div className="flex rounded-[8px] border border-[var(--line)] bg-[var(--card)] p-[2px]">
+            <button type="button" onClick={() => setLanguage("bn")} className={`rounded-[6px] px-[8px] py-[4px] text-[11px] font-medium ${language === "bn" ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--muted)]"}`}>বাংলা</button>
+            <button type="button" onClick={() => setLanguage("en")} className={`rounded-[6px] px-[8px] py-[4px] text-[11px] font-medium ${language === "en" ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--muted)]"}`}>English</button>
+          </div>
+
+          <div className="flex rounded-[8px] border border-[var(--line)] bg-[var(--card)] p-[2px]">
+            {(["system", "light", "dark"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setTheme(mode)}
+                className={`rounded-[6px] px-[8px] py-[4px] text-[10px] font-medium ${theme === mode ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--muted)]"}`}
+              >
+                {mode === "system" ? "Auto" : mode === "light" ? "Light" : "Dark"}
+              </button>
+            ))}
+          </div>
         </header>
 
         <main>{children}</main>
@@ -173,18 +188,18 @@ export function AppShell({ children }: AppShellProps) {
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/30 px-4 pt-[18vh]" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setSearchOpen(false);
         }}>
-          <div role="dialog" aria-modal="true" aria-label="Search cows" className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
-            <div className="flex items-center gap-3 border-b border-stone-100 px-4">
+          <div role="dialog" aria-modal="true" aria-label="Search cows" className="w-full max-w-xl overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--card)] shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-[var(--line)] px-4">
               <SearchIcon />
               <input
                 ref={searchInput}
                 type="search"
                 placeholder={language === "bn" ? "ট্যাগ বা নাম দিয়ে খুঁজুন" : "Search by cow tag or name"}
-                className="h-14 flex-1 bg-transparent text-sm outline-none placeholder:text-stone-400"
+                className="h-14 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--muted)]"
               />
-              <button type="button" onClick={() => setSearchOpen(false)} className="rounded border border-stone-200 px-1.5 py-0.5 text-[10px] text-stone-500">ESC</button>
+              <button type="button" onClick={() => setSearchOpen(false)} className="rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">ESC</button>
             </div>
-            <p className="px-4 py-5 text-xs text-stone-400">{language === "bn" ? "গরু অনুসন্ধান শীঘ্রই যুক্ত হবে" : "Cow search will be connected here."}</p>
+            <p className="px-4 py-5 text-xs text-[var(--muted)]">{language === "bn" ? "গরু অনুসন্ধান শীঘ্রই যুক্ত হবে" : "Cow search will be connected here."}</p>
           </div>
         </div>
       )}
@@ -193,5 +208,5 @@ export function AppShell({ children }: AppShellProps) {
 }
 
 function SearchIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-4 shrink-0 text-stone-400"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" strokeWidth="1.7" /><path d="m16 16 4.3 4.3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>;
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-4 shrink-0 text-[var(--muted)]"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" strokeWidth="1.7" /><path d="m16 16 4.3 4.3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>;
 }
