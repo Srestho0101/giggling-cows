@@ -127,26 +127,6 @@ async def update_feed_type(
     return r
 
 
-@router.delete("/feed-types/{feed_type_id}", response_model=FeedTypeRead)
-async def archive_feed_type(
-    feed_type_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
-):
-    ft = await db.get(FeedType, feed_type_id)
-    if not ft:
-        raise HTTPException(status_code=404, detail="Feed type not found")
-
-    ft.is_archived = True
-    ft.updated_by = current_user.id
-
-    await db.commit()
-    await db.refresh(ft)
-    r = FeedTypeRead.model_validate(ft)
-    r.category_name = ft.category.name if ft.category else None
-    return r
-
-
 # ---------------------- FEEDING RECORDS ----------------------
 @router.get("/feeding-records", response_model=List[FeedingRecordRead])
 async def list_feeding_records(

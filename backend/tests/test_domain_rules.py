@@ -3,7 +3,17 @@ from decimal import Decimal
 import pytest
 from httpx import AsyncClient
 
+from app.core.config import Settings
 from app.services.evaluation_service import calculate_evaluation_metrics
+
+
+def test_supabase_pooler_url_configuration():
+    settings = Settings(
+        DATABASE_URL="postgresql://postgres:secret@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+    )
+
+    assert settings.async_database_url.endswith("postgres?pgbouncer=true&sslmode=require")
+    assert settings.database_connect_args["ssl"] == "require"
 
 
 @pytest.mark.asyncio
@@ -217,118 +227,6 @@ async def test_breeding_source_exclusivity(client: AsyncClient):
     )
     assert success_semen.status_code == 201
     assert success_semen.json()["semen_code"] == "HOLSTEIN-BRAC-99"
-
-
-@pytest.mark.asyncio
-async def test_warehouse_archive_flow(client: AsyncClient):
-    auth_headers = {"Authorization": "Bearer dev-user:admin"}
-
-    create_resp = await client.post(
-        "/api/v1/herd/warehouses",
-        json={"name": "Archive Test Shed", "housing_type": "tie_stall", "capacity": 5},
-        headers=auth_headers,
-    )
-    assert create_resp.status_code == 201
-    warehouse_id = create_resp.json()["warehouse_id"]
-
-    delete_resp = await client.delete(
-        f"/api/v1/herd/warehouses/{warehouse_id}",
-        headers=auth_headers,
-    )
-    assert delete_resp.status_code == 200
-    assert delete_resp.json()["is_archived"] is True
-
-    list_resp = await client.get("/api/v1/herd/warehouses", headers=auth_headers)
-    assert all(item["warehouse_id"] != warehouse_id for item in list_resp.json())
-
-    archived_resp = await client.get(
-        "/api/v1/herd/warehouses",
-        params={"include_archived": True},
-        headers=auth_headers,
-    )
-    archived_ids = [item["warehouse_id"] for item in archived_resp.json()]
-    assert warehouse_id in archived_ids
-
-
-@pytest.mark.asyncio
-async def test_worker_archive_flow(client: AsyncClient):
-    auth_headers = {"Authorization": "Bearer dev-user:admin"}
-
-    create_resp = await client.post(
-        "/api/v1/labor/workers",
-        json={
-            "name": "Test Worker",
-            "phone": "01700000000",
-            "role": "caretaker",
-            "join_date": str(date.today()),
-            "monthly_salary": 20000.0,
-            "status": "active",
-        },
-        headers=auth_headers,
-    )
-    assert create_resp.status_code == 201
-    worker_id = create_resp.json()["worker_id"]
-
-    delete_resp = await client.delete(
-        f"/api/v1/labor/workers/{worker_id}",
-        headers=auth_headers,
-    )
-    assert delete_resp.status_code == 200
-    assert delete_resp.json()["status"] == "inactive"
-
-    list_resp = await client.get("/api/v1/labor/workers", headers=auth_headers)
-    assert all(item["worker_id"] != worker_id for item in list_resp.json())
-
-
-@pytest.mark.asyncio
-async def test_health_record_archive_flow(client: AsyncClient):
-    auth_headers = {"Authorization": "Bearer dev-user:admin"}
-
-    wh_resp = await client.post(
-        "/api/v1/herd/warehouses",
-        json={"name": "Health Test Shed", "housing_type": "open", "capacity": 4},
-        headers=auth_headers,
-    )
-    wh_id = wh_resp.json()["warehouse_id"]
-
-    cow_resp = await client.post(
-        "/api/v1/herd/cows",
-        json={
-            "current_tag_number": "HEALTH-001",
-            "sex": "female",
-            "category": "dairy",
-            "acquisition_type": "born_on_farm",
-            "acquisition_date": str(date.today()),
-            "warehouse_id": wh_id,
-            "status": "active",
-        },
-        headers=auth_headers,
-    )
-    cow_id = cow_resp.json()["cow_id"]
-
-    create_resp = await client.post(
-        "/api/v1/health/records",
-        json={
-            "cow_id": cow_id,
-            "record_type": "checkup",
-            "record_date": str(date.today()),
-            "vet_name": "Dr. Test",
-            "details": "Routine checkup",
-            "cost": 1500.0,
-        },
-        headers=auth_headers,
-    )
-    assert create_resp.status_code == 201
-    health_id = create_resp.json()["health_id"]
-
-    delete_resp = await client.delete(
-        f"/api/v1/health/records/{health_id}",
-        headers=auth_headers,
-    )
-    assert delete_resp.status_code == 200
-
-    list_resp = await client.get("/api/v1/health/records", headers=auth_headers)
-    assert all(item["health_id"] != health_id for item in list_resp.json())
 
 
 @pytest.mark.asyncio

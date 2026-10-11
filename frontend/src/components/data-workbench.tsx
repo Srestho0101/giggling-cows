@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { apiRequest, ApiError } from "@/lib/api";
 
@@ -36,7 +37,7 @@ type DataWorkbenchProps = {
   rowActions?: (row: RecordRow) => React.ReactNode;
   updatePath?: (row: RecordRow) => string;
   deletePath?: (row: RecordRow) => string;
-  onDelete?: (row: RecordRow) => Promise<void> | void;
+  onDelete?: (row: RecordRow) => void | Promise<void>;
 };
 
 export function DataWorkbench({
@@ -56,39 +57,45 @@ export function DataWorkbench({
   deletePath,
   onDelete,
 }: DataWorkbenchProps) {
-  const [rows, setRows] = useState<RecordRow[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [remoteOptions, setRemoteOptions] = useState<Record<string, { value: string; label: string }[]>>({});
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<RecordRow | null>(null);
+  const queryClient = useQueryClient();
   const sourceSignature = fields.filter((field) => field.sourcePath).map((field) => `${field.sourcePath}:${field.sourceValue ?? "id"}:${field.sourceLabel ?? "name"}`).join("|");
   // Config arrays are often declared inline by a parent; the signature is their relevant stable identity.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const sourceFields = useMemo(() => fields.filter((field) => field.sourcePath), [sourceSignature]);
 
-  const loadRows = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
+  const queryKey = useMemo(() => ["data-workbench", path, query] as const, [path, query]);
+  const rowsQuery = useQuery({
+    queryKey,
+    queryFn: async () => {
       const data = await apiRequest<unknown>(query ? `${path}?${query}` : path);
       const nextRows = Array.isArray(data) ? data as RecordRow[] : [];
-      setRows(nextRows);
-      onRows?.(nextRows);
+      return nextRows;
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    retry: 1,
+  });
+
+  const rows = useMemo(() => rowsQuery.data ?? [], [rowsQuery.data]);
+  const loading = rowsQuery.isLoading;
+
+  useEffect(() => { onRows?.(rows); }, [rows, onRows]);
+
+  const loadRows = useCallback(async () => {
+    setError("");
+    try {
+      await queryClient.invalidateQueries({ queryKey, refetchType: "active" });
     } catch (cause) {
       setError(errorText(cause));
-    } finally {
-      setLoading(false);
     }
-  }, [path, query, onRows]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => { void loadRows(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadRows]);
+  }, [queryClient, queryKey]);
 
   useEffect(() => {
     const sources = [...new Set(sourceFields.flatMap((field) => field.sourcePath ? [field.sourcePath] : []))];
@@ -163,34 +170,28 @@ export function DataWorkbench({
     setFormOpen(true);
   }
 
-  async function removeRow(row: RecordRow) {
-    if (!deletePath && !onDelete) return;
-    const confirmed = window.confirm("Archive this record? This hides it from the default list.");
-    if (!confirmed) return;
-
-    try {
-      if (onDelete) {
-        await onDelete(row);
-      } else if (deletePath) {
-        await apiRequest(deletePath(row), { method: "DELETE" });
-      }
-      setNotice("Record archived.");
+  async function handleDelete(row: RecordRow) {
+    if (onDelete) {
+      await onDelete(row);
       await loadRows();
-    } catch (cause) {
-      setError(errorText(cause));
+      return;
+    }
+    if (deletePath) {
+      await apiRequest(deletePath(row), { method: "DELETE" });
+      await loadRows();
     }
   }
 
   return (
-    <section className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <section className="space-y-3.5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-stone-900">{title}</h2>
-          <p className="mt-1 text-sm text-stone-500">{description}</p>
+          <h2 className="text-[14px] font-bold text-stone-900">{title}</h2>
+          <p className="mt-1 text-[11px] text-stone-500">{description}</p>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={() => void loadRows()} className="rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 hover:bg-stone-50">Refresh</button>
-          {showCreate && <button type="button" onClick={() => { setFormOpen((open) => !open); setEditing(null); setValues({}); }} className="rounded-md bg-emerald-800 px-3.5 py-2 text-sm font-medium text-white hover:bg-emerald-900">{formOpen ? "Close form" : `+ Add ${title.replace(/s$/, "")}`}</button>}
+          <button type="button" onClick={() => void loadRows()} className="rounded-md border border-stone-200 bg-white px-3 py-1.5 text-[11px] text-stone-600 hover:bg-stone-50">Refresh</button>
+          {showCreate && <button type="button" onClick={() => { setFormOpen((open) => !open); setEditing(null); setValues({}); }} className="rounded-md bg-emerald-800 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-emerald-900">{formOpen ? "Close form" : `+ Add ${title.replace(/s$/, "")}`}</button>}
         </div>
       </div>
 
@@ -198,14 +199,14 @@ export function DataWorkbench({
       {notice && <Notice tone="success">{notice}</Notice>}
 
       {formOpen && (
-        <form onSubmit={submit} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-4 text-sm font-semibold text-stone-800">{editing ? `Edit ${title.replace(/s$/, "")}` : `New ${title.replace(/s$/, "")}`}</h3>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <form onSubmit={submit} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-[13px] font-semibold text-stone-800">{editing ? `Edit ${title.replace(/s$/, "")}` : `New ${title.replace(/s$/, "")}`}</h3>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {fields.map((field) => {
-              const className = "mt-1.5 w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10";
+              const className = "mt-1.5 w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-[12px] text-stone-700 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10";
               const fieldOptions = field.options ?? (field.sourcePath ? remoteOptions[field.sourcePath] ?? [] : []);
               return (
-                <label key={field.name} className={`text-xs font-medium text-stone-600 ${field.type === "textarea" ? "sm:col-span-2 xl:col-span-3" : ""}`}>
+                <label key={field.name} className={`text-[11px] font-medium text-stone-600 ${field.type === "textarea" ? "sm:col-span-2 xl:col-span-3" : ""}`}>
                   {field.label}{field.required && <span className="ml-1 text-rose-600">*</span>}
                   {field.type === "select" ? (
               <select required={field.required} value={values[field.name] ?? field.defaultValue ?? ""} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} className={className}>
@@ -221,32 +222,48 @@ export function DataWorkbench({
               );
             })}
           </div>
-          <div className="mt-5 flex justify-end">
-            <button type="button" onClick={() => { setFormOpen(false); setEditing(null); setValues({}); }} className="mr-2 rounded-md border border-stone-200 px-4 py-2 text-sm text-stone-600">Cancel</button>
-            <button disabled={saving} className="rounded-md bg-emerald-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{saving ? "Saving…" : editing ? "Save changes" : "Save record"}</button>
+          <div className="mt-4 flex justify-end">
+            <button type="button" onClick={() => { setFormOpen(false); setEditing(null); setValues({}); }} className="mr-2 rounded-md border border-stone-200 px-3 py-2 text-[12px] text-stone-600">Cancel</button>
+            <button disabled={saving} className="rounded-md bg-emerald-800 px-3 py-2 text-[12px] font-medium text-white disabled:opacity-50">{saving ? "Saving…" : editing ? "Save changes" : "Save record"}</button>
           </div>
         </form>
       )}
 
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
-          <p className="text-sm font-medium text-stone-700">Records</p>
-          <span className="text-xs text-stone-400">{loading ? "Loading…" : `${rows.length} records`}</span>
+        <div className="flex items-center justify-between border-b border-stone-100 px-4 py-2.5">
+          <p className="text-[12px] font-medium text-stone-700">Records</p>
+          <span className="text-[11px] text-stone-400">{loading ? "Loading…" : `${rows.length} records`}</span>
         </div>
-        {loading ? <div className="px-4 py-12 text-center text-sm text-stone-400">Loading records…</div> : rows.length === 0 ? <div className="px-4 py-12 text-center text-sm text-stone-400">{emptyMessage}</div> : (
+        {loading ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="bg-stone-50 text-[11px] uppercase tracking-wide text-stone-500">
-                <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">{column.label}</th>)}{(rowActions || updatePath) && <th className="px-4 py-3 font-medium">Actions</th>}</tr>
+                <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">{column.label}</th>)}{(rowActions || updatePath || deletePath || onDelete) && <th className="px-4 py-3 font-medium">Actions</th>}</tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <tr key={`skeleton-${index}`} className="animate-pulse">
+                    {columns.map((column) => <td key={column.key} className="whitespace-nowrap px-3 py-2.5"><div className="h-4 w-24 rounded bg-stone-200" /></td>)}
+                    {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-3 py-2.5"><div className="h-4 w-20 rounded bg-stone-200" /></td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : rows.length === 0 ? <div className="px-4 py-12 text-center text-sm text-stone-400">{emptyMessage}</div> : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="bg-stone-50 text-[11px] uppercase tracking-wide text-stone-500">
+                <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">{column.label}</th>)}{(rowActions || updatePath || deletePath || onDelete) && <th className="px-4 py-3 font-medium">Actions</th>}</tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {rows.map((row, index) => <tr key={String(row.id ?? row.cow_id ?? row.expense_id ?? row.evaluation_id ?? row.health_id ?? row.breeding_id ?? row.milk_id ?? row.invoice_id ?? row.worker_id ?? row.payment_id ?? index)} className="hover:bg-stone-50/70">
                   {columns.map((column, columnIndex) => {
                     const href = rowHref?.(row);
                     const value = formatCell(row[column.key], column.key);
-                    return <td key={column.key} className="whitespace-nowrap px-4 py-3 text-stone-700">{columnIndex === 0 && href ? <Link href={href} className="font-medium text-emerald-800 hover:underline">{value}</Link> : value}</td>;
+                    return <td key={column.key} className="whitespace-nowrap px-3 py-2.5 text-stone-700">{columnIndex === 0 && href ? <Link href={href} className="font-medium text-emerald-800 hover:underline">{value}</Link> : value}</td>;
                   })}
-                  {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-4 py-3"><div className="flex items-center gap-3">{rowActions?.(row)}{updatePath && <button type="button" onClick={() => startEdit(row)} className="text-xs font-medium text-emerald-800 hover:underline">Edit</button>}{(deletePath || onDelete) && <button type="button" onClick={() => void removeRow(row)} className="text-xs font-medium text-rose-700 hover:underline">Archive</button>}</div></td>}
+                  {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-4 py-3"><div className="flex items-center gap-3">{rowActions?.(row)}{updatePath && <button type="button" onClick={() => startEdit(row)} className="text-xs font-medium text-emerald-800 hover:underline">Edit</button>}{(deletePath || onDelete) && <button type="button" onClick={() => void handleDelete(row)} className="text-xs font-medium text-rose-700 hover:underline">Delete</button>}</div></td>}
                 </tr>)}
               </tbody>
             </table>
