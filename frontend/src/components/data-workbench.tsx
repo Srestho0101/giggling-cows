@@ -186,12 +186,12 @@ export function DataWorkbench({
     <section className="space-y-3.5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-[14px] font-bold text-stone-900">{title}</h2>
-          <p className="mt-1 text-[11px] text-stone-500">{description}</p>
+          <h2 className="text-[14px] font-bold text-[var(--text)]">{title}</h2>
+          <p className="mt-1 text-[11px] text-[var(--muted)]">{description}</p>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={() => void loadRows()} className="rounded-md border border-stone-200 bg-white px-3 py-1.5 text-[11px] text-stone-600 hover:bg-stone-50">Refresh</button>
-          {showCreate && <button type="button" onClick={() => { setFormOpen((open) => !open); setEditing(null); setValues({}); }} className="rounded-md bg-emerald-800 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-emerald-900">{formOpen ? "Close form" : `+ Add ${title.replace(/s$/, "")}`}</button>}
+          <button type="button" onClick={() => void loadRows()} className="ui-button-secondary px-3 py-1.5 text-[11px]">Refresh</button>
+          {showCreate && <button type="button" onClick={() => { setFormOpen((open) => !open); setEditing(null); setValues({}); }} className="ui-button px-3 py-1.5 text-[11px]">{formOpen ? "Close form" : `+ Add ${title.replace(/s$/, "")}`}</button>}
         </div>
       </div>
 
@@ -199,14 +199,14 @@ export function DataWorkbench({
       {notice && <Notice tone="success">{notice}</Notice>}
 
       {formOpen && (
-        <form onSubmit={submit} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-[13px] font-semibold text-stone-800">{editing ? `Edit ${title.replace(/s$/, "")}` : `New ${title.replace(/s$/, "")}`}</h3>
+        <form onSubmit={submit} className="ui-card p-4">
+          <h3 className="mb-3 text-[13px] font-semibold text-[var(--text)]">{editing ? `Edit ${title.replace(/s$/, "")}` : `New ${title.replace(/s$/, "")}`}</h3>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {fields.map((field) => {
-              const className = "mt-1.5 w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-[12px] text-stone-700 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10";
+              const className = "ui-input mt-1.5 px-3 py-2 text-[12px]";
               const fieldOptions = field.options ?? (field.sourcePath ? remoteOptions[field.sourcePath] ?? [] : []);
               return (
-                <label key={field.name} className={`text-[11px] font-medium text-stone-600 ${field.type === "textarea" ? "sm:col-span-2 xl:col-span-3" : ""}`}>
+                <label key={field.name} className={`text-[11px] font-medium text-[var(--muted)] ${field.type === "textarea" ? "sm:col-span-2 xl:col-span-3" : ""}`}>
                   {field.label}{field.required && <span className="ml-1 text-rose-600">*</span>}
                   {field.type === "select" ? (
               <select required={field.required} value={values[field.name] ?? field.defaultValue ?? ""} onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))} className={className}>
@@ -223,47 +223,47 @@ export function DataWorkbench({
             })}
           </div>
           <div className="mt-4 flex justify-end">
-            <button type="button" onClick={() => { setFormOpen(false); setEditing(null); setValues({}); }} className="mr-2 rounded-md border border-stone-200 px-3 py-2 text-[12px] text-stone-600">Cancel</button>
-            <button disabled={saving} className="rounded-md bg-emerald-800 px-3 py-2 text-[12px] font-medium text-white disabled:opacity-50">{saving ? "Saving…" : editing ? "Save changes" : "Save record"}</button>
+            <button type="button" onClick={() => { setFormOpen(false); setEditing(null); setValues({}); }} className="ui-button-secondary mr-2 px-3 py-2 text-[12px]">Cancel</button>
+            <button disabled={saving} className="ui-button px-3 py-2 text-[12px] disabled:opacity-50">{saving ? "Saving…" : editing ? "Save changes" : "Save record"}</button>
           </div>
         </form>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-stone-100 px-4 py-2.5">
-          <p className="text-[12px] font-medium text-stone-700">Records</p>
-          <span className="text-[11px] text-stone-400">{loading ? "Loading…" : `${rows.length} records`}</span>
+      <div className="ui-card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5">
+          <p className="text-[12px] font-medium text-[var(--text)]">Records</p>
+          <span className="text-[11px] text-[var(--muted)]">{loading ? "Loading…" : `${rows.length} records`}</span>
         </div>
         {loading ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="bg-stone-50 text-[11px] uppercase tracking-wide text-stone-500">
+              <thead className="bg-[var(--field)] text-[11px] uppercase tracking-wide text-[var(--muted)]">
                 <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">{column.label}</th>)}{(rowActions || updatePath || deletePath || onDelete) && <th className="px-4 py-3 font-medium">Actions</th>}</tr>
               </thead>
-              <tbody className="divide-y divide-stone-100">
+              <tbody className="divide-y divide-[var(--line)]">
                 {Array.from({ length: 4 }).map((_, index) => (
                   <tr key={`skeleton-${index}`} className="animate-pulse">
-                    {columns.map((column) => <td key={column.key} className="whitespace-nowrap px-3 py-2.5"><div className="h-4 w-24 rounded bg-stone-200" /></td>)}
-                    {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-3 py-2.5"><div className="h-4 w-20 rounded bg-stone-200" /></td>}
+                    {columns.map((column) => <td key={column.key} className="whitespace-nowrap px-3 py-2.5"><div className="h-4 w-24 rounded bg-[var(--line)]" /></td>)}
+                    {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-3 py-2.5"><div className="h-4 w-20 rounded bg-[var(--line)]" /></td>}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        ) : rows.length === 0 ? <div className="px-4 py-12 text-center text-sm text-stone-400">{emptyMessage}</div> : (
+        ) : rows.length === 0 ? <div className="px-4 py-12 text-center text-sm text-[var(--muted)]">{emptyMessage}</div> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="bg-stone-50 text-[11px] uppercase tracking-wide text-stone-500">
+              <thead className="bg-[var(--field)] text-[11px] uppercase tracking-wide text-[var(--muted)]">
                 <tr>{columns.map((column) => <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">{column.label}</th>)}{(rowActions || updatePath || deletePath || onDelete) && <th className="px-4 py-3 font-medium">Actions</th>}</tr>
               </thead>
-              <tbody className="divide-y divide-stone-100">
-                {rows.map((row, index) => <tr key={String(row.id ?? row.cow_id ?? row.expense_id ?? row.evaluation_id ?? row.health_id ?? row.breeding_id ?? row.milk_id ?? row.invoice_id ?? row.worker_id ?? row.payment_id ?? index)} className="hover:bg-stone-50/70">
+              <tbody className="divide-y divide-[var(--line)]">
+                {rows.map((row, index) => <tr key={String(row.id ?? row.cow_id ?? row.expense_id ?? row.evaluation_id ?? row.health_id ?? row.breeding_id ?? row.milk_id ?? row.invoice_id ?? row.worker_id ?? row.payment_id ?? index)} className="hover:bg-[var(--field)]">
                   {columns.map((column, columnIndex) => {
                     const href = rowHref?.(row);
                     const value = formatCell(row[column.key], column.key);
-                    return <td key={column.key} className="whitespace-nowrap px-3 py-2.5 text-stone-700">{columnIndex === 0 && href ? <Link href={href} className="font-medium text-emerald-800 hover:underline">{value}</Link> : value}</td>;
+                    return <td key={column.key} className="whitespace-nowrap px-3 py-2.5 text-[var(--text)]">{columnIndex === 0 && href ? <Link href={href} className="font-medium text-[var(--accent)] hover:underline">{value}</Link> : value}</td>;
                   })}
-                  {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-4 py-3"><div className="flex items-center gap-3">{rowActions?.(row)}{updatePath && <button type="button" onClick={() => startEdit(row)} className="text-xs font-medium text-emerald-800 hover:underline">Edit</button>}{(deletePath || onDelete) && <button type="button" onClick={() => void handleDelete(row)} className="text-xs font-medium text-rose-700 hover:underline">Delete</button>}</div></td>}
+                  {(rowActions || updatePath || deletePath || onDelete) && <td className="whitespace-nowrap px-4 py-3"><div className="flex items-center gap-3">{rowActions?.(row)}{updatePath && <button type="button" onClick={() => startEdit(row)} className="text-xs font-medium text-[var(--accent)] hover:underline">Edit</button>}{(deletePath || onDelete) && <button type="button" onClick={() => void handleDelete(row)} className="text-xs font-medium text-[var(--warn)] hover:underline">Delete</button>}</div></td>}
                 </tr>)}
               </tbody>
             </table>
@@ -275,7 +275,7 @@ export function DataWorkbench({
 }
 
 export function Notice({ children, tone = "error" }: { children: React.ReactNode; tone?: "error" | "success" | "info" }) {
-  const styles = tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : tone === "info" ? "border-sky-200 bg-sky-50 text-sky-800" : "border-rose-200 bg-rose-50 text-rose-800";
+  const styles = tone === "success" ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]" : tone === "info" ? "border-sky-300 bg-sky-50 text-sky-800" : "border-[var(--warn)] bg-[var(--warn-soft)] text-[var(--warn)]";
   return <div role={tone === "error" ? "alert" : "status"} className={`rounded-lg border px-4 py-3 text-sm ${styles}`}>{children}</div>;
 }
 

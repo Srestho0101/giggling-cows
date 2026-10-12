@@ -2,22 +2,24 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #eef2f6;
+  --bg: #f2f5f8;
   --card: #ffffff;
-  --line: #dbe2ea;
-  --text: #16212e;
-  --muted: #66758a;
-  --nav: #13202f;
-  --navtxt: #b7c4d4;
-  --accent: #2e8b3d;
-  --accent-soft: #e1f2e3;
-  --hay: #e9b824;
-  --warn: #c2432b;
-  --warn-soft: #fbe5df;
-  --field: #f6f8fb;
+  --line: #d9e1e9;
+  --text: #182433;
+  --muted: #637287;
+  --nav: #152434;
+  --navtxt: #b9c6d4;
+  --navhi: #f8fafc;
+  --accent: #247a42;
+  --accent-hover: #1d6938;
+  --accent-soft: #e5f3e8;
+  --hay: #d8a91f;
+  --warn: #b84242;
+  --warn-soft: #fbe8e8;
+  --field: #f7f9fb;
   --milk: #dff0ff;
   --milk2: #9fd0f5;
-  --bar: rgba(238, 242, 246, 0.9);
+  --bar: rgba(242, 245, 248, 0.88);
   --on-accent: #ffffff;
   --amber: #7a5a00;
   --amber-soft: #fbf0c9;
@@ -28,24 +30,51 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #121212;
-  --card: #1e1e1e;
-  --field: #262626;
-  --bar: #272727;
-  --nav: #2e2e2e;
-  --navtxt: rgba(255, 255, 255, 0.6);
-  --text: rgba(255, 255, 255, 0.87);
-  --muted: rgba(255, 255, 255, 0.6);
-  --line: rgba(255, 255, 255, 0.12);
-  --accent: #81c784;
-  --accent-soft: rgba(129, 199, 132, 0.16);
-  --warn: #cf6679;
-  --warn-soft: rgba(207, 102, 121, 0.16);
-  --milk: rgba(127, 181, 222, 0.22);
-  --milk2: #7fb5de;
-  --amber: #e0c070;
-  --amber-soft: rgba(224, 192, 112, 0.16);
+  --bg: #101820;
+  --card: #18232e;
+  --field: #202d3a;
+  --bar: rgba(16, 24, 32, 0.88);
+  --nav: #0c1620;
+  --navtxt: #aebdca;
+  --navhi: #f4f7fa;
+  --text: #edf3f8;
+  --muted: #a8b6c4;
+  --line: #2c3b49;
+  --accent: #79c88e;
+  --accent-hover: #91d7a3;
+  --accent-soft: rgba(121, 200, 142, 0.16);
+  --warn: #f28a8a;
+  --warn-soft: rgba(242, 138, 138, 0.16);
+  --milk: rgba(120, 183, 226, 0.18);
+  --milk2: #79b9e3;
+  --amber: #efc66f;
+  --amber-soft: rgba(239, 198, 111, 0.16);
   color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #101820;
+    --card: #18232e;
+    --field: #202d3a;
+    --bar: rgba(16, 24, 32, 0.88);
+    --nav: #0c1620;
+    --navtxt: #aebdca;
+    --navhi: #f4f7fa;
+    --text: #edf3f8;
+    --muted: #a8b6c4;
+    --line: #2c3b49;
+    --accent: #79c88e;
+    --accent-hover: #91d7a3;
+    --accent-soft: rgba(121, 200, 142, 0.16);
+    --warn: #f28a8a;
+    --warn-soft: rgba(242, 138, 138, 0.16);
+    --milk: rgba(120, 183, 226, 0.18);
+    --milk2: #79b9e3;
+    --amber: #efc66f;
+    --amber-soft: rgba(239, 198, 111, 0.16);
+    color-scheme: dark;
+  }
 }
 
 * {
@@ -72,6 +101,25 @@ textarea {
   font: inherit;
 }
 
+input,
+select,
+textarea {
+  border-color: var(--line);
+  background: var(--field);
+  color: var(--text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: .82;
+}
+
+select option {
+  background: var(--card);
+  color: var(--text);
+}
+
 button {
   cursor: pointer;
 }
@@ -82,4 +130,115 @@ select:focus-visible,
 textarea:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(46, 139, 61, 0.18);
+}
+
+.ui-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(15 23 42 / .025);
+}
+
+.ui-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.ui-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.ui-button {
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  transition: background .15s, transform .1s;
+}
+
+.ui-button:hover { background: var(--accent-hover); }
+.ui-button:active { transform: translateY(1px); }
+
+.ui-button-secondary {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+}
+
+.ui-tab-list {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.ui-tab {
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+}
+
+.ui-tab[data-active="true"] {
+  border-bottom-color: var(--hay);
+  color: var(--text);
+}
+
+/* Keep legacy controls readable while the workspace transitions to semantic UI classes. */
+:root[data-theme="dark"] .bg-white,
+:root[data-theme="dark"] .bg-stone-50,
+:root[data-theme="dark"] .bg-stone-50\/70,
+:root[data-theme="dark"] .bg-amber-50\/70 {
+  background-color: var(--card) !important;
+}
+
+:root[data-theme="dark"] .border-stone-100,
+:root[data-theme="dark"] .border-stone-200,
+:root[data-theme="dark"] .border-amber-200 { border-color: var(--line) !important; }
+:root[data-theme="dark"] .text-stone-900,
+:root[data-theme="dark"] .text-stone-800,
+:root[data-theme="dark"] .text-stone-700,
+:root[data-theme="dark"] .text-amber-950 { color: var(--text) !important; }
+:root[data-theme="dark"] .text-stone-600,
+:root[data-theme="dark"] .text-stone-500,
+:root[data-theme="dark"] .text-stone-400,
+:root[data-theme="dark"] .text-amber-800 { color: var(--muted) !important; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .bg-white,
+  :root:not([data-theme]) .bg-stone-50,
+  :root:not([data-theme]) .bg-stone-50\/70,
+  :root:not([data-theme]) .bg-amber-50\/70 { background-color: var(--card) !important; }
+  :root:not([data-theme]) .border-stone-100,
+  :root:not([data-theme]) .border-stone-200,
+  :root:not([data-theme]) .border-amber-200 { border-color: var(--line) !important; }
+  :root:not([data-theme]) .text-stone-900,
+  :root:not([data-theme]) .text-stone-800,
+  :root:not([data-theme]) .text-stone-700,
+  :root:not([data-theme]) .text-amber-950 { color: var(--text) !important; }
+  :root:not([data-theme]) .text-stone-600,
+  :root:not([data-theme]) .text-stone-500,
+  :root:not([data-theme]) .text-stone-400,
+  :root:not([data-theme]) .text-amber-800 { color: var(--muted) !important; }
+}
+
+@media (max-width: 900px) {
+  .app-sidebar { position: static; width: 100%; height: auto; flex-direction: row; overflow-x: auto; padding: 8px; }
+  .app-sidebar__brand, .app-sidebar__foot { display: none; }
+  .app-sidebar nav { display: flex; gap: 2px; }
+  .app-sidebar nav a { white-space: nowrap; }
+  .app-content { margin-left: 0 !important; }
+  .app-header { height: auto; min-height: 56px; flex-wrap: wrap; padding: 10px 14px; }
+  .app-header__search { display: none; }
+  .app-header__theme { display: none; }
+}
+
+@media (max-width: 560px) {
+  .app-header__language { display: none; }
+  .app-header__date span { min-width: 92px; font-size: 11px; }
 }

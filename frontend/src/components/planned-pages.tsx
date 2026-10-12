@@ -34,7 +34,7 @@ export function TodayWorkspace() {
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
   const dateQuery = apiQuery("", { start_date: date, end_date: date }).slice(1);
   return <div className="space-y-[14px]">
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--line)] bg-[var(--card)] p-[16px] shadow-sm">
+    <div className="ui-card flex flex-wrap items-center justify-between gap-3 p-[16px]">
       <div>
         <p className="text-[13px] font-semibold text-[var(--text)]">Daily operations</p>
         <p className="mt-1 text-[12px] text-[var(--muted)]">Choose a date to review or enter that day’s records.</p>
@@ -43,7 +43,7 @@ export function TodayWorkspace() {
         <button aria-label="Previous day" onClick={() => setDate(shiftDate(date, -1))} className={iconButton}>‹</button>
         <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={`${inputClass} h-9 w-auto min-w-[140px]`} />
         <button aria-label="Next day" onClick={() => setDate(shiftDate(date, 1))} className={iconButton}>›</button>
-        <button onClick={() => setDate(today())} className="rounded-md border border-[var(--line)] bg-[var(--card)] px-3 py-2 text-[12px] font-medium text-[var(--text)]">Today</button>
+        <button onClick={() => setDate(today())} className="ui-button-secondary px-3 py-2 text-[12px] font-medium">Today</button>
       </div>
     </div>
 
@@ -64,7 +64,7 @@ export function TodayWorkspace() {
           ["Spent today", loading ? "…" : money(dashboard?.month_total_expenses), `${money(dashboard?.total_unpaid_receivables)} receivables`, ""],
           ["Workers present", loading ? "…" : `${dashboard?.active_cows ?? "—"} / ${dashboard?.total_cows ?? "—"}`, `Herd: ${dashboard?.total_cows ?? "—"} active`, ""],
         ].map(([label, value, detail, tone]) => (
-          <div key={label} className={`rounded-[12px] border border-[var(--line)] bg-[var(--card)] p-[12px_14px] ${tone === "hot" ? "border-l-[4px] border-l-[var(--hay)]" : ""}`}>
+          <div key={label} className={`ui-card p-[12px_14px] ${tone === "hot" ? "border-l-[4px] border-l-[var(--hay)]" : ""}`}>
             <p className="text-[12px] text-[var(--muted)]">{label}</p>
             <p className="mt-[2px] text-[22px] font-bold tracking-tight text-[var(--text)]">{value}</p>
             <p className="mt-1 text-[12px] text-[var(--muted)]">{detail}</p>
@@ -73,22 +73,20 @@ export function TodayWorkspace() {
       </div>
     </section>
 
-    <section className="rounded-[12px] border border-amber-200 bg-amber-50/70 p-5">
+    <section className="rounded-[12px] border border-[var(--amber)] bg-[var(--amber-soft)] p-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[15px] font-bold text-amber-950">Herd alerts</h2>
-          <p className="mt-1 text-[12px] text-amber-800">Upcoming and overdue care reminders</p>
+          <h2 className="text-[15px] font-bold text-[var(--text)]">Herd alerts</h2>
+          <p className="mt-1 text-[12px] text-[var(--muted)]">Upcoming and overdue care reminders</p>
         </div>
-        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-amber-900">{dashboard?.alerts.length ?? 0}</span>
+        <span className="rounded-full bg-[var(--card)] px-2.5 py-1 text-[11px] font-medium text-[var(--text)]">{dashboard?.alerts.length ?? 0}</span>
       </div>
-      {loading ? <p className="mt-4 text-sm text-amber-800">Loading alerts…</p> : dashboard?.alerts.length ? <div className="mt-4 grid gap-2 md:grid-cols-2">{dashboard.alerts.map((alert) => <div key={alert.id} className="rounded-lg border border-amber-200 bg-white p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-stone-800">{alert.description}</p><p className="mt-1 text-xs text-stone-500">Cow {alert.cow_tag} · {alert.item_type.replaceAll("_", " ")}</p></div><span className={`shrink-0 rounded-full px-2 py-1 text-[11px] ${alert.days_overdue > 0 ? "bg-rose-50 text-rose-800" : "bg-amber-100 text-amber-900"}`}>{alert.days_overdue > 0 ? `${alert.days_overdue}d overdue` : alert.due_date}</span></div></div>)}</div> : <p className="mt-4 text-sm text-amber-800">No care alerts right now.</p>}
+      {loading ? <p className="mt-4 text-sm text-[var(--muted)]">Loading alerts…</p> : dashboard?.alerts.length ? <div className="mt-4 grid gap-2 md:grid-cols-2">{dashboard.alerts.map((alert) => <div key={alert.id} className="rounded-lg border border-[var(--line)] bg-[var(--card)] p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-[var(--text)]">{alert.description}</p><p className="mt-1 text-xs text-[var(--muted)]">Cow {alert.cow_tag} · {alert.item_type.replaceAll("_", " ")}</p></div><span className={`shrink-0 rounded-full px-2 py-1 text-[11px] ${alert.days_overdue > 0 ? "bg-[var(--warn-soft)] text-[var(--warn)]" : "bg-[var(--card)] text-[var(--text)]"}`}>{alert.days_overdue > 0 ? `${alert.days_overdue}d overdue` : alert.due_date}</span></div></div>)}</div> : <p className="mt-4 text-sm text-[var(--muted)]">No care alerts right now.</p>}
     </section>
 
-    <div className="grid gap-[14px] xl:grid-cols-2">
-      <DataWorkbench title="Milk production" description={`Add per-cow morning or evening records for ${date}.`} path={apiRoutes.sales.milk} query={dateQuery} columns={[{ key: "cow_tag_number", label: "Cow" }, { key: "session", label: "Session" }, { key: "liters", label: "Liters" }]} fields={[
-        { name: "cow_id", label: "Cow", type: "select", sourcePath: apiRoutes.herd.cows, sourceValue: "cow_id", sourceLabel: "current_tag_number", required: true }, { name: "production_date", label: "Date", type: "date", required: true, defaultValue: date }, { name: "session", label: "Session", type: "select", required: true, options: [{ value: "morning", label: "Morning" }, { value: "evening", label: "Evening" }] }, { name: "liters", label: "Liters", type: "number", required: true },
-      ]} />
-      <div className="space-y-3"><div><h2 className="text-lg font-semibold text-stone-900">Attendance</h2><p className="mt-1 text-sm text-stone-500">Mark active workers present or record an absence for {date}.</p></div><AttendanceWorkspace key={date} initialDate={date} /></div>
+    <div className="grid gap-[14px] xl:grid-cols-[1.35fr_1fr]">
+      <MilkRecorder date={date} dateQuery={dateQuery} onSaved={() => void load()} />
+      <div className="space-y-3"><div><h2 className="text-[15px] font-bold text-[var(--text)]">Attendance</h2><p className="mt-1 text-[12px] text-[var(--muted)]">Mark active workers present or record an absence for {date}.</p></div><AttendanceWorkspace key={date} initialDate={date} /></div>
       <DataWorkbench title="Sales invoices" description={`Create and review invoices dated ${date}.`} path={apiRoutes.sales.invoices} query={dateQuery} columns={[{ key: "invoice_number", label: "Invoice" }, { key: "customer_name", label: "Customer" }, { key: "total_amount", label: "Total ৳" }, { key: "paid_amount", label: "Paid ৳" }, { key: "status", label: "Status" }]} fields={[
         { name: "customer_id", label: "Customer", type: "select", sourcePath: apiRoutes.sales.customers, sourceValue: "customer_id", required: true }, { name: "invoice_date", label: "Invoice date", type: "date", required: true, defaultValue: date }, { name: "item_type", label: "Item type", type: "select", required: true, options: [{ value: "milk", label: "Milk" }, { value: "animal", label: "Animal" }, { value: "other", label: "Other" }] }, { name: "cow_id", label: "Cow (required for animal sales)", type: "select", sourcePath: apiRoutes.herd.cows, sourceValue: "cow_id", sourceLabel: "current_tag_number" }, { name: "description", label: "Line description", required: true }, { name: "quantity", label: "Quantity", type: "number", required: true }, { name: "unit_price", label: "Unit price ৳", type: "number", required: true }, { name: "discount", label: "Invoice discount ৳", type: "number" },
       ]} buildBody={(values) => ({ customer_id: values.customer_id, invoice_date: values.invoice_date || date, discount: Number(values.discount || 0), lines: [{ item_type: values.item_type, cow_id: values.cow_id || undefined, description: values.description, quantity: Number(values.quantity), unit_price: Number(values.unit_price) }] })} />
@@ -97,6 +95,82 @@ export function TodayWorkspace() {
       ]} />
     </div>
   </div>;
+}
+
+function MilkRecorder({ date, dateQuery, onSaved }: { date: string; dateQuery: string; onSaved: () => void }) {
+  const [cows, setCows] = useState<Row[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [nextCow, setNextCow] = useState("");
+  const [liters, setLiters] = useState("");
+  const [session, setSession] = useState("morning");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    void apiRequest<Row[]>(apiRoutes.herd.cows).then((rows) => { if (active) setCows(rows.filter((row) => String(row.status ?? "active") === "active")); }).catch((cause) => { if (active) setError(messageFor(cause)); });
+    return () => { active = false; };
+  }, []);
+
+  const selectedCows = selected.map((id) => cows.find((cow) => String(cow.cow_id) === id)).filter((cow): cow is Row => Boolean(cow));
+  const total = Number(liters) || 0;
+  const perCow = selected.length ? total / selected.length : 0;
+  const target = 120;
+  const fill = Math.min(100, Math.max(0, (total / target) * 100));
+
+  function addCow() {
+    if (nextCow && !selected.includes(nextCow)) setSelected((current) => [...current, nextCow]);
+    setNextCow("");
+  }
+
+  async function save() {
+    if (!selected.length) { setError("Choose at least one cow before saving."); return; }
+    if (!Number.isFinite(total) || total <= 0) { setError("Enter a valid total in liters."); return; }
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await Promise.all(selected.map((cowId) => apiRequest(apiRoutes.sales.milk, { method: "POST", body: { cow_id: cowId, production_date: date, session, liters: Number(perCow.toFixed(2)) } })));
+      setNotice(`${fmt(total)} L saved across ${selected.length} cow${selected.length === 1 ? "" : "s"}.`);
+      setSelected([]); setLiters(""); setRevision((value) => value + 1); onSaved();
+    } catch (cause) { setError(messageFor(cause)); }
+    finally { setSaving(false); }
+  }
+
+  return <section className="space-y-3">
+    <div className="ui-card p-4">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div><h2 className="text-[15px] font-bold text-[var(--text)]">Record milk</h2><p className="mt-1 text-[12px] text-[var(--muted)]">Select the cows milked, then enter their combined yield.</p></div>
+        <select aria-label="Milk session" value={session} onChange={(event) => setSession(event.target.value)} className="ui-input h-9 w-auto px-3 text-[12px]">
+          <option value="morning">Morning session</option><option value="evening">Evening session</option>
+        </select>
+      </div>
+      {error && <div className="mb-3"><Notice>{error}</Notice></div>}
+      {notice && <div className="mb-3"><Notice tone="success">{notice}</Notice></div>}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_190px]">
+        <div>
+          <label className="block text-[12px] font-medium text-[var(--muted)]">Cows</label>
+          <div className="mt-1.5 flex min-h-10 flex-wrap items-center gap-1.5 rounded-[8px] border border-[var(--line)] bg-[var(--field)] p-1.5">
+            {selectedCows.map((cow) => <span key={String(cow.cow_id)} className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] py-1 pl-2.5 pr-1 text-[11px] font-semibold text-[var(--accent)]">{String(cow.current_tag_number)}<button type="button" aria-label={`Remove cow ${String(cow.current_tag_number)}`} onClick={() => setSelected((current) => current.filter((id) => id !== String(cow.cow_id)))} className="grid size-5 place-items-center rounded-full text-[var(--accent)] hover:bg-black/5">×</button></span>)}
+            <select value={nextCow} onChange={(event) => setNextCow(event.target.value)} className="min-w-[130px] flex-1 bg-transparent px-2 py-1 text-[12px] text-[var(--text)] outline-none">
+              <option value="">Add cow by tag</option>{cows.filter((cow) => !selected.includes(String(cow.cow_id))).map((cow) => <option key={String(cow.cow_id)} value={String(cow.cow_id)}>{String(cow.current_tag_number)}</option>)}
+            </select>
+            <button type="button" onClick={addCow} disabled={!nextCow} className="ui-button-secondary px-2.5 py-1 text-[11px] disabled:opacity-40">Add</button>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_150px]">
+            <label className="block text-[12px] font-medium text-[var(--muted)]">Total liters<input type="number" inputMode="decimal" min="0" step="0.01" value={liters} onChange={(event) => setLiters(event.target.value)} placeholder="0.00" className="ui-input mt-1.5 h-10 px-3 text-[13px]" /></label>
+            <div className="rounded-[8px] bg-[var(--accent-soft)] px-3 py-2.5"><p className="text-[10px] font-medium uppercase tracking-wide text-[var(--accent)]">Per cow</p><p className="mt-0.5 text-[15px] font-bold text-[var(--accent)]">{selected.length ? `${fmt(perCow)} L` : "—"}</p></div>
+          </div>
+          <button type="button" onClick={() => void save()} disabled={saving || !selected.length || total <= 0} className="ui-button mt-4 px-4 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving…" : "Save milk record"}</button>
+        </div>
+        <div className="flex items-center gap-3 rounded-[10px] border border-[var(--line)] bg-[var(--field)] p-3 lg:block">
+          <div className="relative h-[130px] w-[62px] overflow-hidden rounded-[10px_10px_16px_16px] border-2 border-[var(--line)] bg-[var(--card)] lg:mx-auto"><div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,var(--milk2),var(--milk))] transition-all duration-500" style={{ height: `${fill}%` }} /></div>
+          <div className="lg:mt-3 lg:text-center"><p className="text-[22px] font-bold leading-none text-[var(--text)]">{fmt(total)}<span className="ml-1 text-[12px] font-medium text-[var(--muted)]">L</span></p><p className="mt-1 text-[11px] text-[var(--muted)]">of {target} L daily target</p></div>
+        </div>
+      </div>
+    </div>
+    <DataWorkbench key={`${date}-${revision}`} title="Today’s milk records" description={`Individual records saved for ${date}.`} path={apiRoutes.sales.milk} query={dateQuery} showCreate={false} columns={[{ key: "cow_tag_number", label: "Cow" }, { key: "session", label: "Session" }, { key: "liters", label: "Liters" }]} fields={[]} />
+  </section>;
 }
 
 export function ReportsWorkspace() {
@@ -135,7 +209,7 @@ export function ReportsWorkspace() {
   const milkTotal = milkRows.reduce((sum, row) => sum + Number(row.liters ?? 0), 0);
   const byCow = Object.entries(milkRows.reduce<Record<string, number>>((acc, row) => { const name = String(row.cow_tag_number ?? "Unknown"); acc[name] = (acc[name] ?? 0) + Number(row.liters ?? 0); return acc; }, {})).sort((a, b) => b[1] - a[1]);
   return <div>
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-sm"><div className="flex flex-wrap gap-1">{tabs.map((item) => <button key={item.key} onClick={() => setTab(item.key)} className={`rounded-md px-3.5 py-2 text-sm ${tab === item.key ? "bg-[#34443a] font-medium text-white" : "text-stone-600 hover:bg-stone-50"}`}>{item.label}</button>)}</div><div className="flex flex-wrap items-end gap-2"><label className={labelClass}>From<input type="date" value={start} max={end} onChange={(event) => setStart(event.target.value)} className={inputClass} /></label><label className={labelClass}>To<input type="date" value={end} min={start} onChange={(event) => setEnd(event.target.value)} className={inputClass} /></label></div></div>
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div className="ui-tab-list">{tabs.map((item) => <button key={item.key} onClick={() => setTab(item.key)} data-active={tab === item.key} className="ui-tab px-3.5 py-2 text-sm font-medium">{item.label}</button>)}</div><div className="flex flex-wrap items-end gap-2"><label className={labelClass}>From<input type="date" value={start} max={end} onChange={(event) => setStart(event.target.value)} className={inputClass} /></label><label className={labelClass}>To<input type="date" value={end} min={start} onChange={(event) => setEnd(event.target.value)} className={inputClass} /></label></div></div>
     {error && <div className="mb-4"><Notice>{error} <button onClick={() => setRefreshKey((value) => value + 1)} className="ml-2 underline">Retry</button></Notice></div>}
     {tab === "profitability" && <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-semibold text-stone-900">Profitability report</h2><p className="mt-1 text-sm text-stone-500">Accrual revenue and costs for the selected period.</p></div><button onClick={() => void downloadCsv()} className="rounded-md border border-stone-200 bg-white px-3.5 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">Export CSV</button></div>
@@ -149,7 +223,7 @@ export function ReportsWorkspace() {
 export function MastersWorkspace() {
   const [tab, setTab] = useState("warehouses");
   const tabs = [{ key: "warehouses", label: "Warehouses" }, { key: "suppliers", label: "Suppliers" }, { key: "categories", label: "Expense categories" }, { key: "feed-types", label: "Feed types" }, { key: "customers", label: "Customers" }, { key: "market-prices", label: "Market prices" }];
-  return <div><div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-stone-200 bg-white p-1.5 shadow-sm">{tabs.map((item) => <button key={item.key} onClick={() => setTab(item.key)} className={`rounded-md px-3.5 py-2 text-sm ${tab === item.key ? "bg-[#34443a] font-medium text-white" : "text-stone-600 hover:bg-stone-50"}`}>{item.label}</button>)}</div>
+  return <div><div className="ui-tab-list mb-5">{tabs.map((item) => <button key={item.key} onClick={() => setTab(item.key)} data-active={tab === item.key} className="ui-tab px-3.5 py-2 text-sm font-medium">{item.label}</button>)}</div>
     {tab === "warehouses" && <DataWorkbench title="Warehouses" description="Manage housing areas, type, capacity, and current occupancy." path={apiRoutes.herd.warehouses} updatePath={(row) => apiRoutes.herd.warehouse(String(row.warehouse_id))} columns={[{ key: "name", label: "Name" }, { key: "housing_type", label: "Housing type" }, { key: "capacity", label: "Capacity" }, { key: "current_occupancy", label: "Occupancy" }, { key: "is_archived", label: "Archived" }]} fields={[{ name: "name", label: "Name", required: true }, { name: "housing_type", label: "Housing type", required: true, defaultValue: "shed" }, { name: "capacity", label: "Capacity", type: "number", required: true, defaultValue: "10" }, { name: "is_archived", label: "Archived", type: "select", options: [{ value: "true", label: "Yes" }, { value: "false", label: "No" }] }]} />}
     {tab === "suppliers" && <DataWorkbench title="Suppliers" description="Maintain suppliers used in purchases and herd records." path={apiRoutes.herd.suppliers} updatePath={(row) => apiRoutes.herd.supplier(String(row.supplier_id))} columns={[{ key: "name", label: "Name" }, { key: "phone", label: "Phone" }, { key: "supplier_type", label: "Type" }, { key: "is_archived", label: "Archived" }]} fields={[{ name: "name", label: "Name", required: true }, { name: "phone", label: "Phone" }, { name: "supplier_type", label: "Supplier type", required: true, defaultValue: "individual" }, { name: "is_archived", label: "Archived", type: "select", options: [{ value: "true", label: "Yes" }, { value: "false", label: "No" }] }]} />}
     {tab === "categories" && <DataWorkbench title="Expense categories" description="Group expense categories as food or miscellaneous. Categories are create-only in the API." path={apiRoutes.feeding.categories} columns={[{ key: "name", label: "Name" }, { key: "name_bn", label: "Bangla name" }, { key: "category_group", label: "Group" }]} fields={[{ name: "name", label: "Name", required: true }, { name: "name_bn", label: "Bangla name", required: true }, { name: "category_group", label: "Group", type: "select", required: true, options: [{ value: "food", label: "Food" }, { value: "miscellaneous", label: "Miscellaneous" }] }]} />}
@@ -159,13 +233,13 @@ export function MastersWorkspace() {
   </div>;
 }
 
-const inputClass = "w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10";
-const labelClass = "block text-xs font-medium text-stone-600";
-const iconButton = "size-9 rounded-md border border-stone-200 bg-white text-lg text-stone-600 hover:bg-stone-50";
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm"><p className="text-xs text-stone-500">{label}</p><p className="mt-2 text-xl font-semibold text-stone-900">{value}</p></div>; }
-function Breakdown({ title, rows }: { title: string; rows: [string, number][] }) { return <div className="rounded-xl border border-stone-200 bg-white shadow-sm"><h3 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold text-stone-800">{title}</h3><div className="divide-y divide-stone-100">{rows.map(([label, value], index) => <div key={label} className={`flex justify-between gap-3 px-4 py-3 text-sm ${index === rows.length - 1 ? "font-semibold" : ""}`}><span className="text-stone-600">{label}</span><span className="text-stone-900">{money(value)}</span></div>)}</div></div>; }
-function CountBreakdown({ title, rows }: { title: string; rows: Record<string, number> }) { const entries = Object.entries(rows); return <div className="rounded-xl border border-stone-200 bg-white shadow-sm"><h3 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold text-stone-800">{title}</h3>{entries.length ? <div className="divide-y divide-stone-100">{entries.map(([label, value]) => <div key={label} className="flex justify-between px-4 py-3 text-sm"><span className="capitalize text-stone-600">{label.replaceAll("_", " ")}</span><span className="font-medium text-stone-900">{value}</span></div>)}</div> : <p className="p-5 text-sm text-stone-500">No breakdown data.</p>}</div>; }
-function Panel({ children }: { children: React.ReactNode }) { return <div className="rounded-xl border border-stone-200 bg-white p-8 text-center text-sm text-stone-500">{children}</div>; }
+const inputClass = "ui-input px-3 py-2 text-sm";
+const labelClass = "block text-xs font-medium text-[var(--muted)]";
+const iconButton = "ui-button-secondary size-9 text-lg text-[var(--muted)]";
+function Metric({ label, value }: { label: string; value: string }) { return <div className="ui-card p-4"><p className="text-xs text-[var(--muted)]">{label}</p><p className="mt-2 text-xl font-semibold text-[var(--text)]">{value}</p></div>; }
+function Breakdown({ title, rows }: { title: string; rows: [string, number][] }) { return <div className="ui-card overflow-hidden"><h3 className="border-b border-[var(--line)] px-4 py-3 text-sm font-semibold text-[var(--text)]">{title}</h3><div className="divide-y divide-[var(--line)]">{rows.map(([label, value], index) => <div key={label} className={`flex justify-between gap-3 px-4 py-3 text-sm ${index === rows.length - 1 ? "font-semibold" : ""}`}><span className="text-[var(--muted)]">{label}</span><span className="text-[var(--text)]">{money(value)}</span></div>)}</div></div>; }
+function CountBreakdown({ title, rows }: { title: string; rows: Record<string, number> }) { const entries = Object.entries(rows); return <div className="ui-card overflow-hidden"><h3 className="border-b border-[var(--line)] px-4 py-3 text-sm font-semibold text-[var(--text)]">{title}</h3>{entries.length ? <div className="divide-y divide-[var(--line)]">{entries.map(([label, value]) => <div key={label} className="flex justify-between px-4 py-3 text-sm"><span className="capitalize text-[var(--muted)]">{label.replaceAll("_", " ")}</span><span className="font-medium text-[var(--text)]">{value}</span></div>)}</div> : <p className="p-5 text-sm text-[var(--muted)]">No breakdown data.</p>}</div>; }
+function Panel({ children }: { children: React.ReactNode }) { return <div className="ui-card p-8 text-center text-sm text-[var(--muted)]">{children}</div>; }
 function money(value: unknown) { return value == null ? "—" : `৳ ${new Intl.NumberFormat("en-BD", { maximumFractionDigits: 2 }).format(Number(value))}`; }
 function fmt(value: unknown) { return value == null ? "0" : new Intl.NumberFormat("en-BD", { maximumFractionDigits: 2 }).format(Number(value)); }
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date()); }

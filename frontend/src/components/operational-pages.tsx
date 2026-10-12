@@ -214,7 +214,7 @@ export function MilkSalesWorkspace() {
   const [tab, setTab] = useState("milk");
   const tabs = [{ key: "milk", label: "Milk records" }, { key: "invoices", label: "Sales invoices" }, { key: "customers", label: "Customers" }];
   return <div>
-    <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-stone-200 bg-white p-1.5 shadow-sm">{tabs.map((item) => <button key={item.key} onClick={() => setTab(item.key)} className={`rounded-md px-4 py-2 text-sm ${tab === item.key ? "bg-[#34443a] font-medium text-white" : "text-stone-600 hover:bg-stone-50"}`}>{item.label}</button>)}</div>
+    <div className="ui-tab-list mb-5">{tabs.map((item) => <button key={item.key} onClick={() => setTab(item.key)} data-active={tab === item.key} className="ui-tab px-4 py-2 text-sm font-medium">{item.label}</button>)}</div>
     {tab === "milk" && <DataWorkbench title="Milk production" description="Record per-cow production sessions." path={apiRoutes.sales.milk} columns={[{ key: "production_date", label: "Date" }, { key: "cow_tag_number", label: "Cow" }, { key: "session", label: "Session" }, { key: "liters", label: "Liters" }]} fields={[
       { name: "cow_id", label: "Cow", type: "select", sourcePath: apiRoutes.herd.cows, sourceValue: "cow_id", sourceLabel: "current_tag_number", required: true }, { name: "production_date", label: "Date", type: "date", required: true }, { name: "session", label: "Session", type: "select", required: true, options: [{ value: "morning", label: "Morning" }, { value: "evening", label: "Evening" }] }, { name: "liters", label: "Liters", type: "number", required: true },
     ]} />}
@@ -232,7 +232,7 @@ export function PayrollWorkspace() {
   const [tab, setTab] = useState("workers");
   const tabs = [{ key: "workers", label: "Workers" }, { key: "attendance", label: "Attendance" }, { key: "salary", label: "Salary payments" }, { key: "substitutes", label: "Substitutes" }];
   return <div>
-    <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-stone-200 bg-white p-1.5 shadow-sm">{tabs.map((item) => <button key={item.key} onClick={() => setTab(item.key)} className={`rounded-md px-4 py-2 text-sm ${tab === item.key ? "bg-[#34443a] font-medium text-white" : "text-stone-600 hover:bg-stone-50"}`}>{item.label}</button>)}</div>
+    <div className="ui-tab-list mb-5">{tabs.map((item) => <button key={item.key} onClick={() => setTab(item.key)} data-active={tab === item.key} className="ui-tab px-4 py-2 text-sm font-medium">{item.label}</button>)}</div>
     {tab === "workers" && <DataWorkbench title="Workers" description="Add staff and keep their employment details current." path={apiRoutes.labor.workers} columns={[{ key: "name", label: "Name" }, { key: "role", label: "Role" }, { key: "phone", label: "Phone" }, { key: "join_date", label: "Joined" }, { key: "monthly_salary", label: "Monthly salary ৳" }, { key: "status", label: "Status" }]} fields={[{ name: "name", label: "Name", required: true }, { name: "phone", label: "Phone" }, { name: "role", label: "Role" }, { name: "join_date", label: "Join date", type: "date", required: true }, { name: "monthly_salary", label: "Monthly salary ৳", type: "number", required: true }, { name: "status", label: "Status", type: "select", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }] }]} />}
     {tab === "attendance" && <AttendanceWorkspace />}
     {tab === "salary" && <DataWorkbench title="Salary payments" description="Record a worker’s salary settlement for a month." path={apiRoutes.labor.salaries} columns={[{ key: "worker_name", label: "Worker" }, { key: "pay_month", label: "Pay month" }, { key: "base_salary", label: "Base ৳" }, { key: "absence_deduction", label: "Deduction ৳" }, { key: "bonus", label: "Bonus ৳" }, { key: "net_paid", label: "Net ৳" }, { key: "paid_date", label: "Paid date" }]} fields={[{ name: "worker_id", label: "Worker", type: "select", sourcePath: apiRoutes.labor.workers, sourceValue: "worker_id", required: true }, { name: "pay_month", label: "Pay month", type: "date", required: true }, { name: "base_salary", label: "Base salary ৳", type: "number", required: true }, { name: "absence_deduction", label: "Absence deduction ৳", type: "number" }, { name: "bonus", label: "Bonus ৳", type: "number" }, { name: "paid_date", label: "Paid date", type: "date", required: true }, { name: "status", label: "Status", type: "select", options: [{ value: "paid", label: "Paid" }, { value: "pending", label: "Pending" }, { value: "cancelled", label: "Cancelled" }] }]} />}
@@ -275,14 +275,14 @@ export function AttendanceWorkspace({ initialDate }: { initialDate?: string } = 
     finally { setSaving(false); }
   }
   return <section className="space-y-4">
-    <div className="flex items-end gap-3"><label className={labelClass}>Attendance date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={inputClass} /></label><button onClick={() => void load()} className="rounded-md border border-stone-200 bg-white px-4 py-2 text-sm">Load day</button></div>
+    <div className="flex items-end gap-3"><label className={labelClass}>Attendance date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={inputClass} /></label><button onClick={() => void load()} className="ui-button-secondary px-4 py-2 text-sm">Load day</button></div>
     {error && <Notice>{error}</Notice>}{notice && <Notice tone="success">{notice}</Notice>}
-    <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+    <div className="ui-card overflow-hidden">
       {loading ? <p className="p-8 text-center text-sm text-stone-500">Loading attendance…</p> : workers.length === 0 ? <p className="p-8 text-center text-sm text-stone-500">No active workers found. Add a worker first.</p> : <div className="divide-y divide-stone-100">{workers.map((worker) => {
         const id = String(worker.worker_id); const value = attendance[id] ?? { present: true, note: "" };
         return <div key={id} className="grid items-center gap-3 px-4 py-3 sm:grid-cols-[1fr_auto_minmax(180px,280px)]"><div><p className="text-sm font-medium text-stone-800">{String(worker.name)}</p><p className="text-xs text-stone-500">{String(worker.role ?? "Worker")}</p></div><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={value.present} onChange={(event) => setAttendance((current) => ({ ...current, [id]: { ...value, present: event.target.checked } }))} className="size-4 accent-emerald-800" />Present</label><input disabled={value.present} value={value.note} onChange={(event) => setAttendance((current) => ({ ...current, [id]: { ...value, note: event.target.value } }))} placeholder="Reason for absence" className={`${inputClass} disabled:bg-stone-50`} /></div>;
       })}</div>}
-      <div className="flex justify-end border-t border-stone-100 p-4"><button onClick={() => void save()} disabled={saving || workers.length === 0} className="rounded-md bg-emerald-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{saving ? "Saving…" : "Save attendance"}</button></div>
+      <div className="flex justify-end border-t border-[var(--line)] p-4"><button onClick={() => void save()} disabled={saving || workers.length === 0} className="ui-button px-4 py-2 text-sm disabled:opacity-50">{saving ? "Saving…" : "Save attendance"}</button></div>
     </div>
   </section>;
 }
@@ -297,8 +297,8 @@ function RemoteOptions({ path, valueKey, labelKey }: { path: string; valueKey: s
   return <>{items.map((item, index) => <option key={String(item[valueKey] ?? index)} value={String(item[valueKey] ?? "")}>{String(item[labelKey] ?? "")}</option>)}</>;
 }
 
-const inputClass = "h-10 w-full rounded-md border border-stone-200 bg-white px-3 text-[12px] text-stone-800 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10";
-const labelClass = "block text-[11px] font-medium text-stone-600";
+const inputClass = "ui-input h-10 px-3 text-[12px]";
+const labelClass = "block text-[11px] font-medium text-[var(--muted)]";
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date()); }
 function dateAfter(dateValue: string, days: number) { const date = new Date(`${dateValue}T12:00:00+06:00`); date.setDate(date.getDate() + days); return date.toISOString().slice(0, 10); }
 function money(value: unknown) { return value == null ? "—" : `৳ ${new Intl.NumberFormat("en-BD", { maximumFractionDigits: 2 }).format(Number(value))}`; }

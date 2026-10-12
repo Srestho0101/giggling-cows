@@ -112,10 +112,10 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      <aside className="fixed inset-y-0 left-0 z-20 flex w-[160px] flex-col bg-[var(--nav)] px-[8px] py-[12px] text-[var(--navtxt)]">
-        <div className="flex items-center gap-2 px-2 pb-3 text-[var(--navhi)]">
-          <span className="grid size-[24px] place-items-center rounded-[7px] bg-[var(--hay)] text-[13px] font-bold text-[#0f172a]">🐄</span>
-          <span className="text-[14px] font-bold">Cow Farm</span>
+      <aside className="app-sidebar fixed inset-y-0 left-0 z-20 flex w-[216px] flex-col bg-[var(--nav)] px-[12px] py-[18px] text-[var(--navtxt)]">
+        <div className="app-sidebar__brand flex items-center gap-2.5 px-2 pb-5 text-[var(--navhi)]">
+          <FarmMark />
+          <span className="text-[16px] font-bold tracking-[-.01em]">Cow Farm</span>
         </div>
 
         <nav aria-label={language === "bn" ? "প্রধান নেভিগেশন" : "Main navigation"} className="flex-1 space-y-[2px] overflow-y-auto">
@@ -126,7 +126,7 @@ export function AppShell({ children }: AppShellProps) {
                 key={item.href}
                 href={item.href}
                 aria-current={selected ? "page" : undefined}
-                className={`flex items-center gap-[9px] rounded-[7px] px-[9px] py-[7px] text-[12px] font-medium transition-colors ${
+                className={`flex items-center gap-[10px] rounded-[8px] px-[10px] py-[9px] text-[13px] font-medium transition-colors ${
                   selected ? "bg-white/10 text-[var(--navhi)] shadow-[inset_3px_0_0_var(--hay)]" : "text-[var(--navtxt)] hover:bg-white/5 hover:text-[var(--navhi)]"
                 }`}
               >
@@ -138,36 +138,36 @@ export function AppShell({ children }: AppShellProps) {
           })}
         </nav>
 
-        <div className="mt-auto border-t border-white/10 px-[8px] pt-[10px] text-[11px] text-[var(--navtxt)] opacity-75">Karim is absent today</div>
+        <div className="app-sidebar__foot mt-auto border-t border-white/10 px-[8px] pt-[12px] text-[11px] leading-relaxed text-[var(--navtxt)] opacity-80">Farm operations workspace</div>
       </aside>
 
-      <div className="ml-[160px] min-h-screen">
-        <header className="sticky top-0 z-10 flex h-[52px] items-center gap-[10px] border-b border-[var(--line)] bg-[var(--bar)] px-[16px] backdrop-blur-md">
+      <div className="app-content ml-[216px] min-h-screen">
+        <header className="app-header sticky top-0 z-10 flex h-[60px] items-center gap-[12px] border-b border-[var(--line)] bg-[var(--bar)] px-[24px] backdrop-blur-md">
           <h1 className="min-w-[90px] flex-1 text-[17px] font-bold text-[var(--text)]">{language === "bn" ? activePage.bn : activePage.en}</h1>
 
-          <div className="relative">
+          <div className="app-header__search relative">
             <input
               type="search"
               aria-label="Search cows"
               onFocus={() => setSearchOpen(true)}
               placeholder={language === "bn" ? "গরু খুঁজুন..." : "Search cows..."}
-              className="h-8 w-[150px] rounded-[8px] border border-[var(--line)] bg-[var(--card)] pl-[11px] pr-[34px] text-[12px] text-[var(--text)] placeholder:text-[var(--muted)]"
+              className="h-9 w-[180px] rounded-[8px] border border-[var(--line)] bg-[var(--field)] pl-[11px] pr-[34px] text-[12px] text-[var(--text)] placeholder:text-[var(--muted)]"
             />
             <kbd className="pointer-events-none absolute right-[8px] top-1/2 -translate-y-1/2 rounded-[5px] border border-[var(--line)] bg-[var(--card)] px-[4px] py-[1px] text-[9px] text-[var(--muted)]">Ctrl K</kbd>
           </div>
 
-          <div className="flex items-center rounded-[8px] border border-[var(--line)] bg-[var(--card)]">
+          <div className="app-header__date flex items-center rounded-[8px] border border-[var(--line)] bg-[var(--card)]">
             <button type="button" aria-label="Previous day" onClick={() => shiftDate(-1)} className="h-8 px-[7px] text-[var(--muted)] hover:text-[var(--text)]">‹</button>
             <span className="min-w-[100px] text-center text-[12px] font-semibold tabular-nums">{formattedDate}</span>
             <button type="button" aria-label="Next day" onClick={() => shiftDate(1)} className="h-8 px-[7px] text-[var(--muted)] hover:text-[var(--text)]">›</button>
           </div>
 
-          <div className="flex rounded-[8px] border border-[var(--line)] bg-[var(--card)] p-[2px]">
+          <div className="app-header__language flex rounded-[8px] border border-[var(--line)] bg-[var(--card)] p-[2px]">
             <button type="button" onClick={() => setLanguage("bn")} className={`rounded-[6px] px-[8px] py-[4px] text-[11px] font-medium ${language === "bn" ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--muted)]"}`}>বাংলা</button>
             <button type="button" onClick={() => setLanguage("en")} className={`rounded-[6px] px-[8px] py-[4px] text-[11px] font-medium ${language === "en" ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--muted)]"}`}>English</button>
           </div>
 
-          <div className="flex rounded-[8px] border border-[var(--line)] bg-[var(--card)] p-[2px]">
+          <div className="app-header__theme flex rounded-[8px] border border-[var(--line)] bg-[var(--card)] p-[2px]">
             {(["system", "light", "dark"] as const).map((mode) => (
               <button
                 key={mode}
@@ -205,6 +205,14 @@ export function AppShell({ children }: AppShellProps) {
       )}
     </div>
   );
+}
+
+function FarmMark() {
+  return <span aria-hidden="true" className="grid size-[30px] place-items-center rounded-[9px] bg-[var(--hay)] text-[#152434] shadow-sm">
+    <svg viewBox="0 0 24 24" fill="none" className="size-[18px]" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 10.5 12 4l8 6.5" /><path d="M6.5 9.5v9.5h11V9.5M9.5 19v-5.5h5V19" /><path d="M8.5 10.5h.01M15.5 10.5h.01" />
+    </svg>
+  </span>;
 }
 
 function SearchIcon() {
