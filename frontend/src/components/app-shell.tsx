@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/components/providers";
 
 type AppShellProps = { children: React.ReactNode };
 type Language = "en" | "bn";
@@ -61,6 +62,7 @@ function NavIcon({ name }: { name: string }) {
 }
 
 export function AppShell({ children }: AppShellProps) {
+  const { session, signOut } = useAuth();
   const pathname = usePathname();
   const [language, setLanguage] = useState<Language>("en");
   const [date, setDate] = useState(getBangladeshCalendarDate);
@@ -144,6 +146,9 @@ export function AppShell({ children }: AppShellProps) {
       <div className="ml-[160px] min-h-screen">
         <header className="sticky top-0 z-10 flex h-[52px] items-center gap-[10px] border-b border-[var(--line)] bg-[var(--bar)] px-[16px] backdrop-blur-md">
           <h1 className="min-w-[90px] flex-1 text-[17px] font-bold text-[var(--text)]">{language === "bn" ? activePage.bn : activePage.en}</h1>
+
+          <span className="hidden max-w-[180px] truncate text-[11px] text-[var(--muted)] sm:block">{session?.user.email}</span>
+          <button type="button" onClick={() => void signOut()} className="rounded-[8px] border border-[var(--line)] bg-[var(--card)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text)] hover:bg-[var(--bg)]">Sign out</button>
 
           <div className="relative">
             <input

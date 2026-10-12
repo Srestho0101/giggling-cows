@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Cow Farm Management System"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./cow_farm.db"
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
-    SUPABASE_JWT_SECRET: str = "dev-supabase-jwt-secret-replace-in-env"
+    SUPABASE_JWT_SECRET: str = ""
     SUPABASE_JWT_ALGORITHM: str = "HS256"
 
     # CORS
