@@ -42,17 +42,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. Configure environment variables in a project-root `.env` file (the backend reads that file):
+3. Configure environment variables. Create a `.env` file in `backend/` with at minimum:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@localhost:5432/cowfarm
-DEBUG=false
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_supabase_anon_or_publishable_key
-SUPABASE_JWT_SECRET=your_project_jwt_secret
+SECRET_KEY=supersecret
 ```
 
-Use the Supabase project URL, anon/publishable key, and JWT signing secret from the Supabase dashboard. Keep the service-role key on the server only; this app does not need it for sign-in. Set `DEBUG=true` only for local development, where the backend intentionally allows local development identities.
+See `backend/core/config.py` for other settings and optional variables.
 
 4. Run database migrations and seed the DB (Alembic is configured already):
 
@@ -79,15 +76,13 @@ npm install
 # or: yarn
 ```
 
-2. Copy `frontend/.env.example` to `frontend/.env.local`, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to the same Supabase project, and set `NEXT_PUBLIC_API_URL` to the backend URL.
-
-3. Start the Next.js development server:
+2. Start the Next.js development server:
 
 ```bash
 npm run dev
 ```
 
-Create or invite user accounts in Supabase Authentication, then open the frontend at `http://localhost:3000/login`. The frontend reads/writes to the API endpoints on the backend—keep both servers running. Add custom role claims under Supabase `app_metadata.role` (`admin`, `manager`, or `data_entry`); user-editable metadata is ignored for authorization. New users without a custom role receive `data_entry`.
+Open the frontend at `http://localhost:3000`. The frontend reads/writes to the API endpoints on the backend—keep both servers running.
 
 Running tests
 

@@ -1,5 +1,3 @@
-import { getStoredAccessToken } from "@/lib/auth";
-
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://cow-farm-cakg.onrender.com").replace(/\/$/, "");
 const API_PREFIX = "/api/v1";
 
@@ -41,8 +39,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   if (body !== undefined && !requestHeaders.has("Content-Type")) {
     requestHeaders.set("Content-Type", "application/json");
   }
-  const token = accessToken ?? getStoredAccessToken();
-  if (token) requestHeaders.set("Authorization", `Bearer ${token}`);
+  if (accessToken) requestHeaders.set("Authorization", `Bearer ${accessToken}`);
 
   const response = await fetch(apiUrl(path), {
     ...requestOptions,
@@ -51,7 +48,6 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   });
 
   if (!response.ok) {
-    if (response.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event("cowfarm:auth-expired"));
     const payload = await response.json().catch(() => undefined);
     const message = getErrorMessage(payload) ?? `API request failed (${response.status})`;
     throw new ApiError(response.status, message, payload);
@@ -105,4 +101,3 @@ export const apiRoutes = {
     profitabilityCsv: "/reports/profitability/csv",
   },
 } as const;
-

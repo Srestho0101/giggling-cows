@@ -1,13 +1,10 @@
 import enum
 import uuid
-import asyncio
-from functools import lru_cache
 from typing import List, Optional
 import jwt
-from jwt import PyJWKClient
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.core.config import settings
 
@@ -25,20 +22,26 @@ class AuthUser(BaseModel):
     email: Optional[str] = None
     role: UserRole
     aud: Optional[str] = None
-    app_metadata: dict = Field(default_factory=dict)
-    user_metadata: dict = Field(default_factory=dict)
+    app_metadata: dict = {}
+    user_metadata: dict = {}
 
 
 def extract_role_from_payload(payload: dict) -> UserRole:
-    # user_metadata is editable by the signed-in user, so it cannot grant roles.
-    # app_metadata is managed by trusted administrators and is safe for role claims.
+    # 1. Check user_metadata.role
+    user_meta = payload.get("user_metadata", {})
+    if isinstance(user_meta, dict) and "role" in user_meta:
+        role_str = str(user_meta["role"]).lower()
+        if role_str in [r.value for r in UserRole]:
+            return UserRole(role_str)
+
+    # 2. Check app_metadata.role
     app_meta = payload.get("app_metadata", {})
     if isinstance(app_meta, dict) and "role" in app_meta:
         role_str = str(app_meta["role"]).lower()
         if role_str in [r.value for r in UserRole]:
             return UserRole(role_str)
 
-    # Check a direct role claim when one is supplied by a trusted JWT issuer.
+    # 3. Check direct role in payload
     role_str = payload.get("role")
     if role_str and str(role_str).lower() in [r.value for r in UserRole]:
         return UserRole(str(role_str).lower())
@@ -47,15 +50,7 @@ def extract_role_from_payload(payload: dict) -> UserRole:
     return UserRole.DATA_ENTRY
 
 
-@lru_cache(maxsize=1)
-def get_supabase_jwks_client() -> PyJWKClient:
-    return PyJWKClient(
-        f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json",
-        cache_jwk_set=True,
-    )
-
-
-async def decode_supabase_jwt(token: str) -> dict:
+def decode_supabase_jwt(token: str) -> dict:
     # In development mode, allow dummy tokens if configured
     if settings.DEBUG and token.startswith("dev-user:"):
         # e.g., "dev-user:admin", "dev-user:manager", "dev-user:data_entry"
@@ -69,39 +64,12 @@ async def decode_supabase_jwt(token: str) -> dict:
         }
 
     try:
-        header = jwt.get_unverified_header(token)
-        algorithm = header.get("alg")
-
-        if algorithm == "HS256":
-            if not settings.SUPABASE_JWT_SECRET:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="HS256 authentication is not configured on the server",
-                )
-            payload = jwt.decode(
-                token,
-                settings.SUPABASE_JWT_SECRET,
-                algorithms=["HS256"],
-                options={"verify_aud": False},
-            )
-        elif algorithm in {"ES256", "RS256"}:
-            if not settings.SUPABASE_URL:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="SUPABASE_URL is required to verify asymmetric auth tokens",
-                )
-            signing_key = await asyncio.to_thread(
-                get_supabase_jwks_client().get_signing_key_from_jwt,
-                token,
-            )
-            payload = jwt.decode(
-                token,
-                signing_key.key,
-                algorithms=[algorithm],
-                options={"verify_aud": False},
-            )
-        else:
-            raise jwt.InvalidAlgorithmError("Unsupported Supabase JWT signing algorithm")
+        payload = jwt.decode(
+            token,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=[settings.SUPABASE_JWT_ALGORITHM],
+            options={"verify_aud": False},
+        )
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -135,7 +103,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = await decode_supabase_jwt(credentials.credentials)
+    payload = decode_supabase_jwt(credentials.credentials)
     user_id_str = payload.get("sub")
     if not user_id_str:
         raise HTTPException(
