@@ -3,7 +3,7 @@ const API_PREFIX = "/api/v1";
 
 export type ApiRequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
-  accessToken?: string;
+  accessToken?: string | null;
 };
 
 export class ApiError extends Error {
@@ -62,7 +62,11 @@ function getErrorMessage(payload: unknown): string | undefined {
   const detail = payload.detail;
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) {
-    return detail.map((item) => typeof item === "object" && item !== null && "msg" in item ? String(item.msg) : "Invalid request").join(" ");
+    return detail
+      .map((item) =>
+        typeof item === "object" && item !== null && "msg" in item ? String(item.msg) : "Invalid request",
+      )
+      .join(" ");
   }
   return undefined;
 }
@@ -70,29 +74,44 @@ function getErrorMessage(payload: unknown): string | undefined {
 export const apiRoutes = {
   auth: { me: "/auth/me" },
   herd: {
-    cows: "/herd/cows", cow: (id: string) => `/herd/cows/${id}`,
-    weight: (id: string) => `/herd/cows/${id}/weight`, move: (id: string) => `/herd/cows/${id}/move`,
-    warehouses: "/herd/warehouses", warehouse: (id: string) => `/herd/warehouses/${id}`,
-    suppliers: "/herd/suppliers", supplier: (id: string) => `/herd/suppliers/${id}`,
+    cows: "/herd/cows",
+    cow: (id: string) => `/herd/cows/${id}`,
+    weight: (id: string) => `/herd/cows/${id}/weight`,
+    move: (id: string) => `/herd/cows/${id}/move`,
+    warehouses: "/herd/warehouses",
+    warehouse: (id: string) => `/herd/warehouses/${id}`,
+    suppliers: "/herd/suppliers",
+    supplier: (id: string) => `/herd/suppliers/${id}`,
   },
   evaluations: {
-    root: "/evaluations", preview: "/evaluations/calculate-preview", marketPrices: "/evaluations/market-prices",
-    update: (id: string) => `/evaluations/${id}`, convert: (id: string) => `/evaluations/${id}/convert-to-cow`,
+    root: "/evaluations",
+    preview: "/evaluations/calculate-preview",
+    marketPrices: "/evaluations/market-prices",
+    update: (id: string) => `/evaluations/${id}`,
+    convert: (id: string) => `/evaluations/${id}/convert-to-cow`,
   },
   feeding: {
-    expenses: "/feeding/expenses", categories: "/feeding/categories", feedTypes: "/feeding/feed-types",
+    expenses: "/feeding/expenses",
+    categories: "/feeding/categories",
+    feedTypes: "/feeding/feed-types",
     feedType: (id: string) => `/feeding/feed-types/${id}`,
     records: "/feeding/feeding-records",
   },
   labor: {
-    workers: "/labor/workers", attendance: "/labor/attendance", attendanceBatch: "/labor/attendance/batch",
-    salaries: "/labor/salary-payments", substitutes: "/labor/mill-charges",
+    workers: "/labor/workers",
+    attendance: "/labor/attendance",
+    attendanceBatch: "/labor/attendance/batch",
+    salaries: "/labor/salary-payments",
+    substitutes: "/labor/mill-charges",
   },
   health: { records: "/health/records", breeding: "/health/breeding", pregnancy: "/health/pregnancy" },
   sales: {
-    customers: "/sales/customers", customer: (id: string) => `/sales/customers/${id}`,
-    invoices: "/sales/invoices", invoice: (id: string) => `/sales/invoices/${id}`,
-    invoiceStatus: (id: string) => `/sales/invoices/${id}/status`, invoicePayments: (id: string) => `/sales/invoices/${id}/payments`,
+    customers: "/sales/customers",
+    customer: (id: string) => `/sales/customers/${id}`,
+    invoices: "/sales/invoices",
+    invoice: (id: string) => `/sales/invoices/${id}`,
+    invoiceStatus: (id: string) => `/sales/invoices/${id}/status`,
+    invoicePayments: (id: string) => `/sales/invoices/${id}/payments`,
     milk: "/sales/milk",
   },
   reports: {
