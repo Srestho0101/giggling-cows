@@ -13,10 +13,6 @@ engine = create_async_engine(
     future=True,
     connect_args=settings.database_connect_args,
     pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=5,
-    pool_timeout=30,
-    pool_recycle=300,
 )
 
 async_session_maker = async_sessionmaker(
@@ -63,10 +59,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
         try:
             yield session
-            # Writes commit inside endpoints. Only flush a leftover transaction
-            # so pure reads do not pay an extra COMMIT round-trip.
-            if session.new or session.dirty or session.deleted:
-                await session.commit()
+            await session.commit()
         except Exception:
             await session.rollback()
             raise

@@ -89,14 +89,8 @@ class Settings(BaseSettings):
         host = urlsplit(self.DATABASE_URL).hostname or ""
         port = urlsplit(self.DATABASE_URL).port
         if host.endswith(".supabase.com") or port == 6543:
-            # Supabase's pooler (PgBouncer) rejects asyncpg's prepared-statement cache.
-            return {
-                "ssl": "require",
-                "statement_cache_size": 0,
-                "prepared_statement_cache_size": 0,
-                "command_timeout": 20,
-            }
-        return {"command_timeout": 20}
+            return {"ssl": "require"}
+        return {}
 
 
 settings = Settings()

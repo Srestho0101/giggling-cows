@@ -1,6 +1,5 @@
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import List
 import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,36 +19,28 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
     month_ago = today - timedelta(days=30)
     month_start = today.replace(day=1)
 
-    # 1. Cow stats — aggregates, not full-table hydration
-    status_rows = (
-        await session.execute(
-            select(Cow.status, func.count()).where(Cow.is_archived == False).group_by(Cow.status)
-        )
-    ).all()
-    counts = {status: count for status, count in status_rows}
-    total_cows = sum(counts.values())
-    active_cows = counts.get("active", 0)
-    sold_cows = counts.get("sold", 0)
-    deceased_cows = counts.get("deceased", 0)
+    # 1. Cow stats
+    cows_stmt = select(Cow)
+    all_cows = (await session.execute(cows_stmt)).scalars().all()
 
-    category_rows = (
-        await session.execute(
-            select(Cow.category, func.count())
-            .where(Cow.is_archived == False, Cow.status == "active")
-            .group_by(Cow.category)
-        )
-    ).all()
-    cows_by_category = {category: count for category, count in category_rows}
+    total_cows = len(all_cows)
+    active_cows = sum(1 for c in all_cows if c.status == "active")
+    sold_cows = sum(1 for c in all_cows if c.status == "sold")
+    deceased_cows = sum(1 for c in all_cows if c.status == "deceased")
 
-    warehouse_rows = (
-        await session.execute(
-            select(Warehouse.name, func.count())
-            .join(Cow, Cow.warehouse_id == Warehouse.warehouse_id)
-            .where(Cow.is_archived == False, Cow.status == "active")
-            .group_by(Warehouse.name)
-        )
-    ).all()
-    cows_by_warehouse = {name: count for name, count in warehouse_rows}
+    cows_by_category = {}
+    for c in all_cows:
+        if c.status == "active":
+            cows_by_category[c.category] = cows_by_category.get(c.category, 0) + 1
+
+    # Warehouse occupancy
+    warehouses = (await session.execute(select(Warehouse))).scalars().all()
+    warehouse_map = {w.warehouse_id: w.name for w in warehouses}
+    cows_by_warehouse = {}
+    for c in all_cows:
+        if c.status == "active" and c.warehouse_id in warehouse_map:
+            w_name = warehouse_map[c.warehouse_id]
+            cows_by_warehouse[w_name] = cows_by_warehouse.get(w_name, 0) + 1
 
     # 2. Milk stats
     milk_today_stmt = select(func.coalesce(func.sum(MilkProduction.liters), 0)).where(

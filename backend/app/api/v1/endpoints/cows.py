@@ -43,19 +43,17 @@ async def list_warehouses(
         stmt = stmt.where(Warehouse.is_archived == False)
     warehouses = (await db.execute(stmt)).scalars().all()
 
-    occ_rows = (
-        await db.execute(
-            select(Cow.warehouse_id, func.count())
-            .where(Cow.status == "active", Cow.is_archived == False)
-            .group_by(Cow.warehouse_id)
-        )
-    ).all()
-    occupancy_by_warehouse = {warehouse_id: count for warehouse_id, count in occ_rows}
-
+    # Calculate occupancy
     res = []
     for w in warehouses:
+        occ_stmt = select(func.count()).select_from(Cow).where(
+            Cow.warehouse_id == w.warehouse_id,
+            Cow.status == "active",
+            Cow.is_archived == False,
+        )
+        occupancy = (await db.scalar(occ_stmt)) or 0
         w_read = WarehouseRead.model_validate(w)
-        w_read.current_occupancy = occupancy_by_warehouse.get(w.warehouse_id, 0)
+        w_read.current_occupancy = occupancy
         res.append(w_read)
     return res
 
@@ -165,24 +163,17 @@ async def list_cows(
     category: Optional[str] = None,
     sex: Optional[str] = None,
     search: Optional[str] = None,
-    limit: int = Query(500, ge=1, le=2000),
-    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
-    latest_weight = (
-        select(WeightRecord.weight_kg)
-        .where(WeightRecord.cow_id == Cow.cow_id)
-        .order_by(WeightRecord.weigh_date.desc(), WeightRecord.created_at.desc())
-        .limit(1)
-        .correlate(Cow)
-        .scalar_subquery()
-    )
     stmt = (
-        select(Cow, latest_weight.label("latest_weight"))
+        select(Cow)
         .options(
             selectinload(Cow.warehouse),
             selectinload(Cow.supplier),
+            selectinload(Cow.dam),
+            selectinload(Cow.sire),
+            selectinload(Cow.weight_records),
         )
         .where(Cow.is_archived == False)
     )
@@ -198,29 +189,19 @@ async def list_cows(
     if search:
         stmt = stmt.where(Cow.current_tag_number.ilike(f"%{search}%"))
 
-    stmt = stmt.order_by(Cow.created_at.desc()).limit(limit).offset(offset)
-    rows = (await db.execute(stmt)).unique().all()
-
-    dam_ids = {c.dam_id for c, _ in rows if c.dam_id}
-    sire_ids = {c.sire_id for c, _ in rows if c.sire_id}
-    parent_ids = dam_ids | sire_ids
-    parent_tags: dict[uuid.UUID, str] = {}
-    if parent_ids:
-        parent_rows = (
-            await db.execute(
-                select(Cow.cow_id, Cow.current_tag_number).where(Cow.cow_id.in_(parent_ids))
-            )
-        ).all()
-        parent_tags = {cow_id: tag for cow_id, tag in parent_rows}
+    stmt = stmt.order_by(Cow.created_at.desc())
+    cows = (await db.execute(stmt)).scalars().all()
 
     results = []
-    for c, weight in rows:
+    for c in cows:
         read_obj = CowRead.model_validate(c)
         read_obj.warehouse_name = c.warehouse.name if c.warehouse else None
         read_obj.supplier_name = c.supplier.name if c.supplier else None
-        read_obj.dam_tag = parent_tags.get(c.dam_id) if c.dam_id else None
-        read_obj.sire_tag = parent_tags.get(c.sire_id) if c.sire_id else None
-        read_obj.latest_weight_kg = weight
+        read_obj.dam_tag = c.dam.current_tag_number if c.dam else None
+        read_obj.sire_tag = c.sire.current_tag_number if c.sire else None
+        if c.weight_records:
+            latest_w = max(c.weight_records, key=lambda w: w.weigh_date)
+            read_obj.latest_weight_kg = latest_w.weight_kg
         results.append(read_obj)
 
     return results
