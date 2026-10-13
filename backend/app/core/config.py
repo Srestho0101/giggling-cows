@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Cow Farm Management System"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
-    DEBUG: bool = False
+    DEBUG: bool = True
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./cow_farm.db"
