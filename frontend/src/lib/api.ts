@@ -32,8 +32,10 @@ export function apiQuery(path: string, values: Record<string, string | number | 
   return suffix ? `${path}?${suffix}` : path;
 }
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { accessToken, headers, body, ...requestOptions } = options;
+  const { accessToken, headers, body, signal, ...requestOptions } = options;
   const requestHeaders = new Headers(headers);
 
   if (body !== undefined && !requestHeaders.has("Content-Type")) {
@@ -41,20 +43,36 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   }
   if (accessToken) requestHeaders.set("Authorization", `Bearer ${accessToken}`);
 
-  const response = await fetch(apiUrl(path), {
-    ...requestOptions,
-    headers: requestHeaders,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS);
+  const onAbort = () => timeout.abort();
+  signal?.addEventListener("abort", onAbort);
 
-  if (!response.ok) {
-    const payload = await response.json().catch(() => undefined);
-    const message = getErrorMessage(payload) ?? `API request failed (${response.status})`;
-    throw new ApiError(response.status, message, payload);
+  try {
+    const response = await fetch(apiUrl(path), {
+      ...requestOptions,
+      headers: requestHeaders,
+      signal: timeout.signal,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => undefined);
+      const message = getErrorMessage(payload) ?? `API request failed (${response.status})`;
+      throw new ApiError(response.status, message, payload);
+    }
+
+    if (response.status === 204) return undefined as T;
+    return response.json() as Promise<T>;
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError") {
+      throw new ApiError(0, "The API took too long to respond. It may be waking up — try again.", null);
+    }
+    throw cause;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
   }
-
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
 }
 
 function getErrorMessage(payload: unknown): string | undefined {

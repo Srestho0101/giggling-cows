@@ -80,7 +80,8 @@ export function DataWorkbench({
     },
     staleTime: 30_000,
     refetchOnWindowFocus: true,
-    retry: 1,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
 
   const rows = useMemo(() => rowsQuery.data ?? [], [rowsQuery.data]);
