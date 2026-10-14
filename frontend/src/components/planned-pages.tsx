@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AttendanceWorkspace } from "@/components/operational-pages";
 import { MilkRecorder } from "@/components/milk-recorder";
 import { DataWorkbench, Notice } from "@/components/data-workbench";
 import { Badge, btn, StatTile, Tabs, ui } from "@/components/ui";
@@ -172,7 +171,7 @@ export function TodayWorkspace() {
           />
         </div>
 
-        {/* Right Column: Herd alerts + Attendance + Sales invoices */}
+        {/* Right Column: Herd alerts + Sales invoices */}
         <div className="space-y-4">
           {/* Herd Alerts Card */}
           <section className="rounded-[8px] border border-line bg-surface p-4">
@@ -211,17 +210,6 @@ export function TodayWorkspace() {
             ) : (
               <p className="mt-3 text-[13px] text-muted">No care alerts right now.</p>
             )}
-          </section>
-
-          {/* Attendance Card (embedded) */}
-          <section className="rounded-[8px] border border-line bg-surface p-4 space-y-3">
-            <div className="border-b border-line pb-2.5">
-              <h2 className="text-[15px] font-semibold text-ink">Attendance</h2>
-              <p className="text-[12px] text-muted">
-                Worker attendance for {date || "selected date"}.
-              </p>
-            </div>
-            <AttendanceWorkspace key={date} initialDate={date} embedded />
           </section>
 
           {/* Sales Invoices */}
