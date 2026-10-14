@@ -145,7 +145,7 @@ export function HerdWorkspace() {
 
 export function PurchasesWorkspace() {
   const [liveWeight, setLiveWeight] = useState("350");
-  const [growth, setGrowth] = useState("good");
+  const [growthPercent, setGrowthPercent] = useState("61");
   const [offered, setOffered] = useState("");
   const [market, setMarket] = useState("");
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
@@ -182,7 +182,8 @@ export function PurchasesWorkspace() {
         method: "POST",
         body: {
           live_weight_kg: Number(liveWeight),
-          growth_potential: growth,
+          growth_potential: "good",
+          custom_net_weight_percent: Number(growthPercent),
           offered_price: Number(offered),
           market_price_per_kg: Number(market),
         },
@@ -207,7 +208,8 @@ export function PurchasesWorkspace() {
           evaluation_date: formData.get("evaluation_date"),
           supplier_id: formData.get("supplier_id") || null,
           live_weight_kg: Number(liveWeight),
-          growth_potential: growth,
+          growth_potential: "good",
+          custom_net_weight_percent: Number(growthPercent),
           offered_price: Number(offered),
           market_price_per_kg: Number(market),
           decision,
@@ -312,15 +314,17 @@ export function PurchasesWorkspace() {
               />
             </label>
             <label className="text-[12px] font-medium text-ink">
-              <span className="block mb-1">Growth potential</span>
-              <select
-                value={growth}
-                onChange={(event) => setGrowth(event.target.value)}
-                className={ui.select}
-              >
-                <option value="good">Good (60–62%)</option>
-                <option value="poor">Poor (54–55%)</option>
-              </select>
+              <span className="block mb-1">Growth potential (%)</span>
+              <input
+                type="number"
+                min="40"
+                max="80"
+                step="0.01"
+                required
+                value={growthPercent}
+                onChange={(event) => setGrowthPercent(event.target.value)}
+                className={ui.input}
+              />
             </label>
             <label className="text-[12px] font-medium text-ink">
               <span className="block mb-1">Offered price (৳)</span>
