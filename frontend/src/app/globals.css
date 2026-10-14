@@ -1,85 +1,187 @@
-@import url("https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-field: var(--field);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-hay: var(--hay);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-caution: var(--caution);
+  --color-caution-soft: var(--caution-soft);
+  --color-milk: var(--milk);
+  --color-milk-strong: var(--milk-strong);
+  --color-wash: var(--wash);
+  --color-nav: var(--nav);
+  --color-nav-ink: var(--nav-ink);
+  --color-nav-ink-hi: var(--nav-ink-hi);
+  --color-nav-line: var(--nav-line);
+  --color-overlay: var(--overlay);
+  --shadow-overlay: var(--shadow-overlay);
+  --font-sans: var(--font-hind), "Noto Sans Bengali", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 :root {
-  --bg: #eef2f6;
-  --card: #ffffff;
-  --line: #dbe2ea;
-  --text: #16212e;
-  --muted: #66758a;
-  --nav: #13202f;
-  --navtxt: #b7c4d4;
-  --accent: #2e8b3d;
-  --accent-soft: #e1f2e3;
-  --hay: #e9b824;
-  --warn: #c2432b;
-  --warn-soft: #fbe5df;
-  --field: #f6f8fb;
-  --milk: #dff0ff;
-  --milk2: #9fd0f5;
-  --bar: rgba(238, 242, 246, 0.9);
+  --canvas: #f3f5f7;
+  --surface: #ffffff;
+  --field: #ffffff;
+  --subtle: #fafbfc;
+  --line: #dfe4ea;
+  --line-strong: #8a96a3;
+  --ink: #16202a;
+  --muted: #556270;
+  --accent: #1e6f38;
+  --accent-hover: #175a2c;
+  --accent-soft: #e4f1e7;
   --on-accent: #ffffff;
-  --amber: #7a5a00;
-  --amber-soft: #fbf0c9;
+  --hay: #d9a21b;
+  --warn: #b42318;
+  --warn-soft: #fdecea;
+  --caution: #8a5700;
+  --caution-soft: #fbf0d0;
+  --milk: #e6f1fb;
+  --milk-strong: #5ea6e0;
+  --wash: rgba(15, 30, 45, 0.045);
+  --nav: #14201a;
+  --nav-ink: #a8b8ad;
+  --nav-ink-hi: #f2f6f3;
+  --nav-line: rgba(255, 255, 255, 0.09);
+  --overlay: rgba(10, 16, 20, 0.5);
+  --shadow-overlay: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.25);
   color-scheme: light;
-  font-family: "Hind Siliguri", "Noto Sans Bengali", "Segoe UI", sans-serif;
-  background: var(--bg);
-  color: var(--text);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #101214;
+    --surface: #171a1d;
+    --field: #1d2124;
+    --subtle: #1a1e21;
+    --line: #272c31;
+    --line-strong: #5f6a75;
+    --ink: #e4e7ea;
+    --muted: #9ba5af;
+    --accent: #79c88a;
+    --accent-hover: #93d6a2;
+    --accent-soft: rgba(121, 200, 138, 0.14);
+    --on-accent: #08170d;
+    --hay: #d6ae45;
+    --warn: #f19790;
+    --warn-soft: rgba(241, 151, 144, 0.13);
+    --caution: #e3c36e;
+    --caution-soft: rgba(227, 195, 110, 0.13);
+    --milk: rgba(94, 166, 224, 0.16);
+    --milk-strong: #6db1e8;
+    --wash: rgba(255, 255, 255, 0.05);
+    --nav: #0b0d0f;
+    --nav-ink: #98a3ad;
+    --nav-ink-hi: #eef1f3;
+    --nav-line: rgba(255, 255, 255, 0.08);
+    --overlay: rgba(0, 0, 0, 0.6);
+    --shadow-overlay: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
 }
 
 :root[data-theme="dark"] {
-  --bg: #121212;
-  --card: #1e1e1e;
-  --field: #262626;
-  --bar: #272727;
-  --nav: #2e2e2e;
-  --navtxt: rgba(255, 255, 255, 0.6);
-  --text: rgba(255, 255, 255, 0.87);
-  --muted: rgba(255, 255, 255, 0.6);
-  --line: rgba(255, 255, 255, 0.12);
-  --accent: #81c784;
-  --accent-soft: rgba(129, 199, 132, 0.16);
-  --warn: #cf6679;
-  --warn-soft: rgba(207, 102, 121, 0.16);
-  --milk: rgba(127, 181, 222, 0.22);
-  --milk2: #7fb5de;
-  --amber: #e0c070;
-  --amber-soft: rgba(224, 192, 112, 0.16);
+  --canvas: #101214;
+  --surface: #171a1d;
+  --field: #1d2124;
+  --subtle: #1a1e21;
+  --line: #272c31;
+  --line-strong: #5f6a75;
+  --ink: #e4e7ea;
+  --muted: #9ba5af;
+  --accent: #79c88a;
+  --accent-hover: #93d6a2;
+  --accent-soft: rgba(121, 200, 138, 0.14);
+  --on-accent: #08170d;
+  --hay: #d6ae45;
+  --warn: #f19790;
+  --warn-soft: rgba(241, 151, 144, 0.13);
+  --caution: #e3c36e;
+  --caution-soft: rgba(227, 195, 110, 0.13);
+  --milk: rgba(94, 166, 224, 0.16);
+  --milk-strong: #6db1e8;
+  --wash: rgba(255, 255, 255, 0.05);
+  --nav: #0b0d0f;
+  --nav-ink: #98a3ad;
+  --nav-ink-hi: #eef1f3;
+  --nav-line: rgba(255, 255, 255, 0.08);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-overlay: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }
 
-* {
-  box-sizing: border-box;
-}
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
 
-html {
-  scroll-behavior: smooth;
-}
+  html {
+    scroll-behavior: smooth;
+  }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Hind Siliguri", "Noto Sans Bengali", "Segoe UI", sans-serif;
-  font-variant-numeric: tabular-nums;
-}
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
 
-button {
-  cursor: pointer;
-}
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
 
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(46, 139, 61, 0.18);
+  button:focus-visible,
+  a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Hide number-input spinners */
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
