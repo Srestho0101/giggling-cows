@@ -1,10 +1,17 @@
-export function ModulePage({ title, subtitle, children }: { title: string; subtitle: React.ReactNode; children: React.ReactNode }) {
+import React from "react";
+
+export function ModulePage({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="mx-auto max-w-[1240px] px-[16px] py-[12px]">
-      <div className="mb-[10px]">
-        <h1 className="text-[17px] font-bold text-[var(--text)]">{title}</h1>
-        <p className="mt-0.5 text-[11px] text-[var(--muted)]">{subtitle}</p>
-      </div>
+    <section aria-label={title} className="mx-auto max-w-[1280px] px-4 py-4 sm:px-6 sm:py-5">
+      {subtitle && <p className="mb-4 text-[13px] text-muted">{subtitle}</p>}
       {children}
     </section>
   );
