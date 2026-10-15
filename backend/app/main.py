@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -7,6 +8,8 @@ from sqlalchemy import text
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import engine, Base
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -40,6 +43,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled error processing %s: %s", request.url.path, exc)
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin and (origin in settings.BACKEND_CORS_ORIGINS or "*" in settings.BACKEND_CORS_ORIGINS):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Access-Control-Allow-Methods"] = "*"
+        headers["Access-Control-Allow-Headers"] = "*"
+        headers["Vary"] = "Origin"
+
+    detail = str(exc) if settings.DEBUG else "An unexpected database or server error occurred."
+    return JSONResponse(
+        status_code=500,
+        content={"detail": detail},
+        headers=headers,
+    )
+
 
 # Mount API v1
 app.include_router(api_router, prefix=settings.API_V1_STR)

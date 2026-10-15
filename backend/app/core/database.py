@@ -7,12 +7,24 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.core.config import settings
 
+engine_kwargs = {
+    "echo": False,
+    "future": True,
+    "pool_pre_ping": True,
+    "connect_args": settings.database_connect_args,
+}
+
+if not settings.DATABASE_URL.startswith("sqlite"):
+    engine_kwargs.update({
+        "pool_size": 3,
+        "max_overflow": 2,
+        "pool_timeout": 10,
+        "pool_recycle": 280,
+    })
+
 engine = create_async_engine(
     settings.async_database_url,
-    echo=settings.DEBUG,
-    future=True,
-    connect_args=settings.database_connect_args,
-    pool_pre_ping=True,
+    **engine_kwargs,
 )
 
 async_session_maker = async_sessionmaker(
@@ -59,7 +71,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
         try:
             yield session
-            await session.commit()
+            # Writes commit inside endpoints. Only flush a leftover transaction
+            # so pure reads do not pay an extra COMMIT round-trip.
+            if session.is_active and (session.new or session.dirty or session.deleted):
+                await session.commit()
         except Exception:
             await session.rollback()
             raise

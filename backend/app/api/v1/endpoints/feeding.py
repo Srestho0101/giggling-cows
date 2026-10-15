@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_db
 from app.core.security import AuthUser, UserRole, get_current_user, require_roles
@@ -66,10 +66,10 @@ async def list_feed_types(
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
-    stmt = select(FeedType).options(selectinload(FeedType.category))
+    stmt = select(FeedType).options(joinedload(FeedType.category))
     if not include_archived:
         stmt = stmt.where(FeedType.is_archived == False)
-    feed_types = (await db.execute(stmt)).scalars().all()
+    feed_types = (await db.execute(stmt)).scalars().unique().all()
     res = []
     for ft in feed_types:
         r = FeedTypeRead.model_validate(ft)

@@ -96,9 +96,8 @@ export function DataWorkbench({
       const nextRows = Array.isArray(data) ? (data as RecordRow[]) : [];
       return nextRows;
     },
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    retry: 1,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const rows = useMemo(() => rowsQuery.data ?? [], [rowsQuery.data]);

@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_db
 from app.core.security import AuthUser, UserRole, get_current_user, require_roles
@@ -38,20 +38,22 @@ async def list_warehouses(
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
-    stmt = select(Warehouse)
+    occ_sub = (
+        select(Cow.warehouse_id, func.count().label("occupancy"))
+        .where(Cow.status == "active", Cow.is_archived == False)
+        .group_by(Cow.warehouse_id)
+        .subquery()
+    )
+    stmt = (
+        select(Warehouse, func.coalesce(occ_sub.c.occupancy, 0).label("occupancy"))
+        .outerjoin(occ_sub, Warehouse.warehouse_id == occ_sub.c.warehouse_id)
+    )
     if not include_archived:
         stmt = stmt.where(Warehouse.is_archived == False)
-    warehouses = (await db.execute(stmt)).scalars().all()
+    rows = (await db.execute(stmt)).all()
 
-    # Calculate occupancy
     res = []
-    for w in warehouses:
-        occ_stmt = select(func.count()).select_from(Cow).where(
-            Cow.warehouse_id == w.warehouse_id,
-            Cow.status == "active",
-            Cow.is_archived == False,
-        )
-        occupancy = (await db.scalar(occ_stmt)) or 0
+    for w, occupancy in rows:
         w_read = WarehouseRead.model_validate(w)
         w_read.current_occupancy = occupancy
         res.append(w_read)
@@ -166,14 +168,21 @@ async def list_cows(
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
+    latest_weight = (
+        select(WeightRecord.weight_kg)
+        .where(WeightRecord.cow_id == Cow.cow_id)
+        .order_by(WeightRecord.weigh_date.desc(), WeightRecord.created_at.desc())
+        .limit(1)
+        .correlate(Cow)
+        .scalar_subquery()
+    )
     stmt = (
-        select(Cow)
+        select(Cow, latest_weight.label("latest_weight"))
         .options(
-            selectinload(Cow.warehouse),
-            selectinload(Cow.supplier),
-            selectinload(Cow.dam),
-            selectinload(Cow.sire),
-            selectinload(Cow.weight_records),
+            joinedload(Cow.warehouse),
+            joinedload(Cow.supplier),
+            joinedload(Cow.dam),
+            joinedload(Cow.sire),
         )
         .where(Cow.is_archived == False)
     )
@@ -190,18 +199,16 @@ async def list_cows(
         stmt = stmt.where(Cow.current_tag_number.ilike(f"%{search}%"))
 
     stmt = stmt.order_by(Cow.created_at.desc())
-    cows = (await db.execute(stmt)).scalars().all()
+    rows = (await db.execute(stmt)).unique().all()
 
     results = []
-    for c in cows:
+    for c, weight in rows:
         read_obj = CowRead.model_validate(c)
         read_obj.warehouse_name = c.warehouse.name if c.warehouse else None
         read_obj.supplier_name = c.supplier.name if c.supplier else None
         read_obj.dam_tag = c.dam.current_tag_number if c.dam else None
         read_obj.sire_tag = c.sire.current_tag_number if c.sire else None
-        if c.weight_records:
-            latest_w = max(c.weight_records, key=lambda w: w.weigh_date)
-            read_obj.latest_weight_kg = latest_w.weight_kg
+        read_obj.latest_weight_kg = weight
         results.append(read_obj)
 
     return results

@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_db
 from app.core.security import AuthUser, UserRole, get_current_user, require_roles
@@ -34,7 +34,7 @@ async def list_health_records(
 ):
     stmt = (
         select(HealthRecord)
-        .options(selectinload(HealthRecord.cow))
+        .options(joinedload(HealthRecord.cow))
         .order_by(HealthRecord.record_date.desc())
     )
     if cow_id:
@@ -46,7 +46,7 @@ async def list_health_records(
     if end_date:
         stmt = stmt.where(HealthRecord.record_date <= end_date)
 
-    records = (await db.execute(stmt)).scalars().all()
+    records = (await db.execute(stmt)).scalars().unique().all()
     res = []
     for r in records:
         res.append(
@@ -122,8 +122,8 @@ async def list_breeding_records(
     stmt = (
         select(BreedingRecord)
         .options(
-            selectinload(BreedingRecord.cow),
-            selectinload(BreedingRecord.sire),
+            joinedload(BreedingRecord.cow),
+            joinedload(BreedingRecord.sire),
         )
         .order_by(BreedingRecord.seed_date.desc())
     )
@@ -132,7 +132,7 @@ async def list_breeding_records(
     if outcome:
         stmt = stmt.where(BreedingRecord.outcome == outcome)
 
-    records = (await db.execute(stmt)).scalars().all()
+    records = (await db.execute(stmt)).scalars().unique().all()
     res = []
     for br in records:
         res.append(
@@ -231,7 +231,7 @@ async def list_pregnancy_reports(
 ):
     stmt = (
         select(PregnancyReport)
-        .options(selectinload(PregnancyReport.cow))
+        .options(joinedload(PregnancyReport.cow))
         .order_by(PregnancyReport.report_date.desc())
     )
     if cow_id:
@@ -239,7 +239,7 @@ async def list_pregnancy_reports(
     if status:
         stmt = stmt.where(PregnancyReport.status == status)
 
-    reports = (await db.execute(stmt)).scalars().all()
+    reports = (await db.execute(stmt)).scalars().unique().all()
     res = []
     for pr in reports:
         res.append(

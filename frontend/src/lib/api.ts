@@ -1,9 +1,11 @@
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://cow-farm-cakg.onrender.com").replace(/\/$/, "");
+// const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const API_PREFIX = "/api/v1";
 
 export type ApiRequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   accessToken?: string;
+  retryOnce?: boolean;
 };
 
 export class ApiError extends Error {
@@ -32,8 +34,10 @@ export function apiQuery(path: string, values: Record<string, string | number | 
   return suffix ? `${path}?${suffix}` : path;
 }
 
+const REQUEST_TIMEOUT_MS = 25_000;
+
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { accessToken, headers, body, ...requestOptions } = options;
+  const { accessToken, headers, body, signal, retryOnce, ...requestOptions } = options;
   const requestHeaders = new Headers(headers);
 
   if (body !== undefined && !requestHeaders.has("Content-Type")) {
@@ -41,20 +45,66 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   }
   if (accessToken) requestHeaders.set("Authorization", `Bearer ${accessToken}`);
 
-  const response = await fetch(apiUrl(path), {
-    ...requestOptions,
-    headers: requestHeaders,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const method = (requestOptions.method ?? "GET").toUpperCase();
+  const isIdempotent = ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method) || retryOnce === true;
+  const maxAttempts = isIdempotent ? 2 : 1;
+  let attempts = 0;
 
-  if (!response.ok) {
-    const payload = await response.json().catch(() => undefined);
-    const message = getErrorMessage(payload) ?? `API request failed (${response.status})`;
-    throw new ApiError(response.status, message, payload);
+  while (attempts < maxAttempts) {
+    attempts++;
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS);
+    const onAbort = () => timeout.abort();
+    signal?.addEventListener("abort", onAbort);
+
+    try {
+      const response = await fetch(apiUrl(path), {
+        ...requestOptions,
+        headers: requestHeaders,
+        signal: timeout.signal,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        if (attempts < maxAttempts && [502, 503, 504].includes(response.status)) {
+          await new Promise((res) => setTimeout(res, 1200));
+          continue;
+        }
+        const payload = await response.json().catch(() => undefined);
+        const message = getErrorMessage(payload) ?? `API request failed (${response.status})`;
+        throw new ApiError(response.status, message, payload);
+      }
+
+      if (response.status === 204) return undefined as T;
+      return (await response.json()) as T;
+    } catch (cause) {
+      if (cause instanceof ApiError) throw cause;
+
+      if (cause instanceof DOMException && cause.name === "AbortError") {
+        if (attempts < maxAttempts) {
+          await new Promise((res) => setTimeout(res, 1200));
+          continue;
+        }
+        throw new ApiError(0, "The API took too long to respond. The server may be waking up — please try again.", null);
+      }
+
+      if (attempts < maxAttempts) {
+        await new Promise((res) => setTimeout(res, 1200));
+        continue;
+      }
+
+      const msg = cause instanceof Error ? cause.message : "Network error";
+      const friendlyMsg = msg === "Failed to fetch"
+        ? "Network connection issue or API unreachable. The server may be waking up — please try again in a moment."
+        : msg;
+      throw new ApiError(0, friendlyMsg, null);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    }
   }
 
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  throw new ApiError(0, "Request failed after retry", null);
 }
 
 function getErrorMessage(payload: unknown): string | undefined {

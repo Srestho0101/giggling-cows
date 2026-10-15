@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Cow Farm Management System"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./cow_farm.db"
@@ -68,7 +68,12 @@ class Settings(BaseSettings):
         candidate = urlsplit(url)
         if candidate.scheme and candidate.hostname:
             params = dict(parse_qsl(candidate.query, keep_blank_values=True))
-            if candidate.hostname.endswith(".supabase.com") or candidate.port == 6543:
+            # Clean up parameters for asyncpg when connecting to Supabase poolers or direct hosts
+            if (
+                candidate.hostname.endswith(".supabase.com")
+                or candidate.hostname.endswith(".supabase.co")
+                or candidate.port in (5432, 6543)
+            ):
                 params.pop("pgbouncer", None)
                 params.pop("sslmode", None)
                 return urlunsplit((
@@ -86,11 +91,25 @@ class Settings(BaseSettings):
         if self.DATABASE_URL.startswith("sqlite"):
             return {"check_same_thread": False}
 
+        # asyncpg connect args:
+        # statement_cache_size=0 stops prepared statement collisions with connection poolers
+        args = {
+            "statement_cache_size": 0,
+            "prepared_statement_cache_size": 0,
+            "command_timeout": 15,
+            "timeout": 10,
+        }
         host = urlsplit(self.DATABASE_URL).hostname or ""
         port = urlsplit(self.DATABASE_URL).port
-        if host.endswith(".supabase.com") or port == 6543:
-            return {"ssl": "require"}
-        return {}
+        if (
+            host.endswith(".supabase.com")
+            or host.endswith(".supabase.co")
+            or port in (5432, 6543)
+            or "sslmode=require" in self.DATABASE_URL
+            or host not in ("localhost", "127.0.0.1", "")
+        ):
+            args["ssl"] = "require"
+        return args
 
 
 settings = Settings()
