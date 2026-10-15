@@ -63,9 +63,8 @@ export function AppShell({ children }: AppShellProps) {
   const { data: dashboard } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => apiRequest<DashboardData>(apiRoutes.reports.dashboard),
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    retry: 1,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const alertCount = dashboard?.alerts?.length ?? 0;

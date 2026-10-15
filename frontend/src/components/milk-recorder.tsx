@@ -89,8 +89,7 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
         apiQuery(apiRoutes.sales.milk, { start_date: date, end_date: date })
       ),
     enabled: isReady && Boolean(date),
-    staleTime: 30_000,
-    retry: 1,
+    staleTime: 60_000,
   });
 
   const dayRecords = useMemo(() => milkQuery.data ?? [], [milkQuery.data]);

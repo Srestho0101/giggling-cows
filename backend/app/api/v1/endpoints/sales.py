@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_db
 from app.core.security import AuthUser, UserRole, get_current_user, require_roles
@@ -40,29 +40,37 @@ async def list_customers(
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
-    stmt = select(Customer)
+    inv_sub = (
+        select(
+            SalesInvoice.customer_id,
+            func.coalesce(func.sum(SalesInvoice.total_amount), 0).label("total_inv"),
+            func.coalesce(func.sum(SalesInvoice.paid_amount), 0).label("total_paid"),
+        )
+        .where(SalesInvoice.status != "void")
+        .group_by(SalesInvoice.customer_id)
+        .subquery()
+    )
+    stmt = (
+        select(
+            Customer,
+            func.coalesce(inv_sub.c.total_inv, 0).label("total_inv"),
+            func.coalesce(inv_sub.c.total_paid, 0).label("total_paid"),
+        )
+        .outerjoin(inv_sub, Customer.customer_id == inv_sub.c.customer_id)
+    )
     if not include_archived:
         stmt = stmt.where(Customer.is_archived == False)
-    customers = (await db.execute(stmt)).scalars().all()
+    rows = (await db.execute(stmt)).all()
 
     res = []
-    for c in customers:
-        # Sum total invoiced and paid for active/completed invoices
-        inv_stmt = select(
-            func.coalesce(func.sum(SalesInvoice.total_amount), 0),
-            func.coalesce(func.sum(SalesInvoice.paid_amount), 0),
-        ).where(
-            SalesInvoice.customer_id == c.customer_id,
-            SalesInvoice.status != "void",
-        )
-        total_inv, total_paid = (await db.execute(inv_stmt)).first() or (0, 0)
-        total_inv = Decimal(str(total_inv))
-        total_paid = Decimal(str(total_paid))
-        balance = total_inv - total_paid
+    for c, total_inv, total_paid in rows:
+        total_inv_dec = Decimal(str(total_inv))
+        total_paid_dec = Decimal(str(total_paid))
+        balance = total_inv_dec - total_paid_dec
 
         r = CustomerRead.model_validate(c)
-        r.total_invoiced = total_inv
-        r.total_paid = total_paid
+        r.total_invoiced = total_inv_dec
+        r.total_paid = total_paid_dec
         r.current_balance = balance
         res.append(r)
     return res
@@ -267,7 +275,7 @@ async def list_sales_invoices(
     stmt = (
         select(SalesInvoice)
         .options(
-            selectinload(SalesInvoice.customer),
+            joinedload(SalesInvoice.customer),
             selectinload(SalesInvoice.lines).selectinload(SalesInvoiceLine.cow),
             selectinload(SalesInvoice.payments),
         )
@@ -282,7 +290,7 @@ async def list_sales_invoices(
     if end_date:
         stmt = stmt.where(SalesInvoice.invoice_date <= end_date)
 
-    invoices = (await db.execute(stmt)).scalars().all()
+    invoices = (await db.execute(stmt)).scalars().unique().all()
     return [format_invoice_read(inv) for inv in invoices]
 
 
@@ -295,13 +303,13 @@ async def get_sales_invoice(
     stmt = (
         select(SalesInvoice)
         .options(
-            selectinload(SalesInvoice.customer),
+            joinedload(SalesInvoice.customer),
             selectinload(SalesInvoice.lines).selectinload(SalesInvoiceLine.cow),
             selectinload(SalesInvoice.payments),
         )
         .where(SalesInvoice.invoice_id == invoice_id)
     )
-    invoice = (await db.execute(stmt)).scalar_one_or_none()
+    invoice = (await db.execute(stmt)).scalars().unique().first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return format_invoice_read(invoice)

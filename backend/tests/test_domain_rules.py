@@ -12,7 +12,8 @@ def test_supabase_pooler_url_configuration():
         DATABASE_URL="postgresql://postgres:secret@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
     )
 
-    assert settings.async_database_url.endswith("postgres?pgbouncer=true&sslmode=require")
+    assert "pgbouncer" not in settings.async_database_url
+    assert "sslmode" not in settings.async_database_url
     assert settings.database_connect_args["ssl"] == "require"
 
 
@@ -327,4 +328,45 @@ async def test_purchase_evaluation_to_cow_conversion(client: AsyncClient):
     assert cow_res["current_tag_number"] == "BOUGHT-EVAL-01"
     assert cow_res["status"] == "active"
     assert Decimal(cow_res["purchase_price"]) == Decimal("160000.00")
+
+
+@pytest.mark.asyncio
+async def test_dashboard_and_reports_flow(client: AsyncClient):
+    auth_headers = {"Authorization": "Bearer dev-user:admin"}
+
+    # 1. Dashboard on empty/fresh database returns valid structured response
+    dash_resp = await client.get("/api/v1/reports/dashboard", headers=auth_headers)
+    assert dash_resp.status_code == 200
+    dash = dash_resp.json()
+    assert "total_cows" in dash
+    assert "milk_today_liters" in dash
+    assert "month_total_expenses" in dash
+    assert "alerts" in dash
+
+    # 2. Profitability report returns valid structured response
+    today_str = str(date.today())
+    prof_resp = await client.get(
+        f"/api/v1/reports/profitability?start_date={today_str}&end_date={today_str}",
+        headers=auth_headers,
+    )
+    assert prof_resp.status_code == 200
+    prof = prof_resp.json()
+    assert "total_invoiced_revenue" in prof
+    assert "total_costs" in prof
+    assert "accrual_net_profit" in prof
+    assert "cash_net_margin" in prof
+
+
+@pytest.mark.asyncio
+async def test_error_handler_cors_and_json(client: AsyncClient):
+    # Test unhandled server error returning JSON and CORS headers
+    resp = await client.get(
+        "/api/v1/herd/cows/not-a-valid-uuid",
+        headers={"Origin": "https://giggling-cows.vercel.app"},
+    )
+    # Validation errors return 422 JSON with CORS headers
+    assert resp.status_code == 422
+    assert "application/json" in resp.headers.get("content-type", "")
+    assert resp.headers.get("access-control-allow-origin") == "https://giggling-cows.vercel.app"
+
 

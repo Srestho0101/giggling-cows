@@ -62,9 +62,8 @@ export function TodayWorkspace() {
   const dashboardQuery = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => apiRequest<Dashboard>(apiRoutes.reports.dashboard),
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    retry: 1,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const milkDayQuery = useQuery({

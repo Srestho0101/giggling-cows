@@ -1,7 +1,8 @@
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import List
 import uuid
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.health import BreedingRecord, HealthRecord, PregnancyReport
@@ -19,119 +20,115 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
     month_ago = today - timedelta(days=30)
     month_start = today.replace(day=1)
 
-    # 1. Cow stats
-    cows_stmt = select(Cow)
-    all_cows = (await session.execute(cows_stmt)).scalars().all()
-
-    total_cows = len(all_cows)
-    active_cows = sum(1 for c in all_cows if c.status == "active")
-    sold_cows = sum(1 for c in all_cows if c.status == "sold")
-    deceased_cows = sum(1 for c in all_cows if c.status == "deceased")
-
-    cows_by_category = {}
-    for c in all_cows:
-        if c.status == "active":
-            cows_by_category[c.category] = cows_by_category.get(c.category, 0) + 1
-
-    # Warehouse occupancy
-    warehouses = (await session.execute(select(Warehouse))).scalars().all()
-    warehouse_map = {w.warehouse_id: w.name for w in warehouses}
-    cows_by_warehouse = {}
-    for c in all_cows:
-        if c.status == "active" and c.warehouse_id in warehouse_map:
-            w_name = warehouse_map[c.warehouse_id]
-            cows_by_warehouse[w_name] = cows_by_warehouse.get(w_name, 0) + 1
-
-    # 2. Milk stats
-    milk_today_stmt = select(func.coalesce(func.sum(MilkProduction.liters), 0)).where(
-        MilkProduction.production_date == today
-    )
-    milk_today = Decimal(str(await session.scalar(milk_today_stmt) or 0))
-
-    milk_week_stmt = select(func.coalesce(func.sum(MilkProduction.liters), 0)).where(
-        MilkProduction.production_date >= week_ago
-    )
-    milk_week = Decimal(str(await session.scalar(milk_week_stmt) or 0))
-
-    milk_month_stmt = select(func.coalesce(func.sum(MilkProduction.liters), 0)).where(
-        MilkProduction.production_date >= month_start
-    )
-    milk_month = Decimal(str(await session.scalar(milk_month_stmt) or 0))
-
-    # 3. Monthly Financials
-    # Invoiced revenue this month
-    inv_stmt = select(func.coalesce(func.sum(SalesInvoice.total_amount), 0)).where(
-        SalesInvoice.invoice_date >= month_start,
-        SalesInvoice.status.in_(["issued", "partially_paid", "paid"]),
-    )
-    month_inv = Decimal(str(await session.scalar(inv_stmt) or 0))
-
-    # Cash collected this month
-    cash_stmt = select(func.coalesce(func.sum(SalePayment.amount), 0)).where(
-        SalePayment.payment_date >= month_start
-    )
-    month_cash = Decimal(str(await session.scalar(cash_stmt) or 0))
-
-    # Total unpaid receivables
-    all_unpaid_stmt = select(
-        func.coalesce(func.sum(SalesInvoice.total_amount - SalesInvoice.paid_amount), 0)
-    ).where(SalesInvoice.status.in_(["issued", "partially_paid"]))
-    total_receivables = Decimal(str(await session.scalar(all_unpaid_stmt) or 0))
-
-    # Monthly Expenses (Feed + Expenses + Health/Breeding + Salaries + Mill)
-    feed_exp = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(FeedingRecord.cost), 0)).where(
-                    FeedingRecord.feeding_date >= month_start
-                )
-            )
-            or 0
+    # 1. Consolidated scalar metrics in a single round-trip query
+    scalars_stmt = select(
+        # Cow stats
+        select(func.count(Cow.cow_id))
+        .where(Cow.is_archived == False)
+        .scalar_subquery()
+        .label("total_cows"),
+        select(func.count(Cow.cow_id))
+        .where(Cow.is_archived == False, Cow.status == "active")
+        .scalar_subquery()
+        .label("active_cows"),
+        select(func.count(Cow.cow_id))
+        .where(Cow.is_archived == False, Cow.status == "sold")
+        .scalar_subquery()
+        .label("sold_cows"),
+        select(func.count(Cow.cow_id))
+        .where(Cow.is_archived == False, Cow.status == "deceased")
+        .scalar_subquery()
+        .label("deceased_cows"),
+        # Milk stats
+        select(func.coalesce(func.sum(MilkProduction.liters), 0))
+        .where(MilkProduction.production_date == today)
+        .scalar_subquery()
+        .label("milk_today"),
+        select(func.coalesce(func.sum(MilkProduction.liters), 0))
+        .where(MilkProduction.production_date >= week_ago)
+        .scalar_subquery()
+        .label("milk_week"),
+        select(func.coalesce(func.sum(MilkProduction.liters), 0))
+        .where(MilkProduction.production_date >= month_start)
+        .scalar_subquery()
+        .label("milk_month"),
+        # Monthly Financials
+        select(func.coalesce(func.sum(SalesInvoice.total_amount), 0))
+        .where(
+            SalesInvoice.invoice_date >= month_start,
+            SalesInvoice.status.in_(["issued", "partially_paid", "paid"]),
         )
-    )
-    gen_exp = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(Expense.amount), 0)).where(
-                    Expense.expense_date >= month_start
-                )
+        .scalar_subquery()
+        .label("month_inv"),
+        select(func.coalesce(func.sum(SalePayment.amount), 0))
+        .where(SalePayment.payment_date >= month_start)
+        .scalar_subquery()
+        .label("month_cash"),
+        select(
+            func.coalesce(
+                func.sum(SalesInvoice.total_amount - SalesInvoice.paid_amount), 0
             )
-            or 0
         )
+        .where(SalesInvoice.status.in_(["issued", "partially_paid"]))
+        .scalar_subquery()
+        .label("total_receivables"),
+        # Monthly Expenses
+        select(func.coalesce(func.sum(FeedingRecord.cost), 0))
+        .where(FeedingRecord.feeding_date >= month_start)
+        .scalar_subquery()
+        .label("feed_exp"),
+        select(func.coalesce(func.sum(Expense.amount), 0))
+        .where(Expense.expense_date >= month_start)
+        .scalar_subquery()
+        .label("gen_exp"),
+        select(func.coalesce(func.sum(HealthRecord.cost), 0))
+        .where(HealthRecord.record_date >= month_start)
+        .scalar_subquery()
+        .label("health_exp"),
+        select(func.coalesce(func.sum(SalaryPayment.net_paid), 0))
+        .where(SalaryPayment.paid_date >= month_start)
+        .scalar_subquery()
+        .label("salary_exp"),
+        select(func.coalesce(func.sum(MillCharge.amount), 0))
+        .where(MillCharge.charge_date >= month_start)
+        .scalar_subquery()
+        .label("mill_exp"),
     )
-    health_exp = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(HealthRecord.cost), 0)).where(
-                    HealthRecord.record_date >= month_start
-                )
-            )
-            or 0
-        )
-    )
-    salary_exp = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(SalaryPayment.net_paid), 0)).where(
-                    SalaryPayment.paid_date >= month_start
-                )
-            )
-            or 0
-        )
-    )
-    mill_exp = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(MillCharge.amount), 0)).where(
-                    MillCharge.charge_date >= month_start
-                )
-            )
-            or 0
-        )
-    )
+    scalars = (await session.execute(scalars_stmt)).first()
+
+    total_cows = scalars.total_cows or 0
+    active_cows = scalars.active_cows or 0
+    sold_cows = scalars.sold_cows or 0
+    deceased_cows = scalars.deceased_cows or 0
+    milk_today = Decimal(str(scalars.milk_today or 0))
+    milk_week = Decimal(str(scalars.milk_week or 0))
+    milk_month = Decimal(str(scalars.milk_month or 0))
+    month_inv = Decimal(str(scalars.month_inv or 0))
+    month_cash = Decimal(str(scalars.month_cash or 0))
+    total_receivables = Decimal(str(scalars.total_receivables or 0))
+    feed_exp = Decimal(str(scalars.feed_exp or 0))
+    gen_exp = Decimal(str(scalars.gen_exp or 0))
+    health_exp = Decimal(str(scalars.health_exp or 0))
+    salary_exp = Decimal(str(scalars.salary_exp or 0))
+    mill_exp = Decimal(str(scalars.mill_exp or 0))
     month_expenses = feed_exp + gen_exp + health_exp + salary_exp + mill_exp
 
-    # 4. Action Alerts
+    # 2. Active cow breakdown by category and warehouse in a single query
+    active_cows_stmt = (
+        select(Cow.category, Warehouse.name)
+        .outerjoin(Warehouse, Cow.warehouse_id == Warehouse.warehouse_id)
+        .where(Cow.is_archived == False, Cow.status == "active")
+    )
+    active_rows = (await session.execute(active_cows_stmt)).all()
+    cows_by_category = {}
+    cows_by_warehouse = {}
+    for cat, wh_name in active_rows:
+        if cat:
+            cows_by_category[cat] = cows_by_category.get(cat, 0) + 1
+        if wh_name:
+            cows_by_warehouse[wh_name] = cows_by_warehouse.get(wh_name, 0) + 1
+
+    # 3. Action Alerts
     alerts: List[DashboardAlertItem] = []
 
     # Health items due or overdue within next 7 days
@@ -226,112 +223,79 @@ async def get_profitability_report(
     other_rev = Decimal(str(line_results.get("other", 0)))
     total_invoiced = milk_rev + cow_rev + other_rev
 
-    # Cash collected in date range
-    cash_collected = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(SalePayment.amount), 0)).where(
-                    SalePayment.payment_date >= start_date,
-                    SalePayment.payment_date <= end_date,
-                )
-            )
-            or 0
+    # 2. All costs and cash collected in date range in a single scalar subquery round trip
+    costs_stmt = select(
+        select(func.coalesce(func.sum(SalePayment.amount), 0))
+        .where(
+            SalePayment.payment_date >= start_date,
+            SalePayment.payment_date <= end_date,
         )
+        .scalar_subquery()
+        .label("cash_collected"),
+        select(func.coalesce(func.sum(Cow.purchase_price), 0))
+        .where(
+            Cow.acquisition_date >= start_date,
+            Cow.acquisition_date <= end_date,
+        )
+        .scalar_subquery()
+        .label("cow_acq"),
+        select(func.coalesce(func.sum(FeedingRecord.cost), 0))
+        .where(
+            FeedingRecord.feeding_date >= start_date,
+            FeedingRecord.feeding_date <= end_date,
+        )
+        .scalar_subquery()
+        .label("feed_cost"),
+        select(func.coalesce(func.sum(Expense.amount), 0))
+        .where(
+            Expense.expense_date >= start_date,
+            Expense.expense_date <= end_date,
+        )
+        .scalar_subquery()
+        .label("gen_exp"),
+        select(func.coalesce(func.sum(HealthRecord.cost), 0))
+        .where(
+            HealthRecord.record_date >= start_date,
+            HealthRecord.record_date <= end_date,
+        )
+        .scalar_subquery()
+        .label("health_cost"),
+        select(func.coalesce(func.sum(BreedingRecord.cost), 0))
+        .where(
+            BreedingRecord.seed_date >= start_date,
+            BreedingRecord.seed_date <= end_date,
+        )
+        .scalar_subquery()
+        .label("breeding_cost"),
+        select(func.coalesce(func.sum(SalaryPayment.net_paid), 0))
+        .where(
+            SalaryPayment.paid_date >= start_date,
+            SalaryPayment.paid_date <= end_date,
+            SalaryPayment.status == "paid",
+        )
+        .scalar_subquery()
+        .label("salary_paid"),
+        select(func.coalesce(func.sum(MillCharge.amount), 0))
+        .where(
+            MillCharge.charge_date >= start_date,
+            MillCharge.charge_date <= end_date,
+        )
+        .scalar_subquery()
+        .label("mill_cost"),
     )
-    uncollected = max(Decimal("0.00"), total_invoiced - cash_collected)
+    costs_row = (await session.execute(costs_stmt)).first()
 
-    # 2. Costs in date range
-    # Cow acquisition cost
-    cow_acq = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(Cow.purchase_price), 0)).where(
-                    Cow.acquisition_date >= start_date,
-                    Cow.acquisition_date <= end_date,
-                )
-            )
-            or 0
-        )
-    )
-
-    # Feed consumption cost
-    feed_cost = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(FeedingRecord.cost), 0)).where(
-                    FeedingRecord.feeding_date >= start_date,
-                    FeedingRecord.feeding_date <= end_date,
-                )
-            )
-            or 0
-        )
-    )
-
-    # General expenses
-    gen_exp = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(Expense.amount), 0)).where(
-                    Expense.expense_date >= start_date,
-                    Expense.expense_date <= end_date,
-                )
-            )
-            or 0
-        )
-    )
-
-    # Health & Breeding costs
-    health_cost = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(HealthRecord.cost), 0)).where(
-                    HealthRecord.record_date >= start_date,
-                    HealthRecord.record_date <= end_date,
-                )
-            )
-            or 0
-        )
-    )
-    breeding_cost = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(BreedingRecord.cost), 0)).where(
-                    BreedingRecord.seed_date >= start_date,
-                    BreedingRecord.seed_date <= end_date,
-                )
-            )
-            or 0
-        )
-    )
+    cash_collected = Decimal(str(costs_row.cash_collected or 0))
+    cow_acq = Decimal(str(costs_row.cow_acq or 0))
+    feed_cost = Decimal(str(costs_row.feed_cost or 0))
+    gen_exp = Decimal(str(costs_row.gen_exp or 0))
+    health_cost = Decimal(str(costs_row.health_cost or 0))
+    breeding_cost = Decimal(str(costs_row.breeding_cost or 0))
     health_and_breeding = health_cost + breeding_cost
+    salary_paid = Decimal(str(costs_row.salary_paid or 0))
+    mill_cost = Decimal(str(costs_row.mill_cost or 0))
 
-    # Labor salary payments
-    salary_paid = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(SalaryPayment.net_paid), 0)).where(
-                    SalaryPayment.paid_date >= start_date,
-                    SalaryPayment.paid_date <= end_date,
-                    SalaryPayment.status == "paid",
-                )
-            )
-            or 0
-        )
-    )
-
-    # Mill charges
-    mill_cost = Decimal(
-        str(
-            await session.scalar(
-                select(func.coalesce(func.sum(MillCharge.amount), 0)).where(
-                    MillCharge.charge_date >= start_date,
-                    MillCharge.charge_date <= end_date,
-                )
-            )
-            or 0
-        )
-    )
-
+    uncollected = max(Decimal("0.00"), total_invoiced - cash_collected)
     total_costs = (
         cow_acq + feed_cost + gen_exp + health_and_breeding + salary_paid + mill_cost
     )
