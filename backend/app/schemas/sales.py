@@ -11,7 +11,7 @@ from app.schemas.common import AuditBase
 class MilkProductionBase(BaseModel):
     cow_id: uuid.UUID
     production_date: date
-    session: str = Field(..., pattern="^(morning|evening)$")
+    session: str = Field(..., pattern="^(morning|noon|evening)$")
     liters: Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
 
 

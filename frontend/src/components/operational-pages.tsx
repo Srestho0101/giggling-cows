@@ -148,7 +148,35 @@ export function PurchasesWorkspace() {
   const [growthPercent, setGrowthPercent] = useState("61");
   const [offered, setOffered] = useState("");
   const [market, setMarket] = useState("");
-  const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
+  const preview = useMemo(() => {
+    const liveWeightKg = Number(liveWeight);
+    const growthPotentialPercent = Number(growthPercent);
+    const cowPrice = Number(offered);
+    const marketPricePerKg = Number(market);
+
+    if (
+      !Number.isFinite(liveWeightKg) || liveWeightKg <= 0 ||
+      !Number.isFinite(growthPotentialPercent) || growthPotentialPercent < 40 || growthPotentialPercent > 80 ||
+      !Number.isFinite(cowPrice) || cowPrice <= 0 ||
+      !Number.isFinite(marketPricePerKg) || marketPricePerKg <= 0
+    ) {
+      return null;
+    }
+
+    const roundMoneyOrWeight = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+    const est_net_weight_kg = roundMoneyOrWeight(liveWeightKg * growthPotentialPercent / 100);
+    const net_price_per_kg = roundMoneyOrWeight(cowPrice / est_net_weight_kg);
+    const price_difference_per_kg = roundMoneyOrWeight(marketPricePerKg - net_price_per_kg);
+
+    return {
+      est_net_weight_kg,
+      net_price_per_kg,
+      market_price_per_kg: marketPricePerKg,
+      price_difference_per_kg,
+      total_projected_margin: roundMoneyOrWeight(price_difference_per_kg * est_net_weight_kg),
+      is_profitable: net_price_per_kg < marketPricePerKg,
+    };
+  }, [liveWeight, growthPercent, offered, market]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
@@ -175,25 +203,6 @@ export function PurchasesWorkspace() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [convertRow]);
 
-  async function calculate() {
-    setError("");
-    try {
-      const result = await apiRequest<Record<string, unknown>>(apiRoutes.evaluations.preview, {
-        method: "POST",
-        body: {
-          live_weight_kg: Number(liveWeight),
-          growth_potential: "good",
-          custom_net_weight_percent: Number(growthPercent),
-          offered_price: Number(offered),
-          market_price_per_kg: Number(market),
-        },
-      });
-      setPreview(result);
-    } catch (cause) {
-      setError(messageFor(cause));
-    }
-  }
-
   async function saveEvaluation(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -217,7 +226,6 @@ export function PurchasesWorkspace() {
         },
       });
       setNotice("Evaluation saved.");
-      setPreview(null);
       form.reset();
       setRevision((value) => value + 1);
     } catch (cause) {
@@ -276,7 +284,7 @@ export function PurchasesWorkspace() {
           <div>
             <h2 className="text-[15px] font-semibold text-ink">Evaluate an animal</h2>
             <p className="mt-0.5 text-[12px] text-muted">
-              The backend calculates expected net weight and profitability.
+              Enter the measured live weight and compare the estimated meat price with the market rate.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -327,7 +335,7 @@ export function PurchasesWorkspace() {
               />
             </label>
             <label className="text-[12px] font-medium text-ink">
-              <span className="block mb-1">Offered price (৳)</span>
+              <span className="block mb-1">Cow price (৳)</span>
               <input
                 type="number"
                 min="0"
@@ -367,13 +375,6 @@ export function PurchasesWorkspace() {
             </label>
           </div>
           <div className="flex flex-wrap gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => void calculate()}
-              className={btn("secondary", "md")}
-            >
-              Calculate preview
-            </button>
             <button disabled={saving} className={btn("primary", "md")}>
               {saving ? "Saving…" : "Save evaluation"}
             </button>
@@ -385,13 +386,23 @@ export function PurchasesWorkspace() {
           <div>
             <h2 className="text-[15px] font-semibold text-ink">Calculation preview</h2>
             <p className="mt-0.5 text-[12px] text-muted">
-              Estimated margins based on live weight and carcass yields.
+              Updates as you change the weight or prices.
             </p>
             {preview ? (
               <div className="mt-4 space-y-2.5">
+                <div className="rounded-[6px] border border-line bg-subtle p-3 text-[12px] text-muted">
+                  <p>Net weight = live weight × growth potential</p>
+                  <p className="mt-1 font-medium text-ink tabular-nums">
+                    {Number(liveWeight).toFixed(2)} kg × {Number(growthPercent).toFixed(2)}% = {Number(preview.est_net_weight_kg).toFixed(2)} kg
+                  </p>
+                  <p className="mt-2">Meat price = cow price ÷ net weight</p>
+                  <p className="mt-1 font-medium text-ink tabular-nums">
+                    {money(offered)} ÷ {Number(preview.est_net_weight_kg).toFixed(2)} kg = {money(preview.net_price_per_kg)}/kg
+                  </p>
+                </div>
                 {[
-                  ["Estimated net weight", `${preview.est_net_weight_kg ?? "—"} kg`],
-                  ["Net price per kg", money(preview.net_price_per_kg)],
+                  ["Estimated net weight", `${Number(preview.est_net_weight_kg).toFixed(2)} kg`],
+                  ["Cow meat price", `${money(preview.net_price_per_kg)}/kg`],
                   ["Market price per kg", money(preview.market_price_per_kg)],
                   ["Projected margin", money(preview.total_projected_margin)],
                 ].map(([label, value]) => (
@@ -418,19 +429,21 @@ export function PurchasesWorkspace() {
                   />
                   <div>
                     <p className="text-[13px] font-semibold leading-tight">
-                      {preview.is_profitable ? "Profitable acquisition" : "Not profitable"}
+                      {preview.is_profitable ? "Meat price is below market" : Number(preview.price_difference_per_kg) === 0 ? "Meat price matches market" : "Meat price is above market"}
                     </p>
                     <p className="text-[12px] opacity-90">
                       {preview.is_profitable
-                        ? "Offered price is below estimated market value."
-                        : "Offered price exceeds projected market returns."}
+                        ? `${money(Math.abs(Number(preview.price_difference_per_kg)))} per kg below market.`
+                        : Number(preview.price_difference_per_kg) === 0
+                          ? "The estimated price per kg equals the market rate."
+                          : `${money(Math.abs(Number(preview.price_difference_per_kg)))} per kg above market.`}
                     </p>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="mt-8 rounded-[6px] border border-line bg-subtle p-6 text-center text-[13px] text-muted">
-                Enter weights and prices, then calculate to see the server estimate.
+                Enter a live weight, growth potential, cow price, and market rate to see the comparison.
               </div>
             )}
           </div>
@@ -939,6 +952,7 @@ export function MilkSalesWorkspace() {
               required: true,
               options: [
                 { value: "morning", label: "Morning" },
+                { value: "noon", label: "Noon" },
                 { value: "evening", label: "Evening" },
               ],
             },
