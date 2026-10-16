@@ -17,11 +17,11 @@ type MilkRecordItem = {
   cow_id: string;
   cow_tag_number?: string;
   production_date: string;
-  session: "morning" | "evening";
+  session: "morning" | "noon" | "evening";
   liters: number;
 };
 
-function defaultSessionInDhaka(): "morning" | "evening" {
+function defaultSessionInDhaka(): "morning" | "noon" | "evening" {
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: "Asia/Dhaka",
@@ -30,7 +30,9 @@ function defaultSessionInDhaka(): "morning" | "evening" {
     }).formatToParts(new Date());
     const hourPart = parts.find((p) => p.type === "hour");
     const hour = hourPart ? Number(hourPart.value) : 12;
-    return hour < 15 ? "morning" : "evening";
+    if (hour < 11) return "morning";
+    if (hour < 15) return "noon";
+    return "evening";
   } catch {
     return "morning";
   }
@@ -55,13 +57,13 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
   const [targetInput, setTargetInput] = useState<string>(targetPref);
 
   // Default session in Asia/Dhaka without hydration mismatch
-  const clientDefaultSession = useSyncExternalStore<"morning" | "evening">(
+  const clientDefaultSession = useSyncExternalStore<"morning" | "noon" | "evening">(
     subscribeNever,
     defaultSessionInDhaka,
     () => "morning"
   );
-  const [sessionOverride, setSessionOverride] = useState<"morning" | "evening" | null>(null);
-  const session: "morning" | "evening" = sessionOverride ?? clientDefaultSession;
+  const [sessionOverride, setSessionOverride] = useState<"morning" | "noon" | "evening" | null>(null);
+  const session: "morning" | "noon" | "evening" = sessionOverride ?? clientDefaultSession;
 
   // Fetch cows for tag validation and datalist
   const cowsQuery = useQuery({
@@ -280,13 +282,14 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
         </div>
 
         {/* Session selector */}
-        <Segmented<"morning" | "evening">
+        <Segmented<"morning" | "noon" | "evening">
           name="milk-session"
           size="sm"
           value={session}
           onChange={(s) => setSessionOverride(s)}
           options={[
             { value: "morning", label: "Morning" },
+            { value: "noon", label: "Noon" },
             { value: "evening", label: "Evening" },
           ]}
         />
@@ -498,7 +501,7 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                       </td>
                       <td className="px-3 py-2">
                         <Badge tone={r.session === "morning" ? "good" : "neutral"}>
-                          {r.session === "morning" ? "Morning" : "Evening"}
+                          {r.session === "morning" ? "Morning" : r.session === "noon" ? "Noon" : "Evening"}
                         </Badge>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-ink">

@@ -1,5 +1,5 @@
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://cow-farm-cakg.onrender.com").replace(/\/$/, "");
-// const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+// const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://cow-farm-cakg.onrender.com").replace(/\/$/, "");
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const API_PREFIX = "/api/v1";
 
 export type ApiRequestOptions = Omit<RequestInit, "body"> & {

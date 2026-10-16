@@ -18,7 +18,7 @@ class MilkProduction(Base, AuditMixin):
         Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="CASCADE"), nullable=False
     )
     production_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    session: Mapped[str] = mapped_column(String(20), nullable=False)  # 'morning' | 'evening'
+    session: Mapped[str] = mapped_column(String(20), nullable=False)  # 'morning' | 'noon' | 'evening'
     liters: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
 
     # Relationships

@@ -6495,7 +6495,7 @@
           },
           "session": {
             "type": "string",
-            "pattern": "^(morning|evening)$",
+            "pattern": "^(morning|noon|evening)$",
             "title": "Session"
           },
           "liters": {
@@ -6583,7 +6583,7 @@
           },
           "session": {
             "type": "string",
-            "pattern": "^(morning|evening)$",
+            "pattern": "^(morning|noon|evening)$",
             "title": "Session"
           },
           "liters": {
