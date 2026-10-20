@@ -26,6 +26,7 @@ from app.schemas.herd import (
     WarehouseUpdate,
     WeightRecordCreate,
     WeightRecordRead,
+    WeightRecordUpdate,
 )
 
 router = APIRouter()
@@ -35,6 +36,7 @@ router = APIRouter()
 @router.get("/warehouses", response_model=List[WarehouseRead])
 async def list_warehouses(
     include_archived: bool = False,
+    archived_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
@@ -48,7 +50,9 @@ async def list_warehouses(
         select(Warehouse, func.coalesce(occ_sub.c.occupancy, 0).label("occupancy"))
         .outerjoin(occ_sub, Warehouse.warehouse_id == occ_sub.c.warehouse_id)
     )
-    if not include_archived:
+    if archived_only:
+        stmt = stmt.where(Warehouse.is_archived == True)
+    elif not include_archived:
         stmt = stmt.where(Warehouse.is_archived == False)
     rows = (await db.execute(stmt)).all()
 
@@ -107,11 +111,14 @@ async def update_warehouse(
 @router.get("/suppliers", response_model=List[SupplierRead])
 async def list_suppliers(
     include_archived: bool = False,
+    archived_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
     stmt = select(Supplier)
-    if not include_archived:
+    if archived_only:
+        stmt = stmt.where(Supplier.is_archived == True)
+    elif not include_archived:
         stmt = stmt.where(Supplier.is_archived == False)
     suppliers = (await db.execute(stmt)).scalars().all()
     return suppliers
@@ -165,12 +172,14 @@ async def list_cows(
     category: Optional[str] = None,
     sex: Optional[str] = None,
     search: Optional[str] = None,
+    include_archived: bool = False,
+    archived_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
     latest_weight = (
         select(WeightRecord.weight_kg)
-        .where(WeightRecord.cow_id == Cow.cow_id)
+        .where(WeightRecord.cow_id == Cow.cow_id, WeightRecord.is_archived == False)
         .order_by(WeightRecord.weigh_date.desc(), WeightRecord.created_at.desc())
         .limit(1)
         .correlate(Cow)
@@ -184,8 +193,12 @@ async def list_cows(
             joinedload(Cow.dam),
             joinedload(Cow.sire),
         )
-        .where(Cow.is_archived == False)
     )
+
+    if archived_only:
+        stmt = stmt.where(Cow.is_archived == True)
+    elif not include_archived:
+        stmt = stmt.where(Cow.is_archived == False)
 
     if warehouse_id:
         stmt = stmt.where(Cow.warehouse_id == warehouse_id)
@@ -423,6 +436,14 @@ async def update_cow(
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(cow, field, val)
+
+    if cow.status == "archived" and data.is_archived is None:
+        cow.is_archived = True
+    elif data.is_archived is True and "status" not in update_dict:
+        cow.status = "archived"
+    elif data.is_archived is False and cow.status == "archived":
+        cow.status = "active"
+
     cow.updated_by = current_user.id
 
     await db.commit()
@@ -452,6 +473,28 @@ async def add_cow_weight_record(
     await db.commit()
     await db.refresh(weight_record)
     return weight_record
+
+
+@router.patch("/cows/{cow_id}/weight/{weight_id}", response_model=WeightRecordRead)
+async def update_cow_weight_record(
+    cow_id: uuid.UUID,
+    weight_id: uuid.UUID,
+    data: WeightRecordUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER, UserRole.DATA_ENTRY])),
+):
+    rec = await db.get(WeightRecord, weight_id)
+    if not rec or rec.cow_id != cow_id:
+        raise HTTPException(status_code=404, detail="Weight record not found")
+
+    update_dict = data.model_dump(exclude_unset=True)
+    for field, val in update_dict.items():
+        setattr(rec, field, val)
+    rec.updated_by = current_user.id
+
+    await db.commit()
+    await db.refresh(rec)
+    return rec
 
 
 # ---------------------- WAREHOUSE MOVEMENT ----------------------

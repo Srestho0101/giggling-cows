@@ -212,3 +212,38 @@ async def add_invoice_payment(
 
     await session.flush()
     return payment
+
+
+async def void_invoice_payment(
+    session: AsyncSession,
+    invoice_id: uuid.UUID,
+    payment_id: uuid.UUID,
+    void_reason: str,
+    user_id: Optional[uuid.UUID] = None,
+) -> SalePayment:
+    payment = await session.get(SalePayment, payment_id)
+    if not payment or payment.invoice_id != invoice_id:
+        raise HTTPException(status_code=404, detail="Payment not found for this invoice")
+
+    if payment.status == "void":
+        raise HTTPException(status_code=400, detail="Payment is already voided")
+
+    invoice = await session.get(SalesInvoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    payment.status = "void"
+    payment.void_reason = void_reason
+    payment.updated_by = user_id
+
+    invoice.paid_amount = max(Decimal("0.00"), invoice.paid_amount - payment.amount)
+    if invoice.paid_amount == Decimal("0.00"):
+        invoice.status = "issued"
+    elif invoice.paid_amount < invoice.total_amount:
+        invoice.status = "partially_paid"
+    else:
+        invoice.status = "paid"
+    invoice.updated_by = user_id
+
+    await session.flush()
+    return payment

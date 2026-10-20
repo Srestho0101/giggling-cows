@@ -88,9 +88,9 @@ class Cow(Base, AuditMixin):
     dam: Mapped[Optional["Cow"]] = relationship("Cow", remote_side=[cow_id], foreign_keys=[dam_id])
     sire: Mapped[Optional["Cow"]] = relationship("Cow", remote_side=[cow_id], foreign_keys=[sire_id])
     
-    id_history: Mapped[List["CowIDHistory"]] = relationship("CowIDHistory", back_populates="cow", cascade="all, delete-orphan")
-    warehouse_history: Mapped[List["CowWarehouseHistory"]] = relationship("CowWarehouseHistory", back_populates="cow", cascade="all, delete-orphan")
-    weight_records: Mapped[List["WeightRecord"]] = relationship("WeightRecord", back_populates="cow", cascade="all, delete-orphan")
+    id_history: Mapped[List["CowIDHistory"]] = relationship("CowIDHistory", back_populates="cow", cascade="save-update, merge")
+    warehouse_history: Mapped[List["CowWarehouseHistory"]] = relationship("CowWarehouseHistory", back_populates="cow", cascade="save-update, merge")
+    weight_records: Mapped[List["WeightRecord"]] = relationship("WeightRecord", back_populates="cow", cascade="save-update, merge")
 
 
 class CowIDHistory(Base, AuditMixin):
@@ -100,7 +100,7 @@ class CowIDHistory(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     cow_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=False
     )
     tag_number: Mapped[str] = mapped_column(String(50), nullable=False)
     tag_type: Mapped[str] = mapped_column(String(50), nullable=False, default="ear_tag")
@@ -119,7 +119,7 @@ class CowWarehouseHistory(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     cow_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=False
     )
     warehouse_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("warehouses.warehouse_id"), nullable=False
@@ -140,10 +140,11 @@ class WeightRecord(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     cow_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=False
     )
     weigh_date: Mapped[date] = mapped_column(Date, nullable=False)
     weight_kg: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     cow: Mapped["Cow"] = relationship("Cow", back_populates="weight_records")

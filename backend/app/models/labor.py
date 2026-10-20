@@ -23,10 +23,10 @@ class Worker(Base, AuditMixin):
 
     # Relationships
     attendances: Mapped[List["WorkerAttendance"]] = relationship(
-        "WorkerAttendance", back_populates="worker", cascade="all, delete-orphan"
+        "WorkerAttendance", back_populates="worker", cascade="save-update, merge"
     )
     salary_payments: Mapped[List["SalaryPayment"]] = relationship(
-        "SalaryPayment", back_populates="worker", cascade="all, delete-orphan"
+        "SalaryPayment", back_populates="worker", cascade="save-update, merge"
     )
 
 
@@ -37,11 +37,12 @@ class WorkerAttendance(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     worker_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("workers.worker_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("workers.worker_id", ondelete="RESTRICT"), nullable=False
     )
     attendance_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     is_present: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("worker_id", "attendance_date", name="unique_worker_daily_attendance"),
@@ -58,7 +59,7 @@ class SalaryPayment(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     worker_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("workers.worker_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("workers.worker_id", ondelete="RESTRICT"), nullable=False
     )
     pay_month: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     base_salary: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
@@ -67,6 +68,7 @@ class SalaryPayment(Base, AuditMixin):
     net_paid: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     paid_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="paid")  # 'paid' | 'pending' | 'cancelled'
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     worker: Mapped["Worker"] = relationship("Worker", back_populates="salary_payments")
@@ -85,3 +87,6 @@ class MillCharge(Base, AuditMixin):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     substitute_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_void: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -46,6 +46,12 @@ class BatchAttendanceCreate(BaseModel):
     records: List[AttendanceItem]
 
 
+class WorkerAttendanceUpdate(BaseModel):
+    is_present: Optional[bool] = None
+    note: Optional[str] = None
+    is_archived: Optional[bool] = None
+
+
 class WorkerAttendanceRead(AuditBase):
     attendance_id: uuid.UUID
     worker_id: uuid.UUID
@@ -53,6 +59,7 @@ class WorkerAttendanceRead(AuditBase):
     attendance_date: date
     is_present: bool
     note: Optional[str] = None
+    is_archived: bool = False
 
 
 # SALARY PAYMENT
@@ -70,10 +77,20 @@ class SalaryPaymentCreate(SalaryPaymentBase):
     pass
 
 
+class SalaryPaymentUpdate(BaseModel):
+    base_salary: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    absence_deduction: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    bonus: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    paid_date: Optional[date] = None
+    status: Optional[str] = Field(None, pattern="^(paid|pending|cancelled)$")
+    void_reason: Optional[str] = None
+
+
 class SalaryPaymentRead(SalaryPaymentBase, AuditBase):
     payment_id: uuid.UUID
     worker_name: Optional[str] = None
     net_paid: Decimal
+    void_reason: Optional[str] = None
 
 
 # MILL CHARGE
@@ -89,5 +106,19 @@ class MillChargeCreate(MillChargeBase):
     pass
 
 
+class MillChargeUpdate(BaseModel):
+    charge_date: Optional[date] = None
+    charge_type: Optional[str] = Field(None, pattern="^(worker_food|substitute_worker|other)$")
+    amount: Optional[Decimal] = Field(None, gt=0, max_digits=12, decimal_places=2)
+    substitute_name: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = None
+    is_archived: Optional[bool] = None
+    is_void: Optional[bool] = None
+    void_reason: Optional[str] = None
+
+
 class MillChargeRead(MillChargeBase, AuditBase):
     mill_charge_id: uuid.UUID
+    is_archived: bool = False
+    is_void: bool = False
+    void_reason: Optional[str] = None

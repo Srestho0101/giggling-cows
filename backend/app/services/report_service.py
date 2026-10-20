@@ -41,15 +41,27 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
         .label("deceased_cows"),
         # Milk stats
         select(func.coalesce(func.sum(MilkProduction.liters), 0))
-        .where(MilkProduction.production_date == today)
+        .where(
+            MilkProduction.production_date == today,
+            MilkProduction.is_archived == False,
+            MilkProduction.is_void == False,
+        )
         .scalar_subquery()
         .label("milk_today"),
         select(func.coalesce(func.sum(MilkProduction.liters), 0))
-        .where(MilkProduction.production_date >= week_ago)
+        .where(
+            MilkProduction.production_date >= week_ago,
+            MilkProduction.is_archived == False,
+            MilkProduction.is_void == False,
+        )
         .scalar_subquery()
         .label("milk_week"),
         select(func.coalesce(func.sum(MilkProduction.liters), 0))
-        .where(MilkProduction.production_date >= month_start)
+        .where(
+            MilkProduction.production_date >= month_start,
+            MilkProduction.is_archived == False,
+            MilkProduction.is_void == False,
+        )
         .scalar_subquery()
         .label("milk_month"),
         # Monthly Financials
@@ -61,7 +73,10 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
         .scalar_subquery()
         .label("month_inv"),
         select(func.coalesce(func.sum(SalePayment.amount), 0))
-        .where(SalePayment.payment_date >= month_start)
+        .where(
+            SalePayment.payment_date >= month_start,
+            SalePayment.status == "paid",
+        )
         .scalar_subquery()
         .label("month_cash"),
         select(
@@ -74,23 +89,40 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
         .label("total_receivables"),
         # Monthly Expenses
         select(func.coalesce(func.sum(FeedingRecord.cost), 0))
-        .where(FeedingRecord.feeding_date >= month_start)
+        .where(
+            FeedingRecord.feeding_date >= month_start,
+            FeedingRecord.is_archived == False,
+        )
         .scalar_subquery()
         .label("feed_exp"),
         select(func.coalesce(func.sum(Expense.amount), 0))
-        .where(Expense.expense_date >= month_start)
+        .where(
+            Expense.expense_date >= month_start,
+            Expense.is_archived == False,
+            Expense.is_void == False,
+        )
         .scalar_subquery()
         .label("gen_exp"),
         select(func.coalesce(func.sum(HealthRecord.cost), 0))
-        .where(HealthRecord.record_date >= month_start)
+        .where(
+            HealthRecord.record_date >= month_start,
+            HealthRecord.is_archived == False,
+        )
         .scalar_subquery()
         .label("health_exp"),
         select(func.coalesce(func.sum(SalaryPayment.net_paid), 0))
-        .where(SalaryPayment.paid_date >= month_start)
+        .where(
+            SalaryPayment.paid_date >= month_start,
+            SalaryPayment.status == "paid",
+        )
         .scalar_subquery()
         .label("salary_exp"),
         select(func.coalesce(func.sum(MillCharge.amount), 0))
-        .where(MillCharge.charge_date >= month_start)
+        .where(
+            MillCharge.charge_date >= month_start,
+            MillCharge.is_archived == False,
+            MillCharge.is_void == False,
+        )
         .scalar_subquery()
         .label("mill_exp"),
     )
@@ -138,7 +170,9 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
         .where(
             HealthRecord.next_due_date.is_not(None),
             HealthRecord.next_due_date <= today + timedelta(days=7),
+            HealthRecord.is_archived == False,
             Cow.status == "active",
+            Cow.is_archived == False,
         )
         .order_by(HealthRecord.next_due_date.asc())
         .limit(10)
@@ -165,7 +199,9 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
             PregnancyReport.status.in_(["confirmed", "suspected"]),
             PregnancyReport.expected_calving_date.is_not(None),
             PregnancyReport.expected_calving_date <= today + timedelta(days=14),
+            PregnancyReport.is_archived == False,
             Cow.status == "active",
+            Cow.is_archived == False,
         )
         .order_by(PregnancyReport.expected_calving_date.asc())
         .limit(10)
@@ -229,6 +265,7 @@ async def get_profitability_report(
         .where(
             SalePayment.payment_date >= start_date,
             SalePayment.payment_date <= end_date,
+            SalePayment.status == "paid",
         )
         .scalar_subquery()
         .label("cash_collected"),
@@ -236,6 +273,7 @@ async def get_profitability_report(
         .where(
             Cow.acquisition_date >= start_date,
             Cow.acquisition_date <= end_date,
+            Cow.is_archived == False,
         )
         .scalar_subquery()
         .label("cow_acq"),
@@ -243,6 +281,7 @@ async def get_profitability_report(
         .where(
             FeedingRecord.feeding_date >= start_date,
             FeedingRecord.feeding_date <= end_date,
+            FeedingRecord.is_archived == False,
         )
         .scalar_subquery()
         .label("feed_cost"),
@@ -250,6 +289,8 @@ async def get_profitability_report(
         .where(
             Expense.expense_date >= start_date,
             Expense.expense_date <= end_date,
+            Expense.is_archived == False,
+            Expense.is_void == False,
         )
         .scalar_subquery()
         .label("gen_exp"),
@@ -257,6 +298,7 @@ async def get_profitability_report(
         .where(
             HealthRecord.record_date >= start_date,
             HealthRecord.record_date <= end_date,
+            HealthRecord.is_archived == False,
         )
         .scalar_subquery()
         .label("health_cost"),
@@ -264,6 +306,7 @@ async def get_profitability_report(
         .where(
             BreedingRecord.seed_date >= start_date,
             BreedingRecord.seed_date <= end_date,
+            BreedingRecord.is_archived == False,
         )
         .scalar_subquery()
         .label("breeding_cost"),
@@ -279,6 +322,8 @@ async def get_profitability_report(
         .where(
             MillCharge.charge_date >= start_date,
             MillCharge.charge_date <= end_date,
+            MillCharge.is_archived == False,
+            MillCharge.is_void == False,
         )
         .scalar_subquery()
         .label("mill_cost"),

@@ -618,6 +618,15 @@ export function BreedingWorkspace() {
         title="Breeding records"
         description="Record heat, insemination, sire or semen details, and outcome."
         path={apiRoutes.health.breeding}
+        updatePath={(row) => apiRoutes.health.breedingRecord(String(row.breeding_id))}
+        deleteLabel="Archive"
+        onDelete={async (row) => {
+          if (!window.confirm("Archive this breeding record?")) return;
+          await apiRequest(apiRoutes.health.breedingRecord(String(row.breeding_id)), {
+            method: "PATCH",
+            body: { is_archived: true },
+          });
+        }}
         columns={[
           { key: "cow_tag_number", label: "Cow" },
           { key: "heat_date", label: "Heat date" },
@@ -626,6 +635,7 @@ export function BreedingWorkspace() {
           { key: "semen_code", label: "Semen code" },
           { key: "doctor_name", label: "Doctor" },
           { key: "outcome", label: "Outcome" },
+          { key: "is_archived", label: "Archived" },
         ]}
         fields={[
           {
@@ -663,6 +673,15 @@ export function BreedingWorkspace() {
               { value: "failed", label: "Failed" },
             ],
           },
+          {
+            name: "is_archived",
+            label: "Archived",
+            type: "select",
+            options: [
+              { value: "true", label: "Yes" },
+              { value: "false", label: "No" },
+            ],
+          },
           { name: "notes", label: "Notes", type: "textarea" },
         ]}
       />
@@ -670,6 +689,15 @@ export function BreedingWorkspace() {
         title="Pregnancy checks"
         description="Log pregnancy results and expected calving dates."
         path={apiRoutes.health.pregnancy}
+        updatePath={(row) => apiRoutes.health.pregnancyReport(String(row.pregnancy_id))}
+        deleteLabel="Archive"
+        onDelete={async (row) => {
+          if (!window.confirm("Archive this pregnancy report?")) return;
+          await apiRequest(apiRoutes.health.pregnancyReport(String(row.pregnancy_id)), {
+            method: "PATCH",
+            body: { is_archived: true },
+          });
+        }}
         columns={[
           { key: "cow_tag_number", label: "Cow" },
           { key: "report_date", label: "Check date" },
@@ -677,6 +705,7 @@ export function BreedingWorkspace() {
           { key: "expected_calving_date", label: "Expected calving" },
           { key: "actual_calving_date", label: "Actual calving" },
           { key: "notes", label: "Notes" },
+          { key: "is_archived", label: "Archived" },
         ]}
         fields={[
           {
@@ -703,6 +732,15 @@ export function BreedingWorkspace() {
           },
           { name: "expected_calving_date", label: "Expected calving", type: "date" },
           { name: "actual_calving_date", label: "Actual calving", type: "date" },
+          {
+            name: "is_archived",
+            label: "Archived",
+            type: "select",
+            options: [
+              { value: "true", label: "Yes" },
+              { value: "false", label: "No" },
+            ],
+          },
           { name: "notes", label: "Notes", type: "textarea" },
         ]}
       />
@@ -754,6 +792,15 @@ export function HealthWorkspace() {
         title="Health records"
         description="Vaccinations, deworming, treatment, and checkups."
         path={apiRoutes.health.records}
+        updatePath={(row) => apiRoutes.health.record(String(row.health_id))}
+        deleteLabel="Archive"
+        onDelete={async (row) => {
+          if (!window.confirm("Archive this health record?")) return;
+          await apiRequest(apiRoutes.health.record(String(row.health_id)), {
+            method: "PATCH",
+            body: { is_archived: true },
+          });
+        }}
         columns={[
           { key: "record_date", label: "Date" },
           { key: "cow_tag_number", label: "Cow" },
@@ -762,6 +809,7 @@ export function HealthWorkspace() {
           { key: "cost", label: "Cost ৳" },
           { key: "next_due_date", label: "Next due" },
           { key: "details", label: "Details" },
+          { key: "is_archived", label: "Archived" },
         ]}
         onRows={setRecords}
         fields={[
@@ -790,6 +838,15 @@ export function HealthWorkspace() {
           { name: "vet_name", label: "Vet" },
           { name: "cost", label: "Cost ৳", type: "number" },
           { name: "next_due_date", label: "Next due", type: "date" },
+          {
+            name: "is_archived",
+            label: "Archived",
+            type: "select",
+            options: [
+              { value: "true", label: "Yes" },
+              { value: "false", label: "No" },
+            ],
+          },
           { name: "details", label: "Details", type: "textarea" },
         ]}
       />
@@ -866,6 +923,16 @@ export function ExpensesWorkspace() {
         title="Expenses"
         description="Filter and record farm and animal expenses."
         path={apiRoutes.feeding.expenses}
+        updatePath={(row) => apiRoutes.feeding.expense(String(row.expense_id))}
+        deleteLabel="Void"
+        onDelete={async (row) => {
+          const reason = window.prompt("Reason for voiding this expense:", "Erroneous entry");
+          if (reason === null) return;
+          await apiRequest(apiRoutes.feeding.expense(String(row.expense_id)), {
+            method: "PATCH",
+            body: { is_void: true, void_reason: reason.trim() || "Voided by user" },
+          });
+        }}
         query={query}
         onRows={setExpenses}
         columns={[
@@ -903,6 +970,15 @@ export function ExpensesWorkspace() {
           },
           { name: "expense_date", label: "Date", type: "date", required: true },
           { name: "amount", label: "Amount ৳", type: "number", required: true },
+          {
+            name: "is_archived",
+            label: "Archived",
+            type: "select",
+            options: [
+              { value: "true", label: "Yes" },
+              { value: "false", label: "No" },
+            ],
+          },
           { name: "description", label: "Description", type: "textarea" },
         ]}
       />
@@ -1073,6 +1149,7 @@ export function PayrollWorkspace() {
           title="Workers"
           description="Add staff and keep their employment details current."
           path={apiRoutes.labor.workers}
+          updatePath={(row) => apiRoutes.labor.worker(String(row.worker_id))}
           columns={[
             { key: "name", label: "Name" },
             { key: "role", label: "Role" },
@@ -1108,6 +1185,7 @@ export function PayrollWorkspace() {
           description="Record a worker’s salary settlement for a month."
           addLabel="Add salary payment"
           path={apiRoutes.labor.salaries}
+          updatePath={(row) => apiRoutes.labor.salary(String(row.payment_id))}
           columns={[
             { key: "worker_name", label: "Worker" },
             { key: "pay_month", label: "Pay month" },
@@ -1151,6 +1229,16 @@ export function PayrollWorkspace() {
           description="Record one-day substitute costs and other mill charges."
           addLabel="Add charge"
           path={apiRoutes.labor.substitutes}
+          updatePath={(row) => apiRoutes.labor.substitute(String(row.mill_charge_id))}
+          deleteLabel="Void"
+          onDelete={async (row) => {
+            const reason = window.prompt("Reason for voiding this charge:", "Erroneous charge");
+            if (reason === null) return;
+            await apiRequest(apiRoutes.labor.substitute(String(row.mill_charge_id)), {
+              method: "PATCH",
+              body: { is_void: true, void_reason: reason.trim() || "Voided by user" },
+            });
+          }}
           columns={[
             { key: "charge_date", label: "Date" },
             { key: "charge_type", label: "Type" },

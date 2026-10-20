@@ -19,6 +19,7 @@ class ExpenseCategory(Base, AuditMixin):
     category_group: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # 'food' | 'miscellaneous'
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     feed_types: Mapped[List["FeedType"]] = relationship("FeedType", back_populates="category")
@@ -32,7 +33,7 @@ class FeedType(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     category_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("expense_categories.category_id"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("expense_categories.category_id", ondelete="RESTRICT"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     name_bn: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -52,15 +53,16 @@ class FeedingRecord(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     feed_type_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("feed_types.feed_type_id"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("feed_types.feed_type_id", ondelete="RESTRICT"), nullable=False
     )
     cow_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=True
     )
     feeding_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     quantity: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     feed_type: Mapped["FeedType"] = relationship("FeedType", back_populates="feeding_records")
@@ -74,17 +76,20 @@ class Expense(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     category_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("expense_categories.category_id"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("expense_categories.category_id", ondelete="RESTRICT"), nullable=False
     )
     warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("warehouses.warehouse_id"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("warehouses.warehouse_id", ondelete="RESTRICT"), nullable=True
     )
     cow_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=True
     )
     expense_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_void: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     category: Mapped["ExpenseCategory"] = relationship("ExpenseCategory", back_populates="expenses")

@@ -41,6 +41,7 @@ type DataWorkbenchProps = {
   rowActions?: (row: RecordRow) => React.ReactNode;
   updatePath?: (row: RecordRow) => string;
   deletePath?: (row: RecordRow) => string;
+  deleteLabel?: string;
   onDelete?: (row: RecordRow) => void | Promise<void>;
 };
 
@@ -63,6 +64,7 @@ export function DataWorkbench({
   rowActions,
   updatePath,
   deletePath,
+  deleteLabel,
   onDelete,
 }: DataWorkbenchProps) {
   const [values, setValues] = useState<Record<string, string>>({});
@@ -490,7 +492,7 @@ export function DataWorkbench({
                               onClick={() => void handleDelete(row)}
                               className="font-medium text-warn hover:underline cursor-pointer"
                             >
-                              Delete
+                              {deleteLabel ?? "Delete"}
                             </button>
                           )}
                         </div>

@@ -19,9 +19,22 @@ class MilkProductionCreate(MilkProductionBase):
     pass
 
 
+class MilkProductionUpdate(BaseModel):
+    cow_id: Optional[uuid.UUID] = None
+    production_date: Optional[date] = None
+    session: Optional[str] = Field(None, pattern="^(morning|noon|evening)$")
+    liters: Optional[Decimal] = Field(None, gt=0, max_digits=8, decimal_places=2)
+    is_archived: Optional[bool] = None
+    is_void: Optional[bool] = None
+    void_reason: Optional[str] = None
+
+
 class MilkProductionRead(MilkProductionBase, AuditBase):
     milk_id: uuid.UUID
     cow_tag_number: Optional[str] = None
+    is_archived: bool = False
+    is_void: bool = False
+    void_reason: Optional[str] = None
 
 
 # CUSTOMER
@@ -87,9 +100,15 @@ class SalePaymentCreate(SalePaymentBase):
     pass
 
 
+class SalePaymentVoid(BaseModel):
+    void_reason: str = Field(..., min_length=1, max_length=500)
+
+
 class SalePaymentRead(SalePaymentBase, AuditBase):
     payment_id: uuid.UUID
     invoice_id: uuid.UUID
+    status: str = "paid"
+    void_reason: Optional[str] = None
 
 
 # SALES INVOICE

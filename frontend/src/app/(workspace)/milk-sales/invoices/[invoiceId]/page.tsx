@@ -33,6 +33,19 @@ export default function InvoiceDetailPage() {
     finally { setSaving(false); }
   }
 
+  async function voidPayment(paymentId: string) {
+    const reason = window.prompt("Reason for voiding this payment:", "Erroneous payment entry");
+    if (reason === null) return;
+    setError(""); setNotice("");
+    try {
+      await apiRequest(apiRoutes.sales.voidPayment(invoiceId, paymentId), {
+        method: "PATCH",
+        body: { void_reason: reason.trim() || "Voided by user" },
+      });
+      await load(); setNotice("Payment voided and invoice balance adjusted.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not void payment."); }
+  }
+
   async function setStatus(status: "issued" | "void") {
     setError(""); setNotice("");
     try {
@@ -51,7 +64,51 @@ export default function InvoiceDetailPage() {
         <div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs text-stone-500"><tr><th className="py-2">Item</th><th className="py-2">Description</th><th className="py-2">Qty</th><th className="py-2">Unit price</th><th className="py-2">Line total</th></tr></thead><tbody className="divide-y divide-stone-100">{(invoice.lines ?? []).map((line) => <tr key={String(line.line_id)}><td className="py-3 capitalize">{String(line.item_type)}</td><td className="py-3">{String(line.description)}</td><td className="py-3">{String(line.quantity)}</td><td className="py-3">৳ {String(line.unit_price)}</td><td className="py-3">৳ {String(line.line_total)}</td></tr>)}</tbody></table></div>
       </section>
       <div className="grid gap-5 xl:grid-cols-[1fr_0.8fr]">
-        <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><h3 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold">Payment history</h3>{invoice.payments?.length ? <div className="divide-y divide-stone-100">{invoice.payments.map((payment) => <div key={String(payment.payment_id)} className="flex justify-between gap-3 px-4 py-3 text-sm"><span>{String(payment.payment_date)} · {String(payment.payment_method ?? "payment")}</span><strong>৳ {String(payment.amount)}</strong></div>)}</div> : <p className="p-6 text-sm text-stone-400">No payments recorded yet.</p>}</section>
+        <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+          <h3 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold">Payment history</h3>
+          {invoice.payments?.length ? (
+            <div className="divide-y divide-stone-100">
+              {invoice.payments.map((payment) => {
+                const isVoid = payment.status === "void";
+                return (
+                  <div key={String(payment.payment_id)} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={isVoid ? "line-through text-stone-400" : "text-stone-800"}>
+                          {String(payment.payment_date)} · {String(payment.payment_method ?? "payment")}
+                        </span>
+                        {isVoid && (
+                          <span className="rounded bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                            Voided{payment.void_reason ? `: ${String(payment.void_reason)}` : ""}
+                          </span>
+                        )}
+                      </div>
+                      {Boolean(payment.reference_number) && (
+                        <p className="text-xs text-stone-400">Ref: {String(payment.reference_number)}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <strong className={isVoid ? "line-through text-stone-400" : "text-stone-900"}>
+                        ৳ {String(payment.amount)}
+                      </strong>
+                      {!isVoid && invoice.status !== "void" && (
+                        <button
+                          type="button"
+                          onClick={() => void voidPayment(String(payment.payment_id))}
+                          className="rounded border border-rose-200 px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                        >
+                          Void
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="p-6 text-sm text-stone-400">No payments recorded yet.</p>
+          )}
+        </section>
         <form onSubmit={addPayment} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"><h3 className="text-sm font-semibold">Record a payment</h3><div className="mt-4 space-y-3"><label className={labelClass}>Payment date<input required name="payment_date" type="date" defaultValue={today()} className={inputClass} /></label><label className={labelClass}>Amount (৳)<input required name="amount" type="number" min="0.01" step="0.01" className={inputClass} /></label><label className={labelClass}>Method<select name="payment_method" className={inputClass}><option value="cash">Cash</option><option value="bank">Bank</option><option value="bKash">bKash</option><option value="Nagad">Nagad</option><option value="other">Other</option></select></label><label className={labelClass}>Reference<input name="reference_number" className={inputClass} /></label><label className={labelClass}>Notes<textarea name="notes" rows={2} className={inputClass} /></label></div><button disabled={saving} className="mt-4 rounded-md bg-emerald-800 px-4 py-2 text-sm font-medium text-white">{saving ? "Saving…" : "Save payment"}</button></form>
       </div>
     </div>}

@@ -15,11 +15,14 @@ class MilkProduction(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     cow_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=False
     )
     production_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     session: Mapped[str] = mapped_column(String(20), nullable=False)  # 'morning' | 'noon' | 'evening'
     liters: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_void: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     cow: Mapped["Cow"] = relationship("Cow")
@@ -50,7 +53,7 @@ class SalesInvoice(Base, AuditMixin):
     )
     invoice_number: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
     customer_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("customers.customer_id"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("customers.customer_id", ondelete="RESTRICT"), nullable=False
     )
     invoice_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
@@ -66,10 +69,10 @@ class SalesInvoice(Base, AuditMixin):
     # Relationships
     customer: Mapped["Customer"] = relationship("Customer", back_populates="invoices")
     lines: Mapped[List["SalesInvoiceLine"]] = relationship(
-        "SalesInvoiceLine", back_populates="invoice", cascade="all, delete-orphan"
+        "SalesInvoiceLine", back_populates="invoice", cascade="save-update, merge"
     )
     payments: Mapped[List["SalePayment"]] = relationship(
-        "SalePayment", back_populates="invoice", cascade="all, delete-orphan"
+        "SalePayment", back_populates="invoice", cascade="save-update, merge"
     )
 
 
@@ -80,13 +83,13 @@ class SalesInvoiceLine(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     invoice_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("sales_invoices.invoice_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("sales_invoices.invoice_id", ondelete="RESTRICT"), nullable=False
     )
     item_type: Mapped[str] = mapped_column(
         String(20), nullable=False
     )  # 'milk' | 'animal' | 'other'
     cow_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=True
     )
     description: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=1.00)
@@ -105,7 +108,7 @@ class SalePayment(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     invoice_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("sales_invoices.invoice_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("sales_invoices.invoice_id", ondelete="RESTRICT"), nullable=False
     )
     payment_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
@@ -114,6 +117,10 @@ class SalePayment(Base, AuditMixin):
     )  # 'cash' | 'bank' | 'bKash' | 'Nagad' | 'other'
     reference_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="paid"
+    )  # 'paid' | 'void'
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     invoice: Mapped["SalesInvoice"] = relationship("SalesInvoice", back_populates="payments")

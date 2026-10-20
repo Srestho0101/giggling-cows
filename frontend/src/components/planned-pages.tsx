@@ -640,12 +640,14 @@ export function MastersWorkspace() {
       {tab === "categories" && (
         <DataWorkbench
           title="Expense categories"
-          description="Group expense categories as food or miscellaneous. Categories are create-only in the API."
+          description="Group expense categories as food or miscellaneous."
           path={apiRoutes.feeding.categories}
+          updatePath={(row) => apiRoutes.feeding.category(String(row.category_id))}
           columns={[
             { key: "name", label: "Name" },
             { key: "name_bn", label: "Bangla name" },
             { key: "category_group", label: "Group" },
+            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             { name: "name", label: "Name", required: true },
@@ -658,6 +660,15 @@ export function MastersWorkspace() {
               options: [
                 { value: "food", label: "Food" },
                 { value: "miscellaneous", label: "Miscellaneous" },
+              ],
+            },
+            {
+              name: "is_archived",
+              label: "Archived",
+              type: "select",
+              options: [
+                { value: "true", label: "Yes" },
+                { value: "false", label: "No" },
               ],
             },
           ]}
@@ -748,12 +759,14 @@ export function MastersWorkspace() {
       {tab === "market-prices" && (
         <DataWorkbench
           title="Market prices"
-          description="Record dated market rates used as references for purchase evaluations. The API supports adding and viewing rates."
+          description="Record dated market rates used as references for purchase evaluations."
           path={apiRoutes.evaluations.marketPrices}
+          updatePath={(row) => apiRoutes.evaluations.marketPrice(String(row.market_price_id))}
           columns={[
             { key: "price_date", label: "Date" },
             { key: "price_per_kg_net", label: "Net ৳/kg" },
             { key: "source", label: "Source" },
+            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             {
@@ -765,6 +778,15 @@ export function MastersWorkspace() {
             },
             { name: "price_per_kg_net", label: "Net price per kg ৳", type: "number", required: true },
             { name: "source", label: "Source" },
+            {
+              name: "is_archived",
+              label: "Archived",
+              type: "select",
+              options: [
+                { value: "true", label: "Yes" },
+                { value: "false", label: "No" },
+              ],
+            },
           ]}
         />
       )}

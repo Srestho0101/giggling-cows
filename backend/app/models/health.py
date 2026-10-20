@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import AuditMixin, Base
@@ -15,7 +15,7 @@ class HealthRecord(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     cow_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=False
     )
     record_type: Mapped[str] = mapped_column(
         String(50), nullable=False
@@ -25,6 +25,7 @@ class HealthRecord(Base, AuditMixin):
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0.00)
     next_due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     cow: Mapped["Cow"] = relationship("Cow")
@@ -37,7 +38,7 @@ class BreedingRecord(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     cow_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=False
     )
     heat_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     seed_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
@@ -48,7 +49,7 @@ class BreedingRecord(Base, AuditMixin):
     
     # Exactly one source: on-farm sire OR purchased semen
     sire_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=True
     )
     semen_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     semen_provider: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
@@ -59,6 +60,7 @@ class BreedingRecord(Base, AuditMixin):
         String(20), nullable=False, default="pending"
     )  # 'pending' | 'successful' | 'failed'
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -80,10 +82,10 @@ class PregnancyReport(Base, AuditMixin):
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     cow_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=False
     )
     breeding_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("breeding_records.breeding_id"), nullable=True
+        Uuid(as_uuid=True), ForeignKey("breeding_records.breeding_id", ondelete="RESTRICT"), nullable=True
     )
     report_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     status: Mapped[str] = mapped_column(
@@ -92,6 +94,7 @@ class PregnancyReport(Base, AuditMixin):
     expected_calving_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
     actual_calving_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     cow: Mapped["Cow"] = relationship("Cow")
