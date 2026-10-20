@@ -32,6 +32,7 @@ from app.services.invoice_service import (
     update_invoice_status,
     void_invoice_payment,
 )
+from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 router = APIRouter()
 
@@ -116,9 +117,11 @@ async def update_customer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
+    lifecycle_before = capture_lifecycle_state(customer)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(customer, field, val)
+    record_lifecycle_changes(db, customer, lifecycle_before, current_user.id, current_user.email)
     customer.updated_by = current_user.id
 
     await db.commit()
@@ -235,9 +238,11 @@ async def update_milk_production(
     if not record:
         raise HTTPException(status_code=404, detail="Milk production record not found")
 
+    lifecycle_before = capture_lifecycle_state(record)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(record, field, val)
+    record_lifecycle_changes(db, record, lifecycle_before, current_user.id, current_user.email)
     record.updated_by = current_user.id
 
     await db.commit()
@@ -293,6 +298,8 @@ def format_invoice_read(inv: SalesInvoice) -> SalesInvoiceRead:
             notes=p.notes,
             status=p.status,
             void_reason=p.void_reason,
+            voided_at=p.voided_at,
+            voided_by=p.voided_by,
             created_at=p.created_at,
             updated_at=p.updated_at,
             created_by=p.created_by,
@@ -317,6 +324,9 @@ def format_invoice_read(inv: SalesInvoice) -> SalesInvoiceRead:
         paid_amount=inv.paid_amount,
         outstanding_balance=outstanding,
         notes=inv.notes,
+        void_reason=inv.void_reason,
+        voided_at=inv.voided_at,
+        voided_by=inv.voided_by,
         lines=lines,
         payments=payments,
         created_at=inv.created_at,
@@ -332,6 +342,8 @@ async def list_sales_invoices(
     status: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    include_void: bool = False,
+    void_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
@@ -352,6 +364,10 @@ async def list_sales_invoices(
         stmt = stmt.where(SalesInvoice.invoice_date >= start_date)
     if end_date:
         stmt = stmt.where(SalesInvoice.invoice_date <= end_date)
+    if void_only:
+        stmt = stmt.where(SalesInvoice.status == "void")
+    elif not include_void:
+        stmt = stmt.where(SalesInvoice.status != "void")
 
     invoices = (await db.execute(stmt)).scalars().unique().all()
     return [format_invoice_read(inv) for inv in invoices]
@@ -396,7 +412,14 @@ async def update_invoice_status_endpoint(
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
 ):
-    await update_invoice_status(db, invoice_id, data.status, user_id=current_user.id)
+    await update_invoice_status(
+        db,
+        invoice_id,
+        data.status,
+        void_reason=data.void_reason,
+        user_id=current_user.id,
+        actor_email=current_user.email,
+    )
     await db.commit()
     return await get_sales_invoice(invoice_id, db, current_user)
 
@@ -422,7 +445,14 @@ async def void_payment_endpoint(
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
 ):
-    payment = await void_invoice_payment(db, invoice_id, payment_id, data.void_reason, user_id=current_user.id)
+    payment = await void_invoice_payment(
+        db,
+        invoice_id,
+        payment_id,
+        data.void_reason,
+        user_id=current_user.id,
+        actor_email=current_user.email,
+    )
     await db.commit()
     await db.refresh(payment)
     return SalePaymentRead.model_validate(payment)

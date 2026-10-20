@@ -5,10 +5,10 @@ from typing import List, Optional
 from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import AuditMixin, Base
+from app.core.database import ArchiveAuditMixin, AuditMixin, Base, VoidAuditMixin
 
 
-class ExpenseCategory(Base, AuditMixin):
+class ExpenseCategory(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "expense_categories"
 
     category_id: Mapped[uuid.UUID] = mapped_column(
@@ -26,7 +26,7 @@ class ExpenseCategory(Base, AuditMixin):
     expenses: Mapped[List["Expense"]] = relationship("Expense", back_populates="category")
 
 
-class FeedType(Base, AuditMixin):
+class FeedType(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "feed_types"
 
     feed_type_id: Mapped[uuid.UUID] = mapped_column(
@@ -46,7 +46,7 @@ class FeedType(Base, AuditMixin):
     feeding_records: Mapped[List["FeedingRecord"]] = relationship("FeedingRecord", back_populates="feed_type")
 
 
-class FeedingRecord(Base, AuditMixin):
+class FeedingRecord(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "feeding_records"
 
     feeding_id: Mapped[uuid.UUID] = mapped_column(
@@ -69,7 +69,7 @@ class FeedingRecord(Base, AuditMixin):
     cow: Mapped[Optional["Cow"]] = relationship("Cow")
 
 
-class Expense(Base, AuditMixin):
+class Expense(Base, AuditMixin, ArchiveAuditMixin, VoidAuditMixin):
     __tablename__ = "expenses"
 
     expense_id: Mapped[uuid.UUID] = mapped_column(

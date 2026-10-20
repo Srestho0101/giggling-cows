@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 import uuid
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import AuditBase
 
@@ -121,6 +121,12 @@ class ExpenseUpdate(BaseModel):
     is_archived: Optional[bool] = None
     is_void: Optional[bool] = None
     void_reason: Optional[str] = None
+
+    @model_validator(mode="after")
+    def require_void_reason(self):
+        if self.is_void is True and not (self.void_reason or "").strip():
+            raise ValueError("A reason is required when voiding an expense.")
+        return self
 
 
 class ExpenseRead(ExpenseBase, AuditBase):

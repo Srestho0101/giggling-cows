@@ -300,16 +300,19 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
   async function handleVoidRecord(record: MilkRecordItem) {
     if (!record.milk_id) return;
     const reason = window.prompt(
-      `Reason for voiding milk record for ${record.cow_tag_number ?? "Cow"}:`,
-      "Erroneous entry"
+      `Reason for voiding milk record for ${record.cow_tag_number ?? "Cow"}:`
     );
     if (reason === null) return;
+    if (!reason.trim()) {
+      setError("A reason is required to void a milk record.");
+      return;
+    }
     setError("");
     setNotice("");
     try {
       await apiRequest(apiRoutes.sales.milkRecord(record.milk_id), {
         method: "PATCH",
-        body: { is_void: true, void_reason: reason.trim() || "Voided by user" },
+        body: { is_void: true, void_reason: reason.trim() },
       });
       await queryClient.invalidateQueries({ queryKey: ["milk-records"] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });

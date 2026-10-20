@@ -21,6 +21,7 @@ from app.schemas.health import (
     PregnancyReportRead,
     PregnancyReportUpdate,
 )
+from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 router = APIRouter()
 
@@ -133,9 +134,11 @@ async def update_health_record(
     if not record:
         raise HTTPException(status_code=404, detail="Health record not found")
 
+    lifecycle_before = capture_lifecycle_state(record)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(record, field, val)
+    record_lifecycle_changes(db, record, lifecycle_before, current_user.id, current_user.email)
     record.updated_by = current_user.id
 
     await db.commit()
@@ -289,9 +292,11 @@ async def update_breeding_record(
     if not record:
         raise HTTPException(status_code=404, detail="Breeding record not found")
 
+    lifecycle_before = capture_lifecycle_state(record)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(record, field, val)
+    record_lifecycle_changes(db, record, lifecycle_before, current_user.id, current_user.email)
     record.updated_by = current_user.id
 
     await db.commit()
@@ -430,9 +435,11 @@ async def update_pregnancy_report(
     if not report:
         raise HTTPException(status_code=404, detail="Pregnancy report not found")
 
+    lifecycle_before = capture_lifecycle_state(report)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(report, field, val)
+    record_lifecycle_changes(db, report, lifecycle_before, current_user.id, current_user.email)
     report.updated_by = current_user.id
 
     await db.commit()

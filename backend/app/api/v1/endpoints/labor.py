@@ -24,6 +24,7 @@ from app.schemas.labor import (
     WorkerRead,
     WorkerUpdate,
 )
+from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 router = APIRouter()
 
@@ -155,9 +156,11 @@ async def update_attendance(
     if not att:
         raise HTTPException(status_code=404, detail="Attendance record not found")
 
+    lifecycle_before = capture_lifecycle_state(att)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(att, field, val)
+    record_lifecycle_changes(db, att, lifecycle_before, current_user.id, current_user.email)
     att.updated_by = current_user.id
 
     await db.commit()
@@ -193,6 +196,11 @@ async def save_batch_attendance(
         )
         existing = (await db.execute(stmt)).scalar_one_or_none()
         if existing:
+            if existing.is_archived:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Attendance is archived for this date. Restore it before editing.",
+                )
             existing.is_present = item.is_present
             existing.note = item.note
             existing.updated_by = current_user.id
@@ -225,6 +233,8 @@ async def list_salary_payments(
     worker_id: Optional[uuid.UUID] = None,
     month: Optional[date] = None,
     status: Optional[str] = None,
+    include_void: bool = False,
+    void_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
 ):
@@ -239,6 +249,10 @@ async def list_salary_payments(
         stmt = stmt.where(SalaryPayment.pay_month == month)
     if status:
         stmt = stmt.where(SalaryPayment.status == status)
+    if void_only:
+        stmt = stmt.where(SalaryPayment.is_void == True)
+    elif not include_void:
+        stmt = stmt.where(SalaryPayment.is_void == False)
 
     payments = (await db.execute(stmt)).scalars().all()
     res = []
@@ -253,6 +267,7 @@ async def list_salary_payments(
                 absence_deduction=p.absence_deduction,
                 bonus=p.bonus,
                 net_paid=p.net_paid,
+                is_void=p.is_void,
                 paid_date=p.paid_date,
                 status=p.status,
                 void_reason=p.void_reason,
@@ -304,6 +319,7 @@ async def create_salary_payment(
         absence_deduction=payment.absence_deduction,
         bonus=payment.bonus,
         net_paid=payment.net_paid,
+        is_void=payment.is_void,
         paid_date=payment.paid_date,
         status=payment.status,
         void_reason=payment.void_reason,
@@ -325,6 +341,7 @@ async def update_salary_payment(
     if not payment:
         raise HTTPException(status_code=404, detail="Salary payment not found")
 
+    lifecycle_before = capture_lifecycle_state(payment)
     if data.base_salary is not None:
         payment.base_salary = data.base_salary
     if data.absence_deduction is not None:
@@ -335,8 +352,11 @@ async def update_salary_payment(
         payment.paid_date = data.paid_date
     if data.status is not None:
         payment.status = data.status
+    if data.is_void is not None:
+        payment.is_void = data.is_void
     if data.void_reason is not None:
         payment.void_reason = data.void_reason
+    record_lifecycle_changes(db, payment, lifecycle_before, current_user.id, current_user.email)
 
     net_paid = payment.base_salary - payment.absence_deduction + payment.bonus
     if net_paid < Decimal("0.00"):
@@ -357,6 +377,7 @@ async def update_salary_payment(
         absence_deduction=payment.absence_deduction,
         bonus=payment.bonus,
         net_paid=payment.net_paid,
+        is_void=payment.is_void,
         paid_date=payment.paid_date,
         status=payment.status,
         void_reason=payment.void_reason,
@@ -428,9 +449,11 @@ async def update_mill_charge(
     if not mc:
         raise HTTPException(status_code=404, detail="Mill charge not found")
 
+    lifecycle_before = capture_lifecycle_state(mc)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(mc, field, val)
+    record_lifecycle_changes(db, mc, lifecycle_before, current_user.id, current_user.email)
     mc.updated_by = current_user.id
 
     await db.commit()

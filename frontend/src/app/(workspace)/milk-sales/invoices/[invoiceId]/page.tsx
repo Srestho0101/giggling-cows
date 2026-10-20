@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ModulePage } from "@/components/module-page";
 import { Notice } from "@/components/data-workbench";
+import { SafeDataHistory } from "@/components/safe-data-history";
 import { apiRequest, apiRoutes } from "@/lib/api";
 
 type Invoice = Record<string, unknown> & { lines?: Record<string, unknown>[]; payments?: Record<string, unknown>[] };
@@ -34,13 +35,17 @@ export default function InvoiceDetailPage() {
   }
 
   async function voidPayment(paymentId: string) {
-    const reason = window.prompt("Reason for voiding this payment:", "Erroneous payment entry");
+    const reason = window.prompt("Reason for voiding this payment:");
     if (reason === null) return;
+    if (!reason.trim()) {
+      setError("A reason is required to void a payment.");
+      return;
+    }
     setError(""); setNotice("");
     try {
       await apiRequest(apiRoutes.sales.voidPayment(invoiceId, paymentId), {
         method: "PATCH",
-        body: { void_reason: reason.trim() || "Voided by user" },
+        body: { void_reason: reason.trim() },
       });
       await load(); setNotice("Payment voided and invoice balance adjusted.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not void payment."); }
@@ -49,7 +54,17 @@ export default function InvoiceDetailPage() {
   async function setStatus(status: "issued" | "void") {
     setError(""); setNotice("");
     try {
-      const updated = await apiRequest<Invoice>(apiRoutes.sales.invoiceStatus(invoiceId), { method: "PATCH", body: { status } });
+      let void_reason: string | undefined;
+      if (status === "void") {
+        const reason = window.prompt("Reason for voiding this invoice:");
+        if (reason === null) return;
+        if (!reason.trim()) {
+          setError("A reason is required to void an invoice.");
+          return;
+        }
+        void_reason = reason.trim();
+      }
+      const updated = await apiRequest<Invoice>(apiRoutes.sales.invoiceStatus(invoiceId), { method: "PATCH", body: { status, void_reason } });
       setInvoice(updated); setNotice(status === "void" ? "Invoice voided." : "Invoice issued.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update invoice."); }
   }
@@ -59,13 +74,14 @@ export default function InvoiceDetailPage() {
     {error && <div className="mb-4"><Notice>{error}</Notice></div>}{notice && <div className="mb-4"><Notice tone="success">{notice}</Notice></div>}
     {!invoice ? <p className="rounded-xl border border-stone-200 bg-white p-8 text-center text-sm text-stone-500">Loading invoice…</p> : <div className="space-y-5">
       <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-lg font-semibold">{String(invoice.customer_name ?? "Customer")}</h2><p className="mt-1 text-sm text-stone-500">{String(invoice.invoice_date)} · Due {String(invoice.due_date ?? "—")} · <span className="capitalize">{String(invoice.status)}</span></p></div><div className="flex gap-2">{invoice.status === "draft" && <button onClick={() => void setStatus("issued")} className="rounded-md bg-emerald-800 px-3 py-2 text-sm text-white">Issue invoice</button>}{invoice.status !== "void" && <button onClick={() => void setStatus("void")} className="rounded-md border border-rose-200 px-3 py-2 text-sm text-rose-700">Void</button>}</div></div>
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-lg font-semibold">{String(invoice.customer_name ?? "Customer")}</h2><p className="mt-1 text-sm text-stone-500">{String(invoice.invoice_date)} · Due {String(invoice.due_date ?? "—")} · <span className="capitalize">{String(invoice.status)}</span></p>{invoice.status === "void" && invoice.void_reason ? <p className="mt-1 text-xs text-rose-700">Void reason: {String(invoice.void_reason)}</p> : null}<div className="mt-2"><SafeDataHistory entityType="sales_invoices" entityId={invoiceId} /></div></div><div className="flex gap-2">{(invoice.status === "draft" || invoice.status === "void") && <button onClick={() => void setStatus("issued")} className="rounded-md bg-emerald-800 px-3 py-2 text-sm text-white">{invoice.status === "void" ? "Reissue invoice" : "Issue invoice"}</button>}{invoice.status !== "void" && <button onClick={() => void setStatus("void")} className="rounded-md border border-rose-200 px-3 py-2 text-sm text-rose-700">Void</button>}</div></div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">{[["Subtotal", invoice.subtotal], ["Total", invoice.total_amount], ["Outstanding", invoice.outstanding_balance]].map(([label, value]) => <div key={String(label)} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{String(label)}</p><p className="mt-1 font-semibold text-stone-900">৳ {String(value ?? "0.00")}</p></div>)}</div>
         <div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs text-stone-500"><tr><th className="py-2">Item</th><th className="py-2">Description</th><th className="py-2">Qty</th><th className="py-2">Unit price</th><th className="py-2">Line total</th></tr></thead><tbody className="divide-y divide-stone-100">{(invoice.lines ?? []).map((line) => <tr key={String(line.line_id)}><td className="py-3 capitalize">{String(line.item_type)}</td><td className="py-3">{String(line.description)}</td><td className="py-3">{String(line.quantity)}</td><td className="py-3">৳ {String(line.unit_price)}</td><td className="py-3">৳ {String(line.line_total)}</td></tr>)}</tbody></table></div>
       </section>
       <div className="grid gap-5 xl:grid-cols-[1fr_0.8fr]">
         <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
           <h3 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold">Payment history</h3>
+          <p className="px-4 pt-3 text-xs text-stone-500">Voided payments stay in the audit history. Record a replacement payment to correct the invoice balance.</p>
           {invoice.payments?.length ? (
             <div className="divide-y divide-stone-100">
               {invoice.payments.map((payment) => {
@@ -91,6 +107,7 @@ export default function InvoiceDetailPage() {
                       <strong className={isVoid ? "line-through text-stone-400" : "text-stone-900"}>
                         ৳ {String(payment.amount)}
                       </strong>
+                      <SafeDataHistory entityType="sale_payments" entityId={String(payment.payment_id)} />
                       {!isVoid && invoice.status !== "void" && (
                         <button
                           type="button"

@@ -5,7 +5,7 @@ from typing import List, Optional
 from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import AuditMixin, Base
+from app.core.database import ArchiveAuditMixin, AuditMixin, Base, VoidAuditMixin
 
 
 class Worker(Base, AuditMixin):
@@ -30,7 +30,7 @@ class Worker(Base, AuditMixin):
     )
 
 
-class WorkerAttendance(Base, AuditMixin):
+class WorkerAttendance(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "worker_attendances"
 
     attendance_id: Mapped[uuid.UUID] = mapped_column(
@@ -52,7 +52,7 @@ class WorkerAttendance(Base, AuditMixin):
     worker: Mapped["Worker"] = relationship("Worker", back_populates="attendances")
 
 
-class SalaryPayment(Base, AuditMixin):
+class SalaryPayment(Base, AuditMixin, VoidAuditMixin):
     __tablename__ = "salary_payments"
 
     payment_id: Mapped[uuid.UUID] = mapped_column(
@@ -68,13 +68,14 @@ class SalaryPayment(Base, AuditMixin):
     net_paid: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     paid_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="paid")  # 'paid' | 'pending' | 'cancelled'
+    is_void: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     worker: Mapped["Worker"] = relationship("Worker", back_populates="salary_payments")
 
 
-class MillCharge(Base, AuditMixin):
+class MillCharge(Base, AuditMixin, ArchiveAuditMixin, VoidAuditMixin):
     __tablename__ = "mill_charges"
 
     mill_charge_id: Mapped[uuid.UUID] = mapped_column(

@@ -5,10 +5,10 @@ from typing import List, Optional
 from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import AuditMixin, Base
+from app.core.database import ArchiveAuditMixin, AuditMixin, Base, VoidAuditMixin
 
 
-class MilkProduction(Base, AuditMixin):
+class MilkProduction(Base, AuditMixin, ArchiveAuditMixin, VoidAuditMixin):
     __tablename__ = "milk_productions"
 
     milk_id: Mapped[uuid.UUID] = mapped_column(
@@ -28,7 +28,7 @@ class MilkProduction(Base, AuditMixin):
     cow: Mapped["Cow"] = relationship("Cow")
 
 
-class Customer(Base, AuditMixin):
+class Customer(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "customers"
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
@@ -45,7 +45,7 @@ class Customer(Base, AuditMixin):
     invoices: Mapped[List["SalesInvoice"]] = relationship("SalesInvoice", back_populates="customer")
 
 
-class SalesInvoice(Base, AuditMixin):
+class SalesInvoice(Base, AuditMixin, VoidAuditMixin):
     __tablename__ = "sales_invoices"
 
     invoice_id: Mapped[uuid.UUID] = mapped_column(
@@ -65,6 +65,7 @@ class SalesInvoice(Base, AuditMixin):
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0.00)
     paid_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0.00)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     customer: Mapped["Customer"] = relationship("Customer", back_populates="invoices")
@@ -101,7 +102,7 @@ class SalesInvoiceLine(Base, AuditMixin):
     cow: Mapped[Optional["Cow"]] = relationship("Cow")
 
 
-class SalePayment(Base, AuditMixin):
+class SalePayment(Base, AuditMixin, VoidAuditMixin):
     __tablename__ = "sale_payments"
 
     payment_id: Mapped[uuid.UUID] = mapped_column(

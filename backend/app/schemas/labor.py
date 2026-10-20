@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 import uuid
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import AuditBase
 
@@ -83,13 +83,21 @@ class SalaryPaymentUpdate(BaseModel):
     bonus: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
     paid_date: Optional[date] = None
     status: Optional[str] = Field(None, pattern="^(paid|pending|cancelled)$")
+    is_void: Optional[bool] = None
     void_reason: Optional[str] = None
+
+    @model_validator(mode="after")
+    def require_void_reason(self):
+        if self.is_void is True and not (self.void_reason or "").strip():
+            raise ValueError("A reason is required when voiding a salary payment.")
+        return self
 
 
 class SalaryPaymentRead(SalaryPaymentBase, AuditBase):
     payment_id: uuid.UUID
     worker_name: Optional[str] = None
     net_paid: Decimal
+    is_void: bool = False
     void_reason: Optional[str] = None
 
 
@@ -115,6 +123,12 @@ class MillChargeUpdate(BaseModel):
     is_archived: Optional[bool] = None
     is_void: Optional[bool] = None
     void_reason: Optional[str] = None
+
+    @model_validator(mode="after")
+    def require_void_reason(self):
+        if self.is_void is True and not (self.void_reason or "").strip():
+            raise ValueError("A reason is required when voiding a mill charge.")
+        return self
 
 
 class MillChargeRead(MillChargeBase, AuditBase):

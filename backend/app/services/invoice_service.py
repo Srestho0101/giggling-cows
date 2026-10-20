@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 from app.models.herd import Cow
 from app.models.sales import Customer, SalePayment, SalesInvoice, SalesInvoiceLine
 from app.schemas.sales import SalePaymentCreate, SalesInvoiceCreate
+from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 
 async def generate_invoice_number(session: AsyncSession) -> str:
@@ -113,7 +114,9 @@ async def update_invoice_status(
     session: AsyncSession,
     invoice_id: uuid.UUID,
     new_status: str,
+    void_reason: Optional[str] = None,
     user_id: Optional[uuid.UUID] = None,
+    actor_email: Optional[str] = None,
 ) -> SalesInvoice:
     stmt = (
         select(SalesInvoice)
@@ -124,6 +127,8 @@ async def update_invoice_status(
     invoice = (await session.execute(stmt)).scalar_one_or_none()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    lifecycle_before = capture_lifecycle_state(invoice)
 
     if invoice.status == new_status:
         return invoice
@@ -148,6 +153,8 @@ async def update_invoice_status(
 
     # Transition to VOID
     elif new_status == "void":
+        if not (void_reason or "").strip():
+            raise HTTPException(status_code=422, detail="A reason is required when voiding an invoice.")
         if invoice.paid_amount > Decimal("0.00"):
             raise HTTPException(
                 status_code=400,
@@ -162,8 +169,10 @@ async def update_invoice_status(
                     cow.updated_by = user_id
 
         invoice.status = "void"
+        invoice.void_reason = void_reason.strip()
         invoice.updated_by = user_id
 
+    record_lifecycle_changes(session, invoice, lifecycle_before, user_id, actor_email)
     await session.flush()
     return invoice
 
@@ -220,6 +229,7 @@ async def void_invoice_payment(
     payment_id: uuid.UUID,
     void_reason: str,
     user_id: Optional[uuid.UUID] = None,
+    actor_email: Optional[str] = None,
 ) -> SalePayment:
     payment = await session.get(SalePayment, payment_id)
     if not payment or payment.invoice_id != invoice_id:
@@ -228,6 +238,8 @@ async def void_invoice_payment(
     if payment.status == "void":
         raise HTTPException(status_code=400, detail="Payment is already voided")
 
+    lifecycle_before = capture_lifecycle_state(payment)
+
     invoice = await session.get(SalesInvoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -235,6 +247,7 @@ async def void_invoice_payment(
     payment.status = "void"
     payment.void_reason = void_reason
     payment.updated_by = user_id
+    record_lifecycle_changes(session, payment, lifecycle_before, user_id, actor_email)
 
     invoice.paid_amount = max(Decimal("0.00"), invoice.paid_amount - payment.amount)
     if invoice.paid_amount == Decimal("0.00"):

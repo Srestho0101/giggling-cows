@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { apiRequest, ApiError } from "@/lib/api";
 import { Badge, btn, statusTone, ui } from "@/components/ui";
+import { SafeDataHistory } from "@/components/safe-data-history";
 
 export { Notice } from "@/components/ui";
 
@@ -24,6 +25,14 @@ export type FormField = {
 
 export type TableColumn = { key: string; label: string };
 type RecordRow = Record<string, unknown>;
+type LifecycleActions = {
+  includeQuery: string;
+  entityType: string;
+  idKey: string;
+  isInactive: (row: RecordRow) => boolean;
+  restoreBody: (row: RecordRow) => Record<string, unknown>;
+  restoreLabel?: (row: RecordRow) => string;
+};
 
 type DataWorkbenchProps = {
   title: string;
@@ -43,6 +52,7 @@ type DataWorkbenchProps = {
   deletePath?: (row: RecordRow) => string;
   deleteLabel?: string;
   onDelete?: (row: RecordRow) => void | Promise<void>;
+  lifecycle?: LifecycleActions;
 };
 
 const isNumericKey = (key: string) =>
@@ -66,6 +76,7 @@ export function DataWorkbench({
   deletePath,
   deleteLabel,
   onDelete,
+  lifecycle,
 }: DataWorkbenchProps) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [remoteOptions, setRemoteOptions] = useState<
@@ -76,6 +87,7 @@ export function DataWorkbench({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<RecordRow | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
   const queryClient = useQueryClient();
 
   const sourceSignature = fields
@@ -90,11 +102,12 @@ export function DataWorkbench({
     [sourceSignature]
   );
 
-  const queryKey = useMemo(() => ["data-workbench", path, query] as const, [path, query]);
+  const effectiveQuery = [query, showInactive ? lifecycle?.includeQuery : ""].filter(Boolean).join("&");
+  const queryKey = useMemo(() => ["data-workbench", path, effectiveQuery] as const, [path, effectiveQuery]);
   const rowsQuery = useQuery({
     queryKey,
     queryFn: async () => {
-      const data = await apiRequest<unknown>(query ? `${path}?${query}` : path);
+      const data = await apiRequest<unknown>(effectiveQuery ? `${path}?${effectiveQuery}` : path);
       const nextRows = Array.isArray(data) ? (data as RecordRow[]) : [];
       return nextRows;
     },
@@ -209,14 +222,32 @@ export function DataWorkbench({
   }
 
   async function handleDelete(row: RecordRow) {
-    if (onDelete) {
-      await onDelete(row);
-      await loadRows();
-      return;
+    setError("");
+    try {
+      if (onDelete) {
+        await onDelete(row);
+        await loadRows();
+        return;
+      }
+      if (deletePath) {
+        await apiRequest(deletePath(row), { method: "DELETE" });
+        await loadRows();
+      }
+    } catch (cause) {
+      setError(errorText(cause));
     }
-    if (deletePath) {
-      await apiRequest(deletePath(row), { method: "DELETE" });
+  }
+
+  async function restoreRow(row: RecordRow) {
+    if (!lifecycle || !updatePath) return;
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(updatePath(row), { method: "PATCH", body: lifecycle.restoreBody(row) });
+      setNotice("Record restored.");
       await loadRows();
+    } catch (cause) {
+      setError(errorText(cause));
     }
   }
 
@@ -232,6 +263,12 @@ export function DataWorkbench({
           <p className="mt-0.5 text-[12px] text-muted">{description}</p>
         </div>
         <div className="flex items-center gap-2">
+          {lifecycle ? (
+            <label className="flex items-center gap-2 text-xs text-muted">
+              <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
+              Show archived and voided
+            </label>
+          ) : null}
           <button
             type="button"
             onClick={() => void loadRows()}
@@ -378,7 +415,7 @@ export function DataWorkbench({
                   {column.label}
                 </th>
               ))}
-              {(rowActions || updatePath || deletePath || onDelete) && (
+              {(rowActions || updatePath || deletePath || onDelete || lifecycle) && (
                 <th className="px-3 py-2.5 text-[12px] font-medium text-muted whitespace-nowrap text-right">
                   Actions
                 </th>
@@ -394,7 +431,7 @@ export function DataWorkbench({
                       <div className="h-4 w-20 rounded-[4px] bg-line/60" />
                     </td>
                   ))}
-                  {(rowActions || updatePath || deletePath || onDelete) && (
+                  {(rowActions || updatePath || deletePath || onDelete || lifecycle) && (
                     <td className="px-3 py-2.5 whitespace-nowrap text-right">
                       <div className="ml-auto h-4 w-14 rounded-[4px] bg-line/60" />
                     </td>
@@ -404,7 +441,7 @@ export function DataWorkbench({
             ) : rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length + (rowActions || updatePath || deletePath || onDelete ? 1 : 0)}
+                  colSpan={columns.length + (rowActions || updatePath || deletePath || onDelete || lifecycle ? 1 : 0)}
                   className="px-4 py-10 text-center text-[13px] text-muted"
                 >
                   {emptyMessage}
@@ -473,10 +510,19 @@ export function DataWorkbench({
                         </td>
                       );
                     })}
-                    {(rowActions || updatePath || deletePath || onDelete) && (
+                    {(rowActions || updatePath || deletePath || onDelete || lifecycle) && (
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2.5 text-[12px]">
                           {rowActions?.(row)}
+                          {lifecycle && lifecycle.isInactive(row) && updatePath ? (
+                            <button
+                              type="button"
+                              onClick={() => void restoreRow(row)}
+                              className="font-medium text-accent hover:underline cursor-pointer"
+                            >
+                              {lifecycle.restoreLabel?.(row) ?? "Restore"}
+                            </button>
+                          ) : null}
                           {updatePath && (
                             <button
                               type="button"
@@ -486,7 +532,7 @@ export function DataWorkbench({
                               Edit
                             </button>
                           )}
-                          {(deletePath || onDelete) && (
+                          {(deletePath || onDelete) && !(lifecycle?.isInactive(row)) && (
                             <button
                               type="button"
                               onClick={() => void handleDelete(row)}
@@ -495,6 +541,12 @@ export function DataWorkbench({
                               {deleteLabel ?? "Delete"}
                             </button>
                           )}
+                          {lifecycle ? (
+                            <SafeDataHistory
+                              entityType={lifecycle.entityType}
+                              entityId={String(row[lifecycle.idKey] ?? "")}
+                            />
+                          ) : null}
                         </div>
                       </td>
                     )}

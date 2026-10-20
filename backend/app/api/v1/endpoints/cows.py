@@ -28,6 +28,7 @@ from app.schemas.herd import (
     WeightRecordRead,
     WeightRecordUpdate,
 )
+from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 router = APIRouter()
 
@@ -96,9 +97,11 @@ async def update_warehouse(
     if not warehouse:
         raise HTTPException(status_code=404, detail="Warehouse not found")
 
+    lifecycle_before = capture_lifecycle_state(warehouse)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(warehouse, field, val)
+    record_lifecycle_changes(db, warehouse, lifecycle_before, current_user.id, current_user.email)
     warehouse.updated_by = current_user.id
 
     await db.commit()
@@ -154,9 +157,11 @@ async def update_supplier(
     if not supplier:
         raise HTTPException(status_code=404, detail="Supplier not found")
 
+    lifecycle_before = capture_lifecycle_state(supplier)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(supplier, field, val)
+    record_lifecycle_changes(db, supplier, lifecycle_before, current_user.id, current_user.email)
     supplier.updated_by = current_user.id
 
     await db.commit()
@@ -360,6 +365,7 @@ async def update_cow(
     if not cow:
         raise HTTPException(status_code=404, detail="Cow not found")
 
+    lifecycle_before = capture_lifecycle_state(cow)
     # If tag number is changing, create tag history record
     if data.current_tag_number and data.current_tag_number != cow.current_tag_number:
         stmt = select(Cow).where(
@@ -437,13 +443,16 @@ async def update_cow(
     for field, val in update_dict.items():
         setattr(cow, field, val)
 
-    if cow.status == "archived" and data.is_archived is None:
-        cow.is_archived = True
-    elif data.is_archived is True and "status" not in update_dict:
-        cow.status = "archived"
-    elif data.is_archived is False and cow.status == "archived":
-        cow.status = "active"
+    if data.is_archived is not None:
+        cow.is_archived = data.is_archived
+        if data.is_archived:
+            cow.status = "archived"
+        elif cow.status == "archived":
+            cow.status = "active"
+    elif "status" in update_dict:
+        cow.is_archived = cow.status == "archived"
 
+    record_lifecycle_changes(db, cow, lifecycle_before, current_user.id, current_user.email)
     cow.updated_by = current_user.id
 
     await db.commit()
@@ -487,9 +496,11 @@ async def update_cow_weight_record(
     if not rec or rec.cow_id != cow_id:
         raise HTTPException(status_code=404, detail="Weight record not found")
 
+    lifecycle_before = capture_lifecycle_state(rec)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(rec, field, val)
+    record_lifecycle_changes(db, rec, lifecycle_before, current_user.id, current_user.email)
     rec.updated_by = current_user.id
 
     await db.commit()

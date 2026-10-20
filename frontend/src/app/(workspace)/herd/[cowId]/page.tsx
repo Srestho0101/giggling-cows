@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ModulePage } from "@/components/module-page";
 import { Notice } from "@/components/data-workbench";
+import { SafeDataHistory } from "@/components/safe-data-history";
 import { apiRequest, apiRoutes } from "@/lib/api";
 
 type CowDetails = Record<string, unknown> & {
@@ -61,7 +62,13 @@ export default function CowProfilePage() {
         ["Acquired", String(cow.acquisition_date ?? "—")], ["Acquisition", String(cow.acquisition_type ?? "—").replaceAll("_", " ")], ["Purchase price", cow.purchase_price ? `৳ ${cow.purchase_price}` : "—"], ["Latest weight", cow.latest_weight_kg ? `${cow.latest_weight_kg} kg` : "—"],
       ].map(([label, value]) => <div key={label} className="rounded-xl border border-stone-200 bg-white p-4"><p className="text-xs text-stone-500">{label}</p><p className="mt-2 text-sm font-medium capitalize text-stone-800">{value}</p></div>)}</div>
       <div className="grid gap-5 xl:grid-cols-2">
-        <HistoryCard title="Weight history" columns={["Date", "Weight"]} rows={cow.weight_records ?? []} keys={["weigh_date", "weight_kg"]} suffixes={["", " kg"]} />
+        <WeightHistory
+          cowId={cowId}
+          rows={cow.weight_records ?? []}
+          reload={load}
+          onError={setError}
+          onNotice={setNotice}
+        />
         <form onSubmit={(event) => void submit(event, "weight")} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"><h3 className="text-sm font-semibold">Log a weight</h3><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className={labelClass}>Date<input name="date" type="date" required defaultValue={localToday()} className={inputClass} /></label><label className={labelClass}>Weight (kg)<input name="weight_kg" type="number" min="0.1" step="0.1" required className={inputClass} /></label></div><button disabled={busy} className={buttonClass}>{busy ? "Saving…" : "Save weight"}</button></form>
       </div>
       <div className="grid gap-5 xl:grid-cols-2">
@@ -71,6 +78,63 @@ export default function CowProfilePage() {
       <HistoryCard title="Tag history" columns={["Tag", "Type", "Assigned", "Removed", "Reason"]} rows={cow.id_history ?? []} keys={["tag_number", "tag_type", "assigned_date", "removed_date", "reason"]} />
     </div>}
   </ModulePage>;
+}
+
+function WeightHistory({
+  cowId,
+  rows,
+  reload,
+  onError,
+  onNotice,
+}: {
+  cowId: string;
+  rows: Record<string, unknown>[];
+  reload: () => Promise<void>;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  async function setArchived(row: Record<string, unknown>, archived: boolean) {
+    const label = archived ? "archive" : "restore";
+    if (archived && !window.confirm("Archive this weight record?")) return;
+    onError("");
+    onNotice("");
+    try {
+      await apiRequest(apiRoutes.herd.weightRecord(cowId, String(row.weight_id)), {
+        method: "PATCH",
+        body: { is_archived: archived },
+      });
+      onNotice(archived ? "Weight record archived." : "Weight record restored.");
+      await reload();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : `Could not ${label} weight record.`);
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+      <h3 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold">Weight history</h3>
+      {rows.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-stone-50 text-stone-500"><tr><th className="px-4 py-2.5">Date</th><th className="px-4 py-2.5">Weight</th><th className="px-4 py-2.5">Archived</th><th className="px-4 py-2.5">Actions</th></tr></thead>
+            <tbody className="divide-y divide-stone-100">
+              {rows.map((row) => (
+                <tr key={String(row.weight_id)}>
+                  <td className="whitespace-nowrap px-4 py-3">{String(row.weigh_date)}</td>
+                  <td className="whitespace-nowrap px-4 py-3">{String(row.weight_kg)} kg</td>
+                  <td className="px-4 py-3">{row.is_archived ? "Yes" : "No"}</td>
+                  <td className="px-4 py-3"><div className="flex items-center gap-3">
+                    <button type="button" onClick={() => void setArchived(row, !row.is_archived)} className="font-medium text-accent hover:underline">{row.is_archived ? "Restore" : "Archive"}</button>
+                    <SafeDataHistory entityType="weight_records" entityId={String(row.weight_id)} />
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p className="px-4 py-8 text-center text-xs text-stone-400">No weight records yet.</p>}
+    </div>
+  );
 }
 
 function HistoryCard({ title, columns, rows, keys, suffixes = [] }: { title: string; columns: string[]; rows: Record<string, unknown>[]; keys: string[]; suffixes?: string[] }) {

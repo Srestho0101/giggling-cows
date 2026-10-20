@@ -28,6 +28,12 @@ class MilkProductionUpdate(BaseModel):
     is_void: Optional[bool] = None
     void_reason: Optional[str] = None
 
+    @model_validator(mode="after")
+    def require_void_reason(self):
+        if self.is_void is True and not (self.void_reason or "").strip():
+            raise ValueError("A reason is required when voiding a milk record.")
+        return self
+
 
 class MilkProductionRead(MilkProductionBase, AuditBase):
     milk_id: uuid.UUID
@@ -103,6 +109,12 @@ class SalePaymentCreate(SalePaymentBase):
 class SalePaymentVoid(BaseModel):
     void_reason: str = Field(..., min_length=1, max_length=500)
 
+    @model_validator(mode="after")
+    def require_nonblank_reason(self):
+        if not self.void_reason.strip():
+            raise ValueError("A reason is required when voiding a payment.")
+        return self
+
 
 class SalePaymentRead(SalePaymentBase, AuditBase):
     payment_id: uuid.UUID
@@ -124,6 +136,13 @@ class SalesInvoiceCreate(BaseModel):
 class SalesInvoiceStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(issued|void)$")
     notes: Optional[str] = None
+    void_reason: Optional[str] = Field(None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def require_void_reason(self):
+        if self.status == "void" and not (self.void_reason or "").strip():
+            raise ValueError("A reason is required when voiding an invoice.")
+        return self
 
 
 class SalesInvoiceRead(AuditBase):

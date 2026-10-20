@@ -170,6 +170,7 @@ export function Segmented<T extends string>({
   onChange,
   size = "md",
   ariaLabel,
+  disabled = false,
 }: {
   name: string;
   options: readonly SegmentedOption<T>[];
@@ -177,6 +178,7 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
   size?: "sm" | "md";
   ariaLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <div
@@ -194,7 +196,7 @@ export function Segmented<T extends string>({
         return (
           <label
             key={opt.value}
-            className={`cursor-pointer rounded-[4px] transition-colors select-none text-center ${
+            className={`${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"} rounded-[4px] transition-colors select-none text-center ${
               size === "sm" ? "px-2.5 py-1 text-[12px]" : "px-3 py-1.5 text-[13px]"
             } ${
               isChecked ? activeClass : "text-muted hover:text-ink"
@@ -205,6 +207,7 @@ export function Segmented<T extends string>({
               name={name}
               value={opt.value}
               checked={isChecked}
+              disabled={disabled}
               onChange={() => onChange(opt.value)}
               className="sr-only"
             />

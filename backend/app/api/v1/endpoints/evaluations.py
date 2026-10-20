@@ -26,6 +26,7 @@ from app.services.evaluation_service import (
     convert_evaluation_to_cow,
     create_purchase_evaluation,
 )
+from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 router = APIRouter()
 
@@ -76,9 +77,11 @@ async def update_market_price(
     if not mp:
         raise HTTPException(status_code=404, detail="Market price not found")
 
+    lifecycle_before = capture_lifecycle_state(mp)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(mp, field, val)
+    record_lifecycle_changes(db, mp, lifecycle_before, current_user.id, current_user.email)
     mp.updated_by = current_user.id
 
     await db.commit()
@@ -208,6 +211,7 @@ async def update_evaluation_decision(
     if not ev:
         raise HTTPException(status_code=404, detail="Purchase evaluation not found")
 
+    lifecycle_before = capture_lifecycle_state(ev)
     if ev.decision == "returned" and data.decision and data.decision != "returned":
         raise HTTPException(
             status_code=400,
@@ -220,6 +224,7 @@ async def update_evaluation_decision(
         ev.notes = data.notes
     if data.is_archived is not None:
         ev.is_archived = data.is_archived
+    record_lifecycle_changes(db, ev, lifecycle_before, current_user.id, current_user.email)
     ev.updated_by = current_user.id
 
     await db.commit()

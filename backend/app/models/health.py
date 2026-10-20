@@ -5,10 +5,10 @@ from typing import List, Optional
 from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import AuditMixin, Base
+from app.core.database import ArchiveAuditMixin, AuditMixin, Base
 
 
-class HealthRecord(Base, AuditMixin):
+class HealthRecord(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "health_records"
 
     health_id: Mapped[uuid.UUID] = mapped_column(
@@ -31,7 +31,7 @@ class HealthRecord(Base, AuditMixin):
     cow: Mapped["Cow"] = relationship("Cow")
 
 
-class BreedingRecord(Base, AuditMixin):
+class BreedingRecord(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "breeding_records"
 
     breeding_id: Mapped[uuid.UUID] = mapped_column(
@@ -75,7 +75,7 @@ class BreedingRecord(Base, AuditMixin):
     pregnancy_reports: Mapped[List["PregnancyReport"]] = relationship("PregnancyReport", back_populates="breeding_record")
 
 
-class PregnancyReport(Base, AuditMixin):
+class PregnancyReport(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "pregnancy_reports"
 
     pregnancy_id: Mapped[uuid.UUID] = mapped_column(

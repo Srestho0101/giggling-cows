@@ -5,10 +5,10 @@ from typing import Optional
 from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import AuditMixin, Base
+from app.core.database import ArchiveAuditMixin, AuditMixin, Base
 
 
-class MarketPrice(Base, AuditMixin):
+class MarketPrice(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "market_prices"
 
     market_price_id: Mapped[uuid.UUID] = mapped_column(
@@ -23,7 +23,7 @@ class MarketPrice(Base, AuditMixin):
     evaluations: Mapped[list["PurchaseEvaluation"]] = relationship("PurchaseEvaluation", back_populates="market_price")
 
 
-class PurchaseEvaluation(Base, AuditMixin):
+class PurchaseEvaluation(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "purchase_evaluations"
 
     evaluation_id: Mapped[uuid.UUID] = mapped_column(

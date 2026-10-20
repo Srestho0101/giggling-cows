@@ -25,6 +25,7 @@ from app.schemas.feeding import (
     FeedingRecordRead,
     FeedingRecordUpdate,
 )
+from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 router = APIRouter()
 
@@ -78,9 +79,11 @@ async def update_expense_category(
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
 
+    lifecycle_before = capture_lifecycle_state(cat)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(cat, field, val)
+    record_lifecycle_changes(db, cat, lifecycle_before, current_user.id, current_user.email)
     cat.updated_by = current_user.id
 
     await db.commit()
@@ -148,9 +151,11 @@ async def update_feed_type(
     if not ft:
         raise HTTPException(status_code=404, detail="Feed type not found")
 
+    lifecycle_before = capture_lifecycle_state(ft)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(ft, field, val)
+    record_lifecycle_changes(db, ft, lifecycle_before, current_user.id, current_user.email)
     ft.updated_by = current_user.id
 
     await db.commit()
@@ -279,6 +284,7 @@ async def update_feeding_record(
     if not rec:
         raise HTTPException(status_code=404, detail="Feeding record not found")
 
+    lifecycle_before = capture_lifecycle_state(rec)
     feed_type_id = data.feed_type_id or rec.feed_type_id
     ft = await db.get(FeedType, feed_type_id)
     if not ft:
@@ -301,6 +307,7 @@ async def update_feeding_record(
         rec.quantity = qty
         rec.cost = (qty * unit_cost).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
+    record_lifecycle_changes(db, rec, lifecycle_before, current_user.id, current_user.email)
     rec.updated_by = current_user.id
     await db.commit()
     await db.refresh(rec)
@@ -471,9 +478,11 @@ async def update_expense(
     if not exp:
         raise HTTPException(status_code=404, detail="Expense not found")
 
+    lifecycle_before = capture_lifecycle_state(exp)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(exp, field, val)
+    record_lifecycle_changes(db, exp, lifecycle_before, current_user.id, current_user.email)
     exp.updated_by = current_user.id
 
     await db.commit()

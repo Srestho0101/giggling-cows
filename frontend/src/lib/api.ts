@@ -118,6 +118,10 @@ function getErrorMessage(payload: unknown): string | undefined {
 }
 
 export const apiRoutes = {
+  audit: {
+    safeDataOperations: (entityType: string, entityId: string) =>
+      `/audit/safe-data-operations?${new URLSearchParams({ entity_type: entityType, entity_id: entityId })}`,
+  },
   auth: { me: "/auth/me" },
   herd: {
     cows: "/herd/cows", cow: (id: string) => `/herd/cows/${id}`,

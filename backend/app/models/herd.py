@@ -5,10 +5,10 @@ from typing import List, Optional
 from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import AuditMixin, Base
+from app.core.database import ArchiveAuditMixin, AuditMixin, Base
 
 
-class Warehouse(Base, AuditMixin):
+class Warehouse(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "warehouses"
 
     warehouse_id: Mapped[uuid.UUID] = mapped_column(
@@ -24,7 +24,7 @@ class Warehouse(Base, AuditMixin):
     movements: Mapped[List["CowWarehouseHistory"]] = relationship("CowWarehouseHistory", back_populates="warehouse")
 
 
-class Supplier(Base, AuditMixin):
+class Supplier(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "suppliers"
 
     supplier_id: Mapped[uuid.UUID] = mapped_column(
@@ -39,7 +39,7 @@ class Supplier(Base, AuditMixin):
     cows: Mapped[List["Cow"]] = relationship("Cow", back_populates="supplier")
 
 
-class Cow(Base, AuditMixin):
+class Cow(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "cows"
 
     cow_id: Mapped[uuid.UUID] = mapped_column(
@@ -133,7 +133,7 @@ class CowWarehouseHistory(Base, AuditMixin):
     warehouse: Mapped["Warehouse"] = relationship("Warehouse", back_populates="movements")
 
 
-class WeightRecord(Base, AuditMixin):
+class WeightRecord(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "weight_records"
 
     weight_id: Mapped[uuid.UUID] = mapped_column(

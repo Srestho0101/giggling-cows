@@ -5,6 +5,7 @@ from app.models.feeding import Expense, ExpenseCategory, FeedType, FeedingRecord
 from app.models.labor import MillCharge, SalaryPayment, Worker, WorkerAttendance
 from app.models.health import BreedingRecord, HealthRecord, PregnancyReport
 from app.models.sales import Customer, MilkProduction, SalePayment, SalesInvoice, SalesInvoiceLine
+from app.models.safe_data_operations import SafeDataOperationEvent
 
 __all__ = [
     "Base",
@@ -32,4 +33,5 @@ __all__ = [
     "SalesInvoice",
     "SalesInvoiceLine",
     "SalePayment",
+    "SafeDataOperationEvent",
 ]
