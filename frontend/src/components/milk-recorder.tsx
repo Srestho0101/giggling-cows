@@ -270,6 +270,58 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
     setIsEditingTarget(false);
   }
 
+  async function handleEditRecord(record: MilkRecordItem) {
+    if (!record.milk_id) return;
+    const input = window.prompt(
+      `Update yield for ${record.cow_tag_number ?? "Cow"} (liters):`,
+      String(record.liters)
+    );
+    if (input === null) return;
+    const val = parseFloat(input);
+    if (Number.isNaN(val) || val <= 0 || val > 999999.99) {
+      setError("Please enter a valid positive number of liters.");
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(apiRoutes.sales.milkRecord(record.milk_id), {
+        method: "PATCH",
+        body: { liters: Number(val.toFixed(2)) },
+      });
+      await queryClient.invalidateQueries({ queryKey: ["milk-records"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setNotice(`Updated milk yield for ${record.cow_tag_number ?? "Cow"} to ${val.toFixed(2)} L.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Failed to update milk record.");
+    }
+  }
+
+  async function handleVoidRecord(record: MilkRecordItem) {
+    if (!record.milk_id) return;
+    const reason = window.prompt(
+      `Reason for voiding milk record for ${record.cow_tag_number ?? "Cow"}:`
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("A reason is required to void a milk record.");
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(apiRoutes.sales.milkRecord(record.milk_id), {
+        method: "PATCH",
+        body: { is_void: true, void_reason: reason.trim() },
+      });
+      await queryClient.invalidateQueries({ queryKey: ["milk-records"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setNotice(`Voided milk record for ${record.cow_tag_number ?? "Cow"}.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Failed to void milk record.");
+    }
+  }
+
   return (
     <div className="rounded-[8px] border border-line bg-surface p-4 space-y-4">
       {/* Header */}
@@ -483,12 +535,13 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                 <th className="px-3 py-2 font-medium">Cow</th>
                 <th className="px-3 py-2 font-medium">Session</th>
                 <th className="px-3 py-2 font-medium text-right">Liters</th>
+                <th className="px-3 py-2 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {dayRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-3 py-6 text-center text-muted">
+                  <td colSpan={4} className="px-3 py-6 text-center text-muted">
                     No milk recorded for this date yet. Use the form above to add records.
                   </td>
                 </tr>
@@ -507,6 +560,26 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                       <td className="px-3 py-2 text-right tabular-nums text-ink">
                         {Number(r.liters).toFixed(2)}
                       </td>
+                      <td className="px-3 py-2 text-right">
+                        {r.milk_id && (
+                          <div className="flex items-center justify-end gap-2.5 text-[12px]">
+                            <button
+                              type="button"
+                              onClick={() => void handleEditRecord(r)}
+                              className="font-medium text-accent hover:underline cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleVoidRecord(r)}
+                              className="font-medium text-warn hover:underline cursor-pointer"
+                            >
+                              Void
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   <tr className="bg-subtle font-semibold border-t border-line">
@@ -516,6 +589,7 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                     <td className="px-3 py-2 text-right tabular-nums text-ink">
                       {totalDayLiters.toFixed(2)} L
                     </td>
+                    <td />
                   </tr>
                 </>
               )}
@@ -523,7 +597,7 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
           </table>
         </div>
         <p className="text-[11px] text-muted">
-          Milk records are saved per cow in the database. There is no API to edit or delete milk records.
+          Milk records are preserved for audit safety. You can adjust liters or void erroneous entries without database deletion.
         </p>
       </div>
     </div>

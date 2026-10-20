@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
+    audit,
     auth,
     cows,
     evaluations,
@@ -12,6 +13,7 @@ from app.api.v1.endpoints import (
 
 api_router = APIRouter()
 
+api_router.include_router(audit.router, prefix="/audit", tags=["Audit History"])
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication & Profile"])
 api_router.include_router(cows.router, prefix="/herd", tags=["Herd & Farm Structure"])
 api_router.include_router(evaluations.router, prefix="/evaluations", tags=["Purchase Evaluation"])

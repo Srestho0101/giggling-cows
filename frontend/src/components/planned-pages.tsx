@@ -579,6 +579,19 @@ export function MastersWorkspace() {
           description="Manage housing areas, type, capacity, and current occupancy."
           path={apiRoutes.herd.warehouses}
           updatePath={(row) => apiRoutes.herd.warehouse(String(row.warehouse_id))}
+          lifecycle={{
+            includeQuery: "include_archived=true",
+            entityType: "warehouses",
+            idKey: "warehouse_id",
+            isInactive: (row) => row.is_archived === true,
+            restoreBody: () => ({ is_archived: false }),
+            restoreLabel: () => "Unarchive",
+          }}
+          deleteLabel="Archive"
+          onDelete={async (row) => {
+            if (!window.confirm("Archive this warehouse?")) return;
+            await apiRequest(apiRoutes.herd.warehouse(String(row.warehouse_id)), { method: "PATCH", body: { is_archived: true } });
+          }}
           columns={[
             { key: "name", label: "Name" },
             { key: "housing_type", label: "Housing type" },
@@ -609,6 +622,19 @@ export function MastersWorkspace() {
           description="Maintain suppliers used in purchases and herd records."
           path={apiRoutes.herd.suppliers}
           updatePath={(row) => apiRoutes.herd.supplier(String(row.supplier_id))}
+          lifecycle={{
+            includeQuery: "include_archived=true",
+            entityType: "suppliers",
+            idKey: "supplier_id",
+            isInactive: (row) => row.is_archived === true,
+            restoreBody: () => ({ is_archived: false }),
+            restoreLabel: () => "Unarchive",
+          }}
+          deleteLabel="Archive"
+          onDelete={async (row) => {
+            if (!window.confirm("Archive this supplier?")) return;
+            await apiRequest(apiRoutes.herd.supplier(String(row.supplier_id)), { method: "PATCH", body: { is_archived: true } });
+          }}
           columns={[
             { key: "name", label: "Name" },
             { key: "phone", label: "Phone" },
@@ -640,12 +666,27 @@ export function MastersWorkspace() {
       {tab === "categories" && (
         <DataWorkbench
           title="Expense categories"
-          description="Group expense categories as food or miscellaneous. Categories are create-only in the API."
+          description="Group expense categories as food or miscellaneous."
           path={apiRoutes.feeding.categories}
+          updatePath={(row) => apiRoutes.feeding.category(String(row.category_id))}
+          lifecycle={{
+            includeQuery: "include_archived=true",
+            entityType: "expense_categories",
+            idKey: "category_id",
+            isInactive: (row) => row.is_archived === true,
+            restoreBody: () => ({ is_archived: false }),
+            restoreLabel: () => "Unarchive",
+          }}
+          deleteLabel="Archive"
+          onDelete={async (row) => {
+            if (!window.confirm("Archive this expense category?")) return;
+            await apiRequest(apiRoutes.feeding.category(String(row.category_id)), { method: "PATCH", body: { is_archived: true } });
+          }}
           columns={[
             { key: "name", label: "Name" },
             { key: "name_bn", label: "Bangla name" },
             { key: "category_group", label: "Group" },
+            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             { name: "name", label: "Name", required: true },
@@ -660,6 +701,15 @@ export function MastersWorkspace() {
                 { value: "miscellaneous", label: "Miscellaneous" },
               ],
             },
+            {
+              name: "is_archived",
+              label: "Archived",
+              type: "select",
+              options: [
+                { value: "true", label: "Yes" },
+                { value: "false", label: "No" },
+              ],
+            },
           ]}
         />
       )}
@@ -670,6 +720,19 @@ export function MastersWorkspace() {
           description="Manage feed items, units, and per-unit costs."
           path={apiRoutes.feeding.feedTypes}
           updatePath={(row) => apiRoutes.feeding.feedType(String(row.feed_type_id))}
+          lifecycle={{
+            includeQuery: "include_archived=true",
+            entityType: "feed_types",
+            idKey: "feed_type_id",
+            isInactive: (row) => row.is_archived === true,
+            restoreBody: () => ({ is_archived: false }),
+            restoreLabel: () => "Unarchive",
+          }}
+          deleteLabel="Archive"
+          onDelete={async (row) => {
+            if (!window.confirm("Archive this feed type?")) return;
+            await apiRequest(apiRoutes.feeding.feedType(String(row.feed_type_id)), { method: "PATCH", body: { is_archived: true } });
+          }}
           columns={[
             { key: "name", label: "Name" },
             { key: "name_bn", label: "Bangla name" },
@@ -709,6 +772,19 @@ export function MastersWorkspace() {
           description="Maintain buyers and monitor their account balances."
           path={apiRoutes.sales.customers}
           updatePath={(row) => apiRoutes.sales.customer(String(row.customer_id))}
+          lifecycle={{
+            includeQuery: "include_archived=true",
+            entityType: "customers",
+            idKey: "customer_id",
+            isInactive: (row) => row.is_archived === true,
+            restoreBody: () => ({ is_archived: false }),
+            restoreLabel: () => "Unarchive",
+          }}
+          deleteLabel="Archive"
+          onDelete={async (row) => {
+            if (!window.confirm("Archive this customer?")) return;
+            await apiRequest(apiRoutes.sales.customer(String(row.customer_id)), { method: "PATCH", body: { is_archived: true } });
+          }}
           columns={[
             { key: "name", label: "Name" },
             { key: "phone", label: "Phone" },
@@ -748,12 +824,27 @@ export function MastersWorkspace() {
       {tab === "market-prices" && (
         <DataWorkbench
           title="Market prices"
-          description="Record dated market rates used as references for purchase evaluations. The API supports adding and viewing rates."
+          description="Record dated market rates used as references for purchase evaluations."
           path={apiRoutes.evaluations.marketPrices}
+          updatePath={(row) => apiRoutes.evaluations.marketPrice(String(row.market_price_id))}
+          lifecycle={{
+            includeQuery: "include_archived=true",
+            entityType: "market_prices",
+            idKey: "market_price_id",
+            isInactive: (row) => row.is_archived === true,
+            restoreBody: () => ({ is_archived: false }),
+            restoreLabel: () => "Unarchive",
+          }}
+          deleteLabel="Archive"
+          onDelete={async (row) => {
+            if (!window.confirm("Archive this market price?")) return;
+            await apiRequest(apiRoutes.evaluations.marketPrice(String(row.market_price_id)), { method: "PATCH", body: { is_archived: true } });
+          }}
           columns={[
             { key: "price_date", label: "Date" },
             { key: "price_per_kg_net", label: "Net ৳/kg" },
             { key: "source", label: "Source" },
+            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             {
@@ -765,6 +856,15 @@ export function MastersWorkspace() {
             },
             { name: "price_per_kg_net", label: "Net price per kg ৳", type: "number", required: true },
             { name: "source", label: "Source" },
+            {
+              name: "is_archived",
+              label: "Archived",
+              type: "select",
+              options: [
+                { value: "true", label: "Yes" },
+                { value: "false", label: "No" },
+              ],
+            },
           ]}
         />
       )}

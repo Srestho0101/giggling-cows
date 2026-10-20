@@ -60,9 +60,16 @@ class WeightRecordCreate(BaseModel):
     weight_kg: Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
 
 
+class WeightRecordUpdate(BaseModel):
+    weigh_date: Optional[date] = None
+    weight_kg: Optional[Decimal] = Field(None, gt=0, max_digits=8, decimal_places=2)
+    is_archived: Optional[bool] = None
+
+
 class WeightRecordRead(WeightRecordCreate, AuditBase):
     weight_id: uuid.UUID
     cow_id: uuid.UUID
+    is_archived: bool = False
 
 
 # COW ID / TAG HISTORY

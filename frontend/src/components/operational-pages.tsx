@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { DataWorkbench, Notice, type FormField, type TableColumn } from "@/components/data-workbench";
+import { SafeDataHistory } from "@/components/safe-data-history";
 import { Icon } from "@/components/icons";
 import { Badge, btn, Segmented, Tabs, ui } from "@/components/ui";
 import { apiRequest, apiRoutes, apiQuery } from "@/lib/api";
@@ -134,6 +135,20 @@ export function HerdWorkspace() {
         title="Cows"
         description="Search and register animals. Select a tag to open its record."
         path={apiRoutes.herd.cows}
+        updatePath={(row) => apiRoutes.herd.cow(String(row.cow_id))}
+        lifecycle={{
+          includeQuery: "include_archived=true",
+          entityType: "cows",
+          idKey: "cow_id",
+          isInactive: (row) => row.is_archived === true || row.status === "archived",
+          restoreBody: () => ({ is_archived: false }),
+          restoreLabel: () => "Unarchive",
+        }}
+        deleteLabel="Archive"
+        onDelete={async (row) => {
+          if (!window.confirm("Archive this cow?")) return;
+          await apiRequest(apiRoutes.herd.cow(String(row.cow_id)), { method: "PATCH", body: { is_archived: true } });
+        }}
         columns={cowColumns}
         fields={cowFields}
         query={query}
@@ -570,6 +585,23 @@ export function PurchasesWorkspace() {
         title="Purchase evaluations"
         description="Review saved buy and return decisions. Register a bought animal to add it to the herd."
         path={apiRoutes.evaluations.root}
+        updatePath={(row) => apiRoutes.evaluations.update(String(row.evaluation_id))}
+        lifecycle={{
+          includeQuery: "include_archived=true",
+          entityType: "purchase_evaluations",
+          idKey: "evaluation_id",
+          isInactive: (row) => row.is_archived === true,
+          restoreBody: () => ({ is_archived: false }),
+          restoreLabel: () => "Unarchive",
+        }}
+        deleteLabel="Archive"
+        onDelete={async (row) => {
+          if (!window.confirm("Archive this purchase evaluation?")) return;
+          await apiRequest(apiRoutes.evaluations.update(String(row.evaluation_id)), {
+            method: "PATCH",
+            body: { is_archived: true },
+          });
+        }}
         columns={[
           { key: "evaluation_date", label: "Date" },
           { key: "supplier_name", label: "Supplier" },
@@ -618,6 +650,23 @@ export function BreedingWorkspace() {
         title="Breeding records"
         description="Record heat, insemination, sire or semen details, and outcome."
         path={apiRoutes.health.breeding}
+        updatePath={(row) => apiRoutes.health.breedingRecord(String(row.breeding_id))}
+        lifecycle={{
+          includeQuery: "include_archived=true",
+          entityType: "breeding_records",
+          idKey: "breeding_id",
+          isInactive: (row) => row.is_archived === true,
+          restoreBody: () => ({ is_archived: false }),
+          restoreLabel: () => "Unarchive",
+        }}
+        deleteLabel="Archive"
+        onDelete={async (row) => {
+          if (!window.confirm("Archive this breeding record?")) return;
+          await apiRequest(apiRoutes.health.breedingRecord(String(row.breeding_id)), {
+            method: "PATCH",
+            body: { is_archived: true },
+          });
+        }}
         columns={[
           { key: "cow_tag_number", label: "Cow" },
           { key: "heat_date", label: "Heat date" },
@@ -626,6 +675,7 @@ export function BreedingWorkspace() {
           { key: "semen_code", label: "Semen code" },
           { key: "doctor_name", label: "Doctor" },
           { key: "outcome", label: "Outcome" },
+          { key: "is_archived", label: "Archived" },
         ]}
         fields={[
           {
@@ -663,6 +713,15 @@ export function BreedingWorkspace() {
               { value: "failed", label: "Failed" },
             ],
           },
+          {
+            name: "is_archived",
+            label: "Archived",
+            type: "select",
+            options: [
+              { value: "true", label: "Yes" },
+              { value: "false", label: "No" },
+            ],
+          },
           { name: "notes", label: "Notes", type: "textarea" },
         ]}
       />
@@ -670,6 +729,23 @@ export function BreedingWorkspace() {
         title="Pregnancy checks"
         description="Log pregnancy results and expected calving dates."
         path={apiRoutes.health.pregnancy}
+        updatePath={(row) => apiRoutes.health.pregnancyReport(String(row.pregnancy_id))}
+        lifecycle={{
+          includeQuery: "include_archived=true",
+          entityType: "pregnancy_reports",
+          idKey: "pregnancy_id",
+          isInactive: (row) => row.is_archived === true,
+          restoreBody: () => ({ is_archived: false }),
+          restoreLabel: () => "Unarchive",
+        }}
+        deleteLabel="Archive"
+        onDelete={async (row) => {
+          if (!window.confirm("Archive this pregnancy report?")) return;
+          await apiRequest(apiRoutes.health.pregnancyReport(String(row.pregnancy_id)), {
+            method: "PATCH",
+            body: { is_archived: true },
+          });
+        }}
         columns={[
           { key: "cow_tag_number", label: "Cow" },
           { key: "report_date", label: "Check date" },
@@ -677,6 +753,7 @@ export function BreedingWorkspace() {
           { key: "expected_calving_date", label: "Expected calving" },
           { key: "actual_calving_date", label: "Actual calving" },
           { key: "notes", label: "Notes" },
+          { key: "is_archived", label: "Archived" },
         ]}
         fields={[
           {
@@ -703,6 +780,15 @@ export function BreedingWorkspace() {
           },
           { name: "expected_calving_date", label: "Expected calving", type: "date" },
           { name: "actual_calving_date", label: "Actual calving", type: "date" },
+          {
+            name: "is_archived",
+            label: "Archived",
+            type: "select",
+            options: [
+              { value: "true", label: "Yes" },
+              { value: "false", label: "No" },
+            ],
+          },
           { name: "notes", label: "Notes", type: "textarea" },
         ]}
       />
@@ -754,6 +840,23 @@ export function HealthWorkspace() {
         title="Health records"
         description="Vaccinations, deworming, treatment, and checkups."
         path={apiRoutes.health.records}
+        updatePath={(row) => apiRoutes.health.record(String(row.health_id))}
+        lifecycle={{
+          includeQuery: "include_archived=true",
+          entityType: "health_records",
+          idKey: "health_id",
+          isInactive: (row) => row.is_archived === true,
+          restoreBody: () => ({ is_archived: false }),
+          restoreLabel: () => "Unarchive",
+        }}
+        deleteLabel="Archive"
+        onDelete={async (row) => {
+          if (!window.confirm("Archive this health record?")) return;
+          await apiRequest(apiRoutes.health.record(String(row.health_id)), {
+            method: "PATCH",
+            body: { is_archived: true },
+          });
+        }}
         columns={[
           { key: "record_date", label: "Date" },
           { key: "cow_tag_number", label: "Cow" },
@@ -762,6 +865,7 @@ export function HealthWorkspace() {
           { key: "cost", label: "Cost ৳" },
           { key: "next_due_date", label: "Next due" },
           { key: "details", label: "Details" },
+          { key: "is_archived", label: "Archived" },
         ]}
         onRows={setRecords}
         fields={[
@@ -790,6 +894,15 @@ export function HealthWorkspace() {
           { name: "vet_name", label: "Vet" },
           { name: "cost", label: "Cost ৳", type: "number" },
           { name: "next_due_date", label: "Next due", type: "date" },
+          {
+            name: "is_archived",
+            label: "Archived",
+            type: "select",
+            options: [
+              { value: "true", label: "Yes" },
+              { value: "false", label: "No" },
+            ],
+          },
           { name: "details", label: "Details", type: "textarea" },
         ]}
       />
@@ -866,6 +979,28 @@ export function ExpensesWorkspace() {
         title="Expenses"
         description="Filter and record farm and animal expenses."
         path={apiRoutes.feeding.expenses}
+        updatePath={(row) => apiRoutes.feeding.expense(String(row.expense_id))}
+        lifecycle={{
+          includeQuery: "include_archived=true&include_void=true",
+          entityType: "expenses",
+          idKey: "expense_id",
+          isInactive: (row) => row.is_archived === true || row.is_void === true,
+          restoreBody: (row) => row.is_archived === true ? { is_archived: false } : { is_void: false },
+          restoreLabel: (row) => row.is_archived === true ? "Unarchive" : "Unvoid",
+        }}
+        deleteLabel="Void"
+        onDelete={async (row) => {
+          const reason = window.prompt("Reason for voiding this expense:");
+          if (reason === null) return;
+          if (!reason.trim()) {
+            window.alert("A reason is required to void an expense.");
+            return;
+          }
+          await apiRequest(apiRoutes.feeding.expense(String(row.expense_id)), {
+            method: "PATCH",
+            body: { is_void: true, void_reason: reason.trim() },
+          });
+        }}
         query={query}
         onRows={setExpenses}
         columns={[
@@ -875,6 +1010,9 @@ export function ExpensesWorkspace() {
           { key: "cow_tag_number", label: "Cow" },
           { key: "amount", label: "Amount ৳" },
           { key: "description", label: "Description" },
+          { key: "is_archived", label: "Archived" },
+          { key: "is_void", label: "Voided" },
+          { key: "void_reason", label: "Void reason" },
         ]}
         fields={[
           {
@@ -903,6 +1041,15 @@ export function ExpensesWorkspace() {
           },
           { name: "expense_date", label: "Date", type: "date", required: true },
           { name: "amount", label: "Amount ৳", type: "number", required: true },
+          {
+            name: "is_archived",
+            label: "Archived",
+            type: "select",
+            options: [
+              { value: "true", label: "Yes" },
+              { value: "false", label: "No" },
+            ],
+          },
           { name: "description", label: "Description", type: "textarea" },
         ]}
       />
@@ -928,11 +1075,36 @@ export function MilkSalesWorkspace() {
           description="Record per-cow production sessions."
           addLabel="Add milk record"
           path={apiRoutes.sales.milk}
+          updatePath={(row) => apiRoutes.sales.milkRecord(String(row.milk_id))}
+          lifecycle={{
+            includeQuery: "include_archived=true&include_void=true",
+            entityType: "milk_productions",
+            idKey: "milk_id",
+            isInactive: (row) => row.is_archived === true || row.is_void === true,
+            restoreBody: (row) => row.is_archived === true ? { is_archived: false } : { is_void: false },
+            restoreLabel: (row) => row.is_archived === true ? "Unarchive" : "Unvoid",
+          }}
+          deleteLabel="Void"
+          onDelete={async (row) => {
+            const reason = window.prompt("Reason for voiding this milk record:");
+            if (reason === null) return;
+            if (!reason.trim()) {
+              window.alert("A reason is required to void a milk record.");
+              return;
+            }
+            await apiRequest(apiRoutes.sales.milkRecord(String(row.milk_id)), {
+              method: "PATCH",
+              body: { is_void: true, void_reason: reason.trim() },
+            });
+          }}
           columns={[
             { key: "production_date", label: "Date" },
             { key: "cow_tag_number", label: "Cow" },
             { key: "session", label: "Session" },
             { key: "liters", label: "Liters" },
+            { key: "is_archived", label: "Archived" },
+            { key: "is_void", label: "Voided" },
+            { key: "void_reason", label: "Void reason" },
           ]}
           fields={[
             {
@@ -966,6 +1138,15 @@ export function MilkSalesWorkspace() {
           title="Customers"
           description="Maintain customers and review their outstanding balance."
           path={apiRoutes.sales.customers}
+          updatePath={(row) => apiRoutes.sales.customer(String(row.customer_id))}
+          lifecycle={{
+            includeQuery: "include_archived=true",
+            entityType: "customers",
+            idKey: "customer_id",
+            isInactive: (row) => row.is_archived === true,
+            restoreBody: () => ({ is_archived: false }),
+            restoreLabel: () => "Unarchive",
+          }}
           columns={[
             { key: "name", label: "Customer" },
             { key: "phone", label: "Phone" },
@@ -997,6 +1178,28 @@ export function MilkSalesWorkspace() {
           title="Sales invoices"
           description="Create an invoice with one line item. Select an invoice to record payments or update its status."
           path={apiRoutes.sales.invoices}
+          updatePath={(row) => apiRoutes.sales.invoiceStatus(String(row.invoice_id))}
+          lifecycle={{
+            includeQuery: "include_void=true",
+            entityType: "sales_invoices",
+            idKey: "invoice_id",
+            isInactive: (row) => row.status === "void",
+            restoreBody: () => ({ status: "issued" }),
+            restoreLabel: () => "Reissue",
+          }}
+          deleteLabel="Void"
+          onDelete={async (row) => {
+            const reason = window.prompt("Reason for voiding this invoice:");
+            if (reason === null) return;
+            if (!reason.trim()) {
+              window.alert("A reason is required to void an invoice.");
+              return;
+            }
+            await apiRequest(apiRoutes.sales.invoiceStatus(String(row.invoice_id)), {
+              method: "PATCH",
+              body: { status: "void", void_reason: reason.trim() },
+            });
+          }}
           columns={[
             { key: "invoice_number", label: "Invoice" },
             { key: "customer_name", label: "Customer" },
@@ -1073,6 +1276,7 @@ export function PayrollWorkspace() {
           title="Workers"
           description="Add staff and keep their employment details current."
           path={apiRoutes.labor.workers}
+          updatePath={(row) => apiRoutes.labor.worker(String(row.worker_id))}
           columns={[
             { key: "name", label: "Name" },
             { key: "role", label: "Role" },
@@ -1108,6 +1312,28 @@ export function PayrollWorkspace() {
           description="Record a worker’s salary settlement for a month."
           addLabel="Add salary payment"
           path={apiRoutes.labor.salaries}
+          updatePath={(row) => apiRoutes.labor.salary(String(row.payment_id))}
+          lifecycle={{
+            includeQuery: "include_void=true",
+            entityType: "salary_payments",
+            idKey: "payment_id",
+            isInactive: (row) => row.is_void === true,
+            restoreBody: () => ({ is_void: false }),
+            restoreLabel: () => "Unvoid",
+          }}
+          deleteLabel="Void"
+          onDelete={async (row) => {
+            const reason = window.prompt("Reason for voiding this salary payment:");
+            if (reason === null) return;
+            if (!reason.trim()) {
+              window.alert("A reason is required to void a salary payment.");
+              return;
+            }
+            await apiRequest(apiRoutes.labor.salary(String(row.payment_id)), {
+              method: "PATCH",
+              body: { is_void: true, void_reason: reason.trim() },
+            });
+          }}
           columns={[
             { key: "worker_name", label: "Worker" },
             { key: "pay_month", label: "Pay month" },
@@ -1116,6 +1342,8 @@ export function PayrollWorkspace() {
             { key: "bonus", label: "Bonus ৳" },
             { key: "net_paid", label: "Net ৳" },
             { key: "paid_date", label: "Paid date" },
+            { key: "is_void", label: "Voided" },
+            { key: "void_reason", label: "Void reason" },
           ]}
           fields={[
             {
@@ -1151,12 +1379,37 @@ export function PayrollWorkspace() {
           description="Record one-day substitute costs and other mill charges."
           addLabel="Add charge"
           path={apiRoutes.labor.substitutes}
+          updatePath={(row) => apiRoutes.labor.substitute(String(row.mill_charge_id))}
+          lifecycle={{
+            includeQuery: "include_archived=true&include_void=true",
+            entityType: "mill_charges",
+            idKey: "mill_charge_id",
+            isInactive: (row) => row.is_archived === true || row.is_void === true,
+            restoreBody: (row) => row.is_archived === true ? { is_archived: false } : { is_void: false },
+            restoreLabel: (row) => row.is_archived === true ? "Unarchive" : "Unvoid",
+          }}
+          deleteLabel="Void"
+          onDelete={async (row) => {
+            const reason = window.prompt("Reason for voiding this charge:");
+            if (reason === null) return;
+            if (!reason.trim()) {
+              window.alert("A reason is required to void a charge.");
+              return;
+            }
+            await apiRequest(apiRoutes.labor.substitute(String(row.mill_charge_id)), {
+              method: "PATCH",
+              body: { is_void: true, void_reason: reason.trim() },
+            });
+          }}
           columns={[
             { key: "charge_date", label: "Date" },
             { key: "charge_type", label: "Type" },
             { key: "substitute_name", label: "Substitute" },
             { key: "amount", label: "Amount ৳" },
             { key: "description", label: "Description" },
+            { key: "is_archived", label: "Archived" },
+            { key: "is_void", label: "Voided" },
+            { key: "void_reason", label: "Void reason" },
           ]}
           fields={[
             { name: "charge_date", label: "Date", type: "date", required: true },
@@ -1191,8 +1444,9 @@ export function AttendanceWorkspace({
   const [date, setDate] = useState(initialDate ?? today());
   const [workers, setWorkers] = useState<Record<string, unknown>[]>([]);
   const [attendance, setAttendance] = useState<
-    Record<string, { present: boolean; note: string }>
+    Record<string, { present: boolean; note: string; attendanceId?: string; isArchived?: boolean; isSaved?: boolean }>
   >({});
+  const [showArchivedAttendance, setShowArchivedAttendance] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1213,7 +1467,10 @@ export function AttendanceWorkspace({
           apiQuery(apiRoutes.labor.workers, { status: "active" })
         ),
         apiRequest<Record<string, unknown>[]>(
-          apiQuery(apiRoutes.labor.attendance, { attendance_date: date })
+          apiQuery(apiRoutes.labor.attendance, {
+            attendance_date: date,
+            include_archived: showArchivedAttendance,
+          })
         ),
       ]);
       setWorkers(workerRows);
@@ -1227,6 +1484,9 @@ export function AttendanceWorkspace({
               {
                 present: existing ? Boolean(existing.is_present) : true,
                 note: String(existing?.note ?? ""),
+                attendanceId: existing?.created_at ? String(existing.attendance_id) : undefined,
+                isArchived: Boolean(existing?.is_archived),
+                isSaved: Boolean(existing?.created_at),
               },
             ];
           })
@@ -1237,7 +1497,7 @@ export function AttendanceWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [date, showArchivedAttendance]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1270,10 +1530,35 @@ export function AttendanceWorkspace({
     }
   }
 
+  async function setArchived(record: { attendanceId?: string }, archived: boolean) {
+    if (!record.attendanceId) return;
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(apiRoutes.labor.attendanceRecord(record.attendanceId), {
+        method: "PATCH",
+        body: { is_archived: archived },
+      });
+      setNotice(archived ? "Attendance archived." : "Attendance restored.");
+      await load();
+    } catch (cause) {
+      setError(messageFor(cause));
+    }
+  }
+
   const content = (
     <div className="space-y-3.5">
       {error && <Notice>{error}</Notice>}
       {notice && <Notice tone="success">{notice}</Notice>}
+
+      <label className="flex items-center gap-2 text-xs text-muted">
+        <input
+          type="checkbox"
+          checked={showArchivedAttendance}
+          onChange={(event) => setShowArchivedAttendance(event.target.checked)}
+        />
+        Show archived attendance
+      </label>
 
       <div className="rounded-[6px] border border-line bg-surface overflow-hidden">
         {loading ? (
@@ -1286,7 +1571,7 @@ export function AttendanceWorkspace({
           <div className="divide-y divide-line">
             {workers.map((worker) => {
               const id = String(worker.worker_id);
-              const value = attendance[id] ?? { present: true, note: "" };
+              const value = attendance[id] ?? { present: true, note: "", isArchived: false };
               const initial = String(worker.name ?? "W").slice(0, 1).toUpperCase();
               return (
                 <div
@@ -1316,6 +1601,7 @@ export function AttendanceWorkspace({
                           [id]: { ...value, present: next === "present" },
                         }))
                       }
+                      disabled={value.isArchived}
                       options={[
                         { value: "present", label: "Present", tone: "accent" },
                         { value: "absent", label: "Absent", tone: "warn" },
@@ -1334,6 +1620,18 @@ export function AttendanceWorkspace({
                         className={`${ui.input} !h-8 w-44 sm:w-56 text-[12px]`}
                       />
                     )}
+                    {value.isSaved && value.attendanceId ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void setArchived(value, !value.isArchived)}
+                          className="text-[11px] font-medium text-accent hover:underline"
+                        >
+                          {value.isArchived ? "Restore" : "Archive"}
+                        </button>
+                        <SafeDataHistory entityType="worker_attendances" entityId={value.attendanceId} />
+                      </>
+                    ) : null}
                   </div>
                 </div>
               );

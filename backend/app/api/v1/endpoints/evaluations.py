@@ -16,6 +16,7 @@ from app.schemas.evaluation import (
     EvaluationCalculationResult,
     MarketPriceCreate,
     MarketPriceRead,
+    MarketPriceUpdate,
     PurchaseEvaluationCreate,
     PurchaseEvaluationRead,
     PurchaseEvaluationUpdate,
@@ -25,6 +26,7 @@ from app.services.evaluation_service import (
     convert_evaluation_to_cow,
     create_purchase_evaluation,
 )
+from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 router = APIRouter()
 
@@ -32,10 +34,16 @@ router = APIRouter()
 # ---------------------- MARKET PRICES ----------------------
 @router.get("/market-prices", response_model=List[MarketPriceRead])
 async def list_market_prices(
+    include_archived: bool = False,
+    archived_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
     stmt = select(MarketPrice).order_by(MarketPrice.price_date.desc())
+    if archived_only:
+        stmt = stmt.where(MarketPrice.is_archived == True)
+    elif not include_archived:
+        stmt = stmt.where(MarketPrice.is_archived == False)
     return (await db.execute(stmt)).scalars().all()
 
 
@@ -53,6 +61,29 @@ async def create_market_price(
         updated_by=current_user.id,
     )
     db.add(mp)
+    await db.commit()
+    await db.refresh(mp)
+    return mp
+
+
+@router.patch("/market-prices/{market_price_id}", response_model=MarketPriceRead)
+async def update_market_price(
+    market_price_id: uuid.UUID,
+    data: MarketPriceUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    mp = await db.get(MarketPrice, market_price_id)
+    if not mp:
+        raise HTTPException(status_code=404, detail="Market price not found")
+
+    lifecycle_before = capture_lifecycle_state(mp)
+    update_dict = data.model_dump(exclude_unset=True)
+    for field, val in update_dict.items():
+        setattr(mp, field, val)
+    record_lifecycle_changes(db, mp, lifecycle_before, current_user.id, current_user.email)
+    mp.updated_by = current_user.id
+
     await db.commit()
     await db.refresh(mp)
     return mp
@@ -79,6 +110,8 @@ async def list_purchase_evaluations(
     decision: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    include_archived: bool = False,
+    archived_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
@@ -96,6 +129,10 @@ async def list_purchase_evaluations(
         stmt = stmt.where(PurchaseEvaluation.evaluation_date >= start_date)
     if end_date:
         stmt = stmt.where(PurchaseEvaluation.evaluation_date <= end_date)
+    if archived_only:
+        stmt = stmt.where(PurchaseEvaluation.is_archived == True)
+    elif not include_archived:
+        stmt = stmt.where(PurchaseEvaluation.is_archived == False)
 
     evaluations = (await db.execute(stmt)).scalars().all()
     results = []
@@ -118,6 +155,7 @@ async def list_purchase_evaluations(
             cow_id=ev.cow_id,
             cow_tag_number=ev.cow.current_tag_number if ev.cow else None,
             notes=ev.notes,
+            is_archived=ev.is_archived,
             created_at=ev.created_at,
             updated_at=ev.updated_at,
             created_by=ev.created_by,
@@ -154,6 +192,7 @@ async def add_purchase_evaluation(
         cow_id=ev.cow_id,
         cow_tag_number=None,
         notes=ev.notes,
+        is_archived=ev.is_archived,
         created_at=ev.created_at,
         updated_at=ev.updated_at,
         created_by=ev.created_by,
@@ -172,6 +211,7 @@ async def update_evaluation_decision(
     if not ev:
         raise HTTPException(status_code=404, detail="Purchase evaluation not found")
 
+    lifecycle_before = capture_lifecycle_state(ev)
     if ev.decision == "returned" and data.decision and data.decision != "returned":
         raise HTTPException(
             status_code=400,
@@ -182,6 +222,9 @@ async def update_evaluation_decision(
         ev.decision = data.decision
     if data.notes is not None:
         ev.notes = data.notes
+    if data.is_archived is not None:
+        ev.is_archived = data.is_archived
+    record_lifecycle_changes(db, ev, lifecycle_before, current_user.id, current_user.email)
     ev.updated_by = current_user.id
 
     await db.commit()
@@ -204,6 +247,7 @@ async def update_evaluation_decision(
         cow_id=ev.cow_id,
         cow_tag_number=None,
         notes=ev.notes,
+        is_archived=ev.is_archived,
         created_at=ev.created_at,
         updated_at=ev.updated_at,
         created_by=ev.created_by,

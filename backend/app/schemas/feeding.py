@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 import uuid
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import AuditBase
 
@@ -18,8 +18,16 @@ class ExpenseCategoryCreate(ExpenseCategoryBase):
     pass
 
 
+class ExpenseCategoryUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=100)
+    name_bn: Optional[str] = Field(None, max_length=100)
+    category_group: Optional[str] = Field(None, pattern="^(food|miscellaneous)$")
+    is_archived: Optional[bool] = None
+
+
 class ExpenseCategoryRead(ExpenseCategoryBase, AuditBase):
     category_id: uuid.UUID
+    is_archived: bool = False
 
 
 # FEED TYPE
@@ -64,6 +72,16 @@ class FeedingRecordCreate(FeedingRecordBase):
     pass
 
 
+class FeedingRecordUpdate(BaseModel):
+    feed_type_id: Optional[uuid.UUID] = None
+    cow_id: Optional[uuid.UUID] = None
+    feeding_date: Optional[date] = None
+    quantity: Optional[Decimal] = Field(None, gt=0, max_digits=10, decimal_places=2)
+    custom_unit_cost: Optional[Decimal] = Field(None, ge=0, max_digits=10, decimal_places=2)
+    notes: Optional[str] = None
+    is_archived: Optional[bool] = None
+
+
 class FeedingRecordRead(AuditBase):
     feeding_id: uuid.UUID
     feed_type_id: uuid.UUID
@@ -76,6 +94,7 @@ class FeedingRecordRead(AuditBase):
     quantity: Decimal
     cost: Decimal
     notes: Optional[str] = None
+    is_archived: bool = False
 
 
 # EXPENSE
@@ -99,6 +118,15 @@ class ExpenseUpdate(BaseModel):
     expense_date: Optional[date] = None
     amount: Optional[Decimal] = Field(None, gt=0, max_digits=12, decimal_places=2)
     description: Optional[str] = None
+    is_archived: Optional[bool] = None
+    is_void: Optional[bool] = None
+    void_reason: Optional[str] = None
+
+    @model_validator(mode="after")
+    def require_void_reason(self):
+        if self.is_void is True and not (self.void_reason or "").strip():
+            raise ValueError("A reason is required when voiding an expense.")
+        return self
 
 
 class ExpenseRead(ExpenseBase, AuditBase):
@@ -107,3 +135,6 @@ class ExpenseRead(ExpenseBase, AuditBase):
     category_name_bn: Optional[str] = None
     warehouse_name: Optional[str] = None
     cow_tag_number: Optional[str] = None
+    is_archived: bool = False
+    is_void: bool = False
+    void_reason: Optional[str] = None

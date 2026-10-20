@@ -5,7 +5,7 @@ from typing import List, Optional
 from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import AuditMixin, Base
+from app.core.database import ArchiveAuditMixin, AuditMixin, Base, VoidAuditMixin
 
 
 class Worker(Base, AuditMixin):
@@ -23,25 +23,26 @@ class Worker(Base, AuditMixin):
 
     # Relationships
     attendances: Mapped[List["WorkerAttendance"]] = relationship(
-        "WorkerAttendance", back_populates="worker", cascade="all, delete-orphan"
+        "WorkerAttendance", back_populates="worker", cascade="save-update, merge"
     )
     salary_payments: Mapped[List["SalaryPayment"]] = relationship(
-        "SalaryPayment", back_populates="worker", cascade="all, delete-orphan"
+        "SalaryPayment", back_populates="worker", cascade="save-update, merge"
     )
 
 
-class WorkerAttendance(Base, AuditMixin):
+class WorkerAttendance(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "worker_attendances"
 
     attendance_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     worker_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("workers.worker_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("workers.worker_id", ondelete="RESTRICT"), nullable=False
     )
     attendance_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     is_present: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("worker_id", "attendance_date", name="unique_worker_daily_attendance"),
@@ -51,14 +52,14 @@ class WorkerAttendance(Base, AuditMixin):
     worker: Mapped["Worker"] = relationship("Worker", back_populates="attendances")
 
 
-class SalaryPayment(Base, AuditMixin):
+class SalaryPayment(Base, AuditMixin, VoidAuditMixin):
     __tablename__ = "salary_payments"
 
     payment_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     worker_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("workers.worker_id", ondelete="CASCADE"), nullable=False
+        Uuid(as_uuid=True), ForeignKey("workers.worker_id", ondelete="RESTRICT"), nullable=False
     )
     pay_month: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     base_salary: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
@@ -67,12 +68,14 @@ class SalaryPayment(Base, AuditMixin):
     net_paid: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     paid_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="paid")  # 'paid' | 'pending' | 'cancelled'
+    is_void: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     worker: Mapped["Worker"] = relationship("Worker", back_populates="salary_payments")
 
 
-class MillCharge(Base, AuditMixin):
+class MillCharge(Base, AuditMixin, ArchiveAuditMixin, VoidAuditMixin):
     __tablename__ = "mill_charges"
 
     mill_charge_id: Mapped[uuid.UUID] = mapped_column(
@@ -85,3 +88,6 @@ class MillCharge(Base, AuditMixin):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     substitute_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_void: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

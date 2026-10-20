@@ -18,8 +18,16 @@ class MarketPriceCreate(MarketPriceBase):
     pass
 
 
+class MarketPriceUpdate(BaseModel):
+    price_date: Optional[date] = None
+    price_per_kg_net: Optional[Decimal] = Field(None, gt=0, max_digits=10, decimal_places=2)
+    source: Optional[str] = Field(None, max_length=100)
+    is_archived: Optional[bool] = None
+
+
 class MarketPriceRead(MarketPriceBase, AuditBase):
     market_price_id: uuid.UUID
+    is_archived: bool = False
 
 
 # CALCULATION PREVIEW
@@ -65,6 +73,7 @@ class PurchaseEvaluationCreate(PurchaseEvaluationBase):
 class PurchaseEvaluationUpdate(BaseModel):
     decision: Optional[str] = Field(None, pattern="^(bought|returned|pending)$")
     notes: Optional[str] = None
+    is_archived: Optional[bool] = None
 
 
 class PurchaseEvaluationRead(AuditBase):
@@ -85,6 +94,7 @@ class PurchaseEvaluationRead(AuditBase):
     cow_id: Optional[uuid.UUID] = None
     cow_tag_number: Optional[str] = None
     notes: Optional[str] = None
+    is_archived: bool = False
 
 
 class ConvertEvaluationToCow(BaseModel):
