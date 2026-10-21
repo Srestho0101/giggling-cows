@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, Numeric, String, Text, Uuid
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, JSON, Numeric, String, Text, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import ArchiveAuditMixin, AuditMixin, Base
@@ -48,6 +48,7 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     current_tag_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     sex: Mapped[str] = mapped_column(String(10), nullable=False)  # 'male' | 'female'
     category: Mapped[str] = mapped_column(String(50), nullable=False)  # dairy, bull, heifer, calf, ox
+    breed: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)  # deshi | friesian | other
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     acquisition_type: Mapped[str] = mapped_column(
         String(50), nullable=False
@@ -70,6 +71,8 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="active"
     )  # 'active' | 'sold' | 'deceased' | 'archived'
+    gives_milk: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    milking_sessions: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list, server_default=text("'[]'"))
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 

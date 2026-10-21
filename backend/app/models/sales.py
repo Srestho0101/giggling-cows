@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, Uuid, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import ArchiveAuditMixin, AuditMixin, Base, VoidAuditMixin
@@ -17,6 +17,9 @@ class MilkProduction(Base, AuditMixin, ArchiveAuditMixin, VoidAuditMixin):
     cow_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=False
     )
+    batch_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("milk_production_batches.batch_id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     production_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     session: Mapped[str] = mapped_column(String(20), nullable=False)  # 'morning' | 'noon' | 'evening'
     liters: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
@@ -26,6 +29,21 @@ class MilkProduction(Base, AuditMixin, ArchiveAuditMixin, VoidAuditMixin):
 
     # Relationships
     cow: Mapped["Cow"] = relationship("Cow")
+
+
+class MilkProductionBatch(Base, AuditMixin):
+    __tablename__ = "milk_production_batches"
+
+    batch_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    production_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    session: Mapped[str] = mapped_column(String(20), nullable=False)
+    total_liters: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("production_date", "session", name="unique_milk_production_batch_session"),
+    )
 
 
 class Customer(Base, AuditMixin, ArchiveAuditMixin):

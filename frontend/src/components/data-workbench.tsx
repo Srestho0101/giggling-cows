@@ -21,6 +21,7 @@ export type FormField = {
   sourceLabel?: string;
   step?: string;
   defaultValue?: string;
+  showWhen?: { field: string; equals: string[] };
 };
 
 export type TableColumn = { key: string; label: string };
@@ -117,6 +118,11 @@ export function DataWorkbench({
 
   const rows = useMemo(() => rowsQuery.data ?? [], [rowsQuery.data]);
   const loading = rowsQuery.isLoading;
+  const visibleFields = fields.filter(
+    (field) =>
+      !field.showWhen ||
+      field.showWhen.equals.includes(values[field.showWhen.field] ?? "")
+  );
 
   useEffect(() => {
     onRows?.(rows);
@@ -179,7 +185,7 @@ export function DataWorkbench({
       body = buildBody(values);
     } else {
       body = {};
-      for (const field of fields) {
+      for (const field of visibleFields) {
         const value = (values[field.name] ?? field.defaultValue ?? "").trim();
         if (!value) {
           if (field.required) {
@@ -313,7 +319,7 @@ export function DataWorkbench({
             {editing ? `Edit ${title.replace(/s$/, "")}` : `New ${title.replace(/s$/, "")}`}
           </h3>
           <div className="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-3">
-            {fields.map((field) => {
+            {visibleFields.map((field) => {
               const fieldOptions =
                 field.options ?? (field.sourcePath ? remoteOptions[field.sourcePath] ?? [] : []);
               return (
@@ -332,10 +338,15 @@ export function DataWorkbench({
                       required={field.required}
                       value={values[field.name] ?? field.defaultValue ?? ""}
                       onChange={(event) =>
-                        setValues((current) => ({
-                          ...current,
-                          [field.name]: event.target.value,
-                        }))
+                        setValues((current) => {
+                          const next = { ...current, [field.name]: event.target.value };
+                          if (field.name === "acquisition_type") {
+                            next.supplier_id = "";
+                            next.dam_id = "";
+                            next.sire_id = "";
+                          }
+                          return next;
+                        })
                       }
                       className={ui.select}
                     >
