@@ -1,7 +1,7 @@
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Literal, Optional
 import uuid
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -155,6 +155,8 @@ class CowUpdate(BaseModel):
 class CowRead(CowBase, AuditBase):
     cow_id: uuid.UUID
     is_archived: bool
+    gives_milk: bool = False
+    milking_sessions: List[Literal["morning", "noon", "evening"]] = Field(default_factory=list)
     warehouse_name: Optional[str] = None
     supplier_name: Optional[str] = None
     dam_tag: Optional[str] = None

@@ -1,20 +1,31 @@
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
+from typing import Annotated, List, Optional
 import uuid
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.common import AuditBase
 
 
 # WORKER
+Weekday = Annotated[int, Field(ge=0, le=6)]  # Monday=0, Sunday=6
+
+
 class WorkerBase(BaseModel):
     name: str = Field(..., max_length=150)
     phone: Optional[str] = Field(None, max_length=50)
     role: str = Field("caretaker", max_length=50)
     join_date: date
     monthly_salary: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)
+    weekly_holidays: List[Weekday] = Field(default_factory=list)
     status: str = Field("active", pattern="^(active|inactive)$")
+
+    @field_validator("weekly_holidays")
+    @classmethod
+    def unique_weekly_holidays(cls, days: List[int]) -> List[int]:
+        if len(days) != len(set(days)):
+            raise ValueError("Weekly holidays cannot contain duplicate days.")
+        return sorted(days)
 
 
 class WorkerCreate(WorkerBase):
@@ -27,11 +38,23 @@ class WorkerUpdate(BaseModel):
     role: Optional[str] = Field(None, max_length=50)
     join_date: Optional[date] = None
     monthly_salary: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    weekly_holidays: Optional[List[Weekday]] = None
+    is_archived: bool = False
     status: Optional[str] = Field(None, pattern="^(active|inactive)$")
+
+    @field_validator("weekly_holidays")
+    @classmethod
+    def unique_weekly_holidays(cls, days: Optional[List[int]]) -> Optional[List[int]]:
+        if days is None:
+            raise ValueError("Weekly holidays must be a list; send an empty list to clear them.")
+        if len(days) != len(set(days)):
+            raise ValueError("Weekly holidays cannot contain duplicate days.")
+        return sorted(days)
 
 
 class WorkerRead(WorkerBase, AuditBase):
     worker_id: uuid.UUID
+    is_archived: bool = False
 
 
 # ATTENDANCE
@@ -60,6 +83,7 @@ class WorkerAttendanceRead(AuditBase):
     is_present: bool
     note: Optional[str] = None
     is_archived: bool = False
+    is_holiday: bool = False
 
 
 # SALARY PAYMENT

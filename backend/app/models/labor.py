@@ -2,13 +2,13 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Boolean, Date, ForeignKey, Numeric, String, Text, UniqueConstraint, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import ArchiveAuditMixin, AuditMixin, Base, VoidAuditMixin
 
 
-class Worker(Base, AuditMixin):
+class Worker(Base, AuditMixin, ArchiveAuditMixin):
     __tablename__ = "workers"
 
     worker_id: Mapped[uuid.UUID] = mapped_column(
@@ -19,6 +19,10 @@ class Worker(Base, AuditMixin):
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="caretaker")
     join_date: Mapped[date] = mapped_column(Date, nullable=False)
     monthly_salary: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    weekly_holidays: Mapped[list[int]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")  # 'active' | 'inactive'
 
     # Relationships

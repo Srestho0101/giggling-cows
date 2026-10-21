@@ -1,9 +1,11 @@
+import calendar
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -33,13 +35,31 @@ router = APIRouter()
 @router.get("/workers", response_model=List[WorkerRead])
 async def list_workers(
     status: Optional[str] = None,
+    include_archived: bool = False,
+    archived_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
     stmt = select(Worker)
     if status:
         stmt = stmt.where(Worker.status == status)
+    if archived_only:
+        stmt = stmt.where(Worker.is_archived == True)
+    elif not include_archived:
+        stmt = stmt.where(Worker.is_archived == False)
     return (await db.execute(stmt)).scalars().all()
+
+
+@router.get("/workers/{worker_id}", response_model=WorkerRead)
+async def get_worker(
+    worker_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    worker = await db.get(Worker, worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    return worker
 
 
 @router.post("/workers", response_model=WorkerRead, status_code=status.HTTP_201_CREATED)
@@ -54,6 +74,7 @@ async def create_worker(
         role=data.role,
         join_date=data.join_date,
         monthly_salary=data.monthly_salary,
+        weekly_holidays=data.weekly_holidays,
         status=data.status,
         created_by=current_user.id,
         updated_by=current_user.id,
@@ -75,9 +96,11 @@ async def update_worker(
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
 
+    lifecycle_before = capture_lifecycle_state(worker)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(worker, field, val)
+    record_lifecycle_changes(db, worker, lifecycle_before, current_user.id, current_user.email)
     worker.updated_by = current_user.id
 
     await db.commit()
@@ -85,17 +108,96 @@ async def update_worker(
     return worker
 
 
+@router.delete("/workers/{worker_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_worker(
+    worker_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    worker = await db.get(Worker, worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    has_attendance = await db.execute(
+        select(WorkerAttendance.attendance_id)
+        .where(WorkerAttendance.worker_id == worker_id)
+        .limit(1)
+    )
+    has_salary_payments = await db.execute(
+        select(SalaryPayment.payment_id)
+        .where(SalaryPayment.worker_id == worker_id)
+        .limit(1)
+    )
+    if has_attendance.scalar_one_or_none() or has_salary_payments.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail="This worker has attendance or salary history and cannot be removed. Archive the worker to preserve those records.",
+        )
+
+    await db.delete(worker)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This worker is linked to other records and cannot be removed. Archive the worker to preserve those records.",
+        ) from exc
+
+
 # ---------------------- ATTENDANCE ----------------------
 @router.get("/attendance", response_model=List[WorkerAttendanceRead])
 async def get_daily_attendance(
     attendance_date: date = Query(default_factory=date.today),
+    month: Optional[date] = None,
+    worker_id: Optional[uuid.UUID] = None,
     include_archived: bool = False,
     archived_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
+    if month:
+        month_start = month.replace(day=1)
+        month_end = month.replace(day=calendar.monthrange(month.year, month.month)[1])
+        stmt = (
+            select(WorkerAttendance)
+            .where(
+                WorkerAttendance.attendance_date >= month_start,
+                WorkerAttendance.attendance_date <= month_end,
+            )
+            .order_by(WorkerAttendance.attendance_date.asc())
+        )
+        if worker_id:
+            stmt = stmt.where(WorkerAttendance.worker_id == worker_id)
+        if archived_only:
+            stmt = stmt.where(WorkerAttendance.is_archived == True)
+        elif not include_archived:
+            stmt = stmt.where(WorkerAttendance.is_archived == False)
+        records = (await db.execute(stmt)).scalars().all()
+        worker_ids = {record.worker_id for record in records}
+        workers = (await db.execute(select(Worker).where(Worker.worker_id.in_(worker_ids)))).scalars().all() if worker_ids else []
+        names = {worker.worker_id: worker.name for worker in workers}
+        holidays = {worker.worker_id: set(worker.weekly_holidays or []) for worker in workers}
+        return [
+            WorkerAttendanceRead(
+                attendance_id=record.attendance_id,
+                worker_id=record.worker_id,
+                worker_name=names.get(record.worker_id),
+                attendance_date=record.attendance_date,
+                is_present=record.is_present,
+                note=record.note,
+                is_archived=record.is_archived,
+                created_at=record.created_at,
+                updated_at=record.updated_at,
+                created_by=record.created_by,
+                updated_by=record.updated_by,
+            )
+            for record in records
+            if record.attendance_date.weekday() not in holidays.get(record.worker_id, set())
+        ]
+
     # Fetch active workers
-    workers_stmt = select(Worker).where(Worker.status == "active").order_by(Worker.name.asc())
+    workers_stmt = select(Worker).where(Worker.status == "active", Worker.is_archived == False).order_by(Worker.name.asc())
     active_workers = (await db.execute(workers_stmt)).scalars().all()
 
     # Fetch recorded attendance for this date
@@ -123,6 +225,7 @@ async def get_daily_attendance(
                     is_present=att.is_present,
                     note=att.note,
                     is_archived=att.is_archived,
+                    is_holiday=attendance_date.weekday() in (w.weekly_holidays or []),
                     created_at=att.created_at,
                     updated_at=att.updated_at,
                     created_by=att.created_by,
@@ -140,6 +243,7 @@ async def get_daily_attendance(
                     is_present=True,
                     note=None,
                     is_archived=False,
+                    is_holiday=attendance_date.weekday() in (w.weekly_holidays or []),
                 )
             )
     return res
@@ -156,6 +260,14 @@ async def update_attendance(
     if not att:
         raise HTTPException(status_code=404, detail="Attendance record not found")
 
+    worker = await db.get(Worker, att.worker_id)
+    if (
+        worker
+        and att.attendance_date.weekday() in (worker.weekly_holidays or [])
+        and (data.is_present is not None or data.note is not None)
+    ):
+        raise HTTPException(status_code=400, detail="Attendance cannot be changed on this worker's scheduled holiday.")
+
     lifecycle_before = capture_lifecycle_state(att)
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
@@ -166,7 +278,6 @@ async def update_attendance(
     await db.commit()
     await db.refresh(att)
 
-    worker = await db.get(Worker, att.worker_id)
     return WorkerAttendanceRead(
         attendance_id=att.attendance_id,
         worker_id=att.worker_id,
@@ -175,6 +286,7 @@ async def update_attendance(
         is_present=att.is_present,
         note=att.note,
         is_archived=att.is_archived,
+        is_holiday=bool(worker and att.attendance_date.weekday() in (worker.weekly_holidays or [])),
         created_at=att.created_at,
         updated_at=att.updated_at,
         created_by=att.created_by,
@@ -190,6 +302,13 @@ async def save_batch_attendance(
 ):
     results = []
     for item in data.records:
+        worker = await db.get(Worker, item.worker_id)
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        if worker.is_archived:
+            raise HTTPException(status_code=409, detail="Archived workers cannot receive attendance records.")
+        if data.attendance_date.weekday() in (worker.weekly_holidays or []):
+            continue
         stmt = select(WorkerAttendance).where(
             WorkerAttendance.worker_id == item.worker_id,
             WorkerAttendance.attendance_date == data.attendance_date,
@@ -289,16 +408,38 @@ async def create_salary_payment(
     worker = await db.get(Worker, data.worker_id)
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
+    if worker.is_archived:
+        raise HTTPException(status_code=409, detail="Archived workers cannot receive new salary payments.")
 
-    net_paid = data.base_salary - data.absence_deduction + data.bonus
+    month_start = data.pay_month.replace(day=1)
+    days_in_month = calendar.monthrange(data.pay_month.year, data.pay_month.month)[1]
+    month_end = data.pay_month.replace(day=days_in_month)
+    attendance_stmt = select(WorkerAttendance).where(
+        WorkerAttendance.worker_id == worker.worker_id,
+        WorkerAttendance.attendance_date >= month_start,
+        WorkerAttendance.attendance_date <= month_end,
+        WorkerAttendance.is_present == False,
+        WorkerAttendance.is_archived == False,
+    )
+    absences = (await db.execute(attendance_stmt)).scalars().all()
+    absent_days = sum(
+        1 for record in absences
+        if record.attendance_date.weekday() not in (worker.weekly_holidays or [])
+    )
+    absence_deduction = (
+        worker.monthly_salary * absent_days / days_in_month
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    base_salary = worker.monthly_salary
+    pay_month = month_start
+    net_paid = base_salary - absence_deduction + data.bonus
     if net_paid < Decimal("0.00"):
         raise HTTPException(status_code=400, detail="Net paid salary cannot be negative.")
 
     payment = SalaryPayment(
         worker_id=data.worker_id,
-        pay_month=data.pay_month,
-        base_salary=data.base_salary,
-        absence_deduction=data.absence_deduction,
+        pay_month=pay_month,
+        base_salary=base_salary,
+        absence_deduction=absence_deduction,
         bonus=data.bonus,
         net_paid=net_paid,
         paid_date=data.paid_date,

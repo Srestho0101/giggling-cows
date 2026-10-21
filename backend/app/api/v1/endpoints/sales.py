@@ -10,11 +10,15 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.core.database import get_db
 from app.core.security import AuthUser, UserRole, get_current_user, require_roles
 from app.models.herd import Cow
-from app.models.sales import Customer, MilkProduction, SalePayment, SalesInvoice, SalesInvoiceLine
+from app.models.sales import Customer, MilkProduction, MilkProductionBatch, SalePayment, SalesInvoice, SalesInvoiceLine
 from app.schemas.sales import (
     CustomerCreate,
     CustomerRead,
     CustomerUpdate,
+    MilkCowScheduleItem,
+    MilkCowSchedulesUpdate,
+    MilkProductionBatchCreate,
+    MilkProductionBatchRead,
     MilkProductionCreate,
     MilkProductionRead,
     MilkProductionUpdate,
@@ -130,6 +134,230 @@ async def update_customer(
 
 
 # ---------------------- MILK PRODUCTION ----------------------
+@router.put("/milk/cow-schedules", response_model=List[MilkCowScheduleItem])
+async def save_milk_cow_schedules(
+    data: MilkCowSchedulesUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER, UserRole.DATA_ENTRY])),
+):
+    cow_ids = [item.cow_id for item in data.records]
+    cows = (await db.execute(select(Cow).where(Cow.cow_id.in_(cow_ids)))).scalars().all() if cow_ids else []
+    cow_by_id = {cow.cow_id: cow for cow in cows}
+    missing = [str(cow_id) for cow_id in cow_ids if cow_id not in cow_by_id]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Cow(s) not found: {', '.join(missing)}")
+
+    for item in data.records:
+        cow = cow_by_id[item.cow_id]
+        cow.gives_milk = item.gives_milk
+        cow.milking_sessions = list(item.milking_sessions)
+        cow.updated_by = current_user.id
+
+    await db.commit()
+    return data.records
+
+
+@router.get("/milk/batches", response_model=List[MilkProductionBatchRead])
+async def list_milk_production_batches(
+    production_date: Optional[date] = None,
+    session: Optional[str] = Query(default=None, pattern="^(morning|noon|evening)$"),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    batch_stmt = select(MilkProductionBatch)
+    legacy_stmt = select(MilkProduction).where(
+        MilkProduction.batch_id.is_(None),
+        MilkProduction.is_archived == False,
+        MilkProduction.is_void == False,
+    )
+    if production_date:
+        batch_stmt = batch_stmt.where(MilkProductionBatch.production_date == production_date)
+        legacy_stmt = legacy_stmt.where(MilkProduction.production_date == production_date)
+    if start_date:
+        batch_stmt = batch_stmt.where(MilkProductionBatch.production_date >= start_date)
+        legacy_stmt = legacy_stmt.where(MilkProduction.production_date >= start_date)
+    if end_date:
+        batch_stmt = batch_stmt.where(MilkProductionBatch.production_date <= end_date)
+        legacy_stmt = legacy_stmt.where(MilkProduction.production_date <= end_date)
+    if session:
+        batch_stmt = batch_stmt.where(MilkProductionBatch.session == session)
+        legacy_stmt = legacy_stmt.where(MilkProduction.session == session)
+
+    batches = (await db.execute(batch_stmt.order_by(MilkProductionBatch.production_date.desc()))).scalars().all()
+    rows_by_batch: dict[uuid.UUID, list[MilkProduction]] = {}
+    if batches:
+        batch_rows = (await db.execute(
+            select(MilkProduction).where(
+                MilkProduction.batch_id.in_([batch.batch_id for batch in batches]),
+                MilkProduction.is_archived == False,
+                MilkProduction.is_void == False,
+            )
+        )).scalars().all()
+        for row in batch_rows:
+            rows_by_batch.setdefault(row.batch_id, []).append(row)
+
+    # Keep older per-cow records visible as session totals until a session is first saved
+    # through the new batch recorder.
+    legacy_groups: dict[tuple[date, str], tuple[Decimal, list[uuid.UUID]]] = {}
+    legacy_rows = (await db.execute(legacy_stmt.order_by(MilkProduction.production_date.desc()))).scalars().all()
+    for row in legacy_rows:
+        key = (row.production_date, row.session)
+        total, cow_ids = legacy_groups.get(key, (Decimal("0.00"), []))
+        legacy_groups[key] = (total + row.liters, [*cow_ids, row.cow_id])
+
+    result = []
+    for batch in batches:
+        legacy_total, legacy_cow_ids = legacy_groups.pop(
+            (batch.production_date, batch.session),
+            (Decimal("0.00"), []),
+        )
+        batch_cow_ids = [row.cow_id for row in rows_by_batch.get(batch.batch_id, [])]
+        cow_ids = list(dict.fromkeys([*batch_cow_ids, *legacy_cow_ids]))
+        result.append(
+            MilkProductionBatchRead(
+                batch_id=batch.batch_id,
+                production_date=batch.production_date,
+                session=batch.session,
+                total_liters=batch.total_liters + legacy_total,
+                cow_ids=cow_ids,
+                cow_count=len(cow_ids),
+            )
+        )
+
+    result.extend(
+        MilkProductionBatchRead(
+            batch_id=None,
+            production_date=record_date,
+            session=record_session,
+            total_liters=total_liters,
+            cow_ids=list(dict.fromkeys(cow_ids)),
+            cow_count=len(set(cow_ids)),
+        )
+        for (record_date, record_session), (total_liters, cow_ids) in legacy_groups.items()
+    )
+    result.sort(key=lambda batch: (batch.production_date, {"morning": 0, "noon": 1, "evening": 2}[batch.session]), reverse=True)
+    return result
+
+
+@router.post("/milk/batches", response_model=MilkProductionBatchRead)
+async def save_milk_production_batch(
+    data: MilkProductionBatchCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER, UserRole.DATA_ENTRY])),
+):
+    selected_cows = (await db.execute(select(Cow).where(Cow.cow_id.in_(data.cow_ids)))).scalars().all() if data.cow_ids else []
+    cow_by_id = {cow.cow_id: cow for cow in selected_cows}
+    if len(cow_by_id) != len(data.cow_ids):
+        raise HTTPException(status_code=404, detail="One or more selected cows were not found.")
+    unavailable = [
+        cow.current_tag_number
+        for cow in selected_cows
+        if cow.is_archived or cow.status != "active" or not cow.gives_milk or data.session not in (cow.milking_sessions or [])
+    ]
+    if unavailable:
+        raise HTTPException(
+            status_code=400,
+            detail=f"These cows are not scheduled for the {data.session} session: {', '.join(unavailable)}",
+        )
+
+    batch = (await db.execute(select(MilkProductionBatch).where(
+        MilkProductionBatch.production_date == data.production_date,
+        MilkProductionBatch.session == data.session,
+    ))).scalar_one_or_none()
+    if batch is None:
+        batch = MilkProductionBatch(
+            production_date=data.production_date,
+            session=data.session,
+            total_liters=data.total_liters,
+            created_by=current_user.id,
+            updated_by=current_user.id,
+        )
+        db.add(batch)
+        await db.flush()
+    else:
+        batch.total_liters = data.total_liters
+        batch.updated_by = current_user.id
+
+    record_stmt = select(MilkProduction).where(
+        MilkProduction.production_date == data.production_date,
+        MilkProduction.session == data.session,
+        MilkProduction.is_archived == False,
+        (MilkProduction.batch_id == batch.batch_id) | MilkProduction.batch_id.is_(None),
+    )
+    existing_records = (await db.execute(record_stmt.order_by(MilkProduction.created_at.asc()))).scalars().all()
+    available_by_cow: dict[uuid.UUID, MilkProduction] = {}
+    for record in existing_records:
+        if not record.is_archived:
+            # Prefer an existing active row when older history has duplicate cow/session rows.
+            previous = available_by_cow.get(record.cow_id)
+            if previous is None or (previous.is_void and not record.is_void):
+                available_by_cow[record.cow_id] = record
+        record.batch_id = batch.batch_id
+
+    selected_ids = set(data.cow_ids)
+    used_record_ids: set[uuid.UUID] = set()
+    total_cents = int(data.total_liters * 100)
+    base_cents, extra_cents = divmod(total_cents, len(data.cow_ids)) if data.cow_ids else (0, 0)
+    allocations = {
+        cow_id: Decimal(base_cents + (1 if index < extra_cents else 0)) / Decimal("100")
+        for index, cow_id in enumerate(data.cow_ids)
+    }
+
+    for cow_id, liters in allocations.items():
+        record = available_by_cow.get(cow_id)
+        if record is None:
+            record = MilkProduction(
+                cow_id=cow_id,
+                batch_id=batch.batch_id,
+                production_date=data.production_date,
+                session=data.session,
+                liters=liters,
+                created_by=current_user.id,
+                updated_by=current_user.id,
+            )
+            db.add(record)
+            continue
+
+        used_record_ids.add(record.milk_id)
+        before = capture_lifecycle_state(record)
+        record.liters = liters
+        record.production_date = data.production_date
+        record.session = data.session
+        record.is_void = False
+        record.void_reason = None
+        record.updated_by = current_user.id
+        record_lifecycle_changes(db, record, before, current_user.id, current_user.email)
+
+    for record in existing_records:
+        if (
+            (record.cow_id not in selected_ids or record.milk_id not in used_record_ids)
+            and not record.is_archived
+            and not record.is_void
+        ):
+            before = capture_lifecycle_state(record)
+            record.is_void = True
+            record.void_reason = "Not milked in the saved session batch."
+            record.updated_by = current_user.id
+            record_lifecycle_changes(db, record, before, current_user.id, current_user.email)
+
+    await db.commit()
+    saved_rows = (await db.execute(select(MilkProduction).where(
+        MilkProduction.batch_id == batch.batch_id,
+        MilkProduction.is_archived == False,
+        MilkProduction.is_void == False,
+    ))).scalars().all()
+    return MilkProductionBatchRead(
+        batch_id=batch.batch_id,
+        production_date=batch.production_date,
+        session=batch.session,
+        total_liters=batch.total_liters,
+        cow_ids=[row.cow_id for row in saved_rows],
+        cow_count=len(saved_rows),
+    )
+
+
 @router.get("/milk", response_model=List[MilkProductionRead])
 async def list_milk_production(
     cow_id: Optional[uuid.UUID] = None,

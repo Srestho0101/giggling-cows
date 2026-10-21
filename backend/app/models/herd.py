@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, Numeric, String, Text, Uuid
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, JSON, Numeric, String, Text, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import ArchiveAuditMixin, AuditMixin, Base
@@ -71,6 +71,8 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="active"
     )  # 'active' | 'sold' | 'deceased' | 'archived'
+    gives_milk: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    milking_sessions: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list, server_default=text("'[]'"))
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 

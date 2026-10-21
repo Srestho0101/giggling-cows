@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Literal, Optional
 import uuid
 from pydantic import BaseModel, Field, model_validator
 
@@ -41,6 +41,62 @@ class MilkProductionRead(MilkProductionBase, AuditBase):
     is_archived: bool = False
     is_void: bool = False
     void_reason: Optional[str] = None
+
+
+MilkSession = Literal["morning", "noon", "evening"]
+
+
+class MilkCowScheduleItem(BaseModel):
+    cow_id: uuid.UUID
+    gives_milk: bool
+    milking_sessions: List[MilkSession] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_schedule(self):
+        if len(self.milking_sessions) != len(set(self.milking_sessions)):
+            raise ValueError("A milking session can only be selected once.")
+        if self.gives_milk != bool(self.milking_sessions):
+            raise ValueError("Select at least one session for a cow that gives milk, or mark her as not milking.")
+        return self
+
+
+class MilkCowSchedulesUpdate(BaseModel):
+    records: List[MilkCowScheduleItem]
+
+    @model_validator(mode="after")
+    def validate_unique_cows(self):
+        cow_ids = [record.cow_id for record in self.records]
+        if len(cow_ids) != len(set(cow_ids)):
+            raise ValueError("A cow can only appear once in the milking roster update.")
+        return self
+
+
+class MilkProductionBatchCreate(BaseModel):
+    production_date: date
+    session: MilkSession
+    total_liters: Decimal = Field(..., ge=0, max_digits=8, decimal_places=2)
+    cow_ids: List[uuid.UUID]
+
+    @model_validator(mode="after")
+    def validate_batch(self):
+        if len(self.cow_ids) != len(set(self.cow_ids)):
+            raise ValueError("A cow can only be selected once in a session.")
+        if self.cow_ids and self.total_liters <= 0:
+            raise ValueError("Enter a positive total when one or more cows are selected.")
+        if not self.cow_ids and self.total_liters != 0:
+            raise ValueError("Set the session total to 0 when no cows are selected.")
+        if self.total_liters * 100 < len(self.cow_ids):
+            raise ValueError("There must be at least 0.01 liters for each selected cow.")
+        return self
+
+
+class MilkProductionBatchRead(BaseModel):
+    batch_id: Optional[uuid.UUID] = None
+    production_date: date
+    session: MilkSession
+    total_liters: Decimal
+    cow_ids: List[uuid.UUID]
+    cow_count: int
 
 
 # CUSTOMER
