@@ -1,3 +1,4 @@
+from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional
@@ -108,6 +109,7 @@ class CowBase(BaseModel):
     current_tag_number: str = Field(..., max_length=50)
     sex: str = Field(..., pattern="^(male|female)$")
     category: str = Field(..., max_length=50)  # dairy, bull, heifer, calf, ox
+    breed: Optional[str] = Field(None, pattern="^(deshi|friesian|other)$")
     birth_date: Optional[date] = None
     acquisition_type: str = Field(..., pattern="^(born_on_farm|bought_from_supplier|bought_from_bazar)$")
     acquisition_date: date
@@ -136,6 +138,7 @@ class CowUpdate(BaseModel):
     current_tag_number: Optional[str] = Field(None, max_length=50)
     sex: Optional[str] = Field(None, pattern="^(male|female)$")
     category: Optional[str] = Field(None, max_length=50)
+    breed: Optional[str] = Field(None, pattern="^(deshi|friesian|other)$")
     birth_date: Optional[date] = None
     acquisition_type: Optional[str] = Field(None, pattern="^(born_on_farm|bought_from_supplier|bought_from_bazar)$")
     acquisition_date: Optional[date] = None
@@ -156,7 +159,55 @@ class CowRead(CowBase, AuditBase):
     supplier_name: Optional[str] = None
     dam_tag: Optional[str] = None
     sire_tag: Optional[str] = None
+    age: Optional[str] = None
+    age_group: Optional[str] = None
     latest_weight_kg: Optional[Decimal] = None
+
+    @model_validator(mode="after")
+    def calculate_age(self) -> "CowRead":
+        category = self.category.strip().casefold()
+        if "dairy" in category or "milk" in category:
+            self.age = None
+            self.age_group = None
+            return self
+
+        if self.birth_date is None or self.birth_date > date.today():
+            self.age = None
+            self.age_group = None
+            return self
+
+        today = date.today()
+        months = (today.year - self.birth_date.year) * 12 + today.month - self.birth_date.month
+        if today.day < self.birth_date.day:
+            months -= 1
+        months = max(months, 0)
+        years, remaining_months = divmod(months, 12)
+        age_parts = []
+        if years:
+            age_parts.append(f"{years} {'year' if years == 1 else 'years'}")
+        if remaining_months or not years:
+            age_parts.append(f"{remaining_months} {'month' if remaining_months == 1 else 'months'}")
+        self.age = ", ".join(age_parts)
+        if today < _add_months(self.birth_date, 4):
+            if self.breed == "deshi":
+                self.age_group = "Deshi Calf"
+            elif self.breed == "friesian":
+                self.age_group = "Friesian Calf"
+            else:
+                self.age_group = "Calf"
+        elif today <= _add_months(self.birth_date, 10):
+            self.age_group = "Medium"
+        else:
+            self.age_group = "Adult"
+        return self
+
+
+def _add_months(value: date, months: int) -> date:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, monthrange(year, month)[1])
+    return date(year, month, day)
 
 
 class CowDetailRead(CowRead):

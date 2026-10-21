@@ -48,6 +48,7 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     current_tag_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     sex: Mapped[str] = mapped_column(String(10), nullable=False)  # 'male' | 'female'
     category: Mapped[str] = mapped_column(String(50), nullable=False)  # dairy, bull, heifer, calf, ox
+    breed: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)  # deshi | friesian | other
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     acquisition_type: Mapped[str] = mapped_column(
         String(50), nullable=False

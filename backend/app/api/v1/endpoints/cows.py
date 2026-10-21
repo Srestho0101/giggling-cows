@@ -311,6 +311,7 @@ async def create_cow(
         current_tag_number=data.current_tag_number,
         sex=data.sex,
         category=data.category,
+        breed=data.breed,
         birth_date=data.birth_date,
         acquisition_type=data.acquisition_type,
         acquisition_date=data.acquisition_date,
