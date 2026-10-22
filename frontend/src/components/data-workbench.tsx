@@ -12,8 +12,9 @@ export { Notice } from "@/components/ui";
 export type FormField = {
   name: string;
   label: string;
-  type?: "text" | "date" | "number" | "select" | "textarea";
+  type?: "text" | "date" | "number" | "select" | "textarea" | "weekdays";
   required?: boolean;
+  requiredOnCreate?: boolean;
   placeholder?: string;
   options?: { value: string; label: string }[];
   sourcePath?: string;
@@ -31,6 +32,8 @@ type LifecycleActions = {
   entityType: string;
   idKey: string;
   isInactive: (row: RecordRow) => boolean;
+  archiveBody?: (row: RecordRow) => Record<string, unknown>;
+  archiveLabel?: string;
   restoreBody: (row: RecordRow) => Record<string, unknown>;
   restoreLabel?: (row: RecordRow) => string;
 };
@@ -54,10 +57,21 @@ type DataWorkbenchProps = {
   deleteLabel?: string;
   onDelete?: (row: RecordRow) => void | Promise<void>;
   lifecycle?: LifecycleActions;
+  refreshKey?: string | number;
 };
 
 const isNumericKey = (key: string) =>
   /(amount|price|cost|salary|paid|balance|total|liters|weight|quantity|kg)$/i.test(key);
+
+const weekdays = [
+  { value: "0", label: "Monday" },
+  { value: "1", label: "Tuesday" },
+  { value: "2", label: "Wednesday" },
+  { value: "3", label: "Thursday" },
+  { value: "4", label: "Friday" },
+  { value: "5", label: "Saturday" },
+  { value: "6", label: "Sunday" },
+];
 
 export function DataWorkbench({
   title,
@@ -78,6 +92,7 @@ export function DataWorkbench({
   deleteLabel,
   onDelete,
   lifecycle,
+  refreshKey = 0,
 }: DataWorkbenchProps) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [remoteOptions, setRemoteOptions] = useState<
@@ -104,7 +119,7 @@ export function DataWorkbench({
   );
 
   const effectiveQuery = [query, showInactive ? lifecycle?.includeQuery : ""].filter(Boolean).join("&");
-  const queryKey = useMemo(() => ["data-workbench", path, effectiveQuery] as const, [path, effectiveQuery]);
+  const queryKey = useMemo(() => ["data-workbench", path, effectiveQuery, refreshKey] as const, [path, effectiveQuery, refreshKey]);
   const rowsQuery = useQuery({
     queryKey,
     queryFn: async () => {
@@ -187,8 +202,12 @@ export function DataWorkbench({
       body = {};
       for (const field of visibleFields) {
         const value = (values[field.name] ?? field.defaultValue ?? "").trim();
+        if (field.type === "weekdays") {
+          body[field.name] = value ? value.split(",").filter(Boolean).map(Number) : [];
+          continue;
+        }
         if (!value) {
-          if (field.required) {
+          if (field.required || (field.requiredOnCreate && !editing)) {
             setError(`${field.label} is required.`);
             setSaving(false);
             return;
@@ -236,9 +255,24 @@ export function DataWorkbench({
         return;
       }
       if (deletePath) {
+        if (!window.confirm(`Permanently remove this ${title.replace(/s$/, "").toLowerCase()}?`)) return;
         await apiRequest(deletePath(row), { method: "DELETE" });
         await loadRows();
       }
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  }
+
+  async function archiveRow(row: RecordRow) {
+    if (!lifecycle?.archiveBody || !updatePath) return;
+    if (!window.confirm(`Archive this ${title.replace(/s$/, "").toLowerCase()}?`)) return;
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(updatePath(row), { method: "PATCH", body: lifecycle.archiveBody(row) });
+      setNotice("Record archived.");
+      await loadRows();
     } catch (cause) {
       setError(errorText(cause));
     }
@@ -322,6 +356,35 @@ export function DataWorkbench({
             {visibleFields.map((field) => {
               const fieldOptions =
                 field.options ?? (field.sourcePath ? remoteOptions[field.sourcePath] ?? [] : []);
+              const required = field.required || (field.requiredOnCreate && !editing);
+              if (field.type === "weekdays") {
+                const selectedDays = (values[field.name] ?? field.defaultValue ?? "")
+                  .split(",")
+                  .filter(Boolean);
+                return (
+                  <fieldset key={field.name} className="text-[12px] font-medium text-ink @lg:col-span-2 @3xl:col-span-3">
+                    <legend className="mb-2">{field.label}</legend>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+                      {weekdays.map((day) => (
+                        <label key={day.value} className="flex items-center gap-2 rounded-[5px] border border-line bg-surface px-2.5 py-2 font-normal">
+                          <input
+                            type="checkbox"
+                            checked={selectedDays.includes(day.value)}
+                            onChange={(event) => setValues((current) => {
+                              const selected = new Set((current[field.name] ?? "").split(",").filter(Boolean));
+                              if (event.target.checked) selected.add(day.value);
+                              else selected.delete(day.value);
+                              return { ...current, [field.name]: [...selected].sort((a, b) => Number(a) - Number(b)).join(",") };
+                            })}
+                          />
+                          {day.label}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-[11px] font-normal text-muted">Choose this worker’s regular weekly holidays. Holiday dates are excluded from attendance and salary deductions.</p>
+                  </fieldset>
+                );
+              }
               return (
                 <label
                   key={field.name}
@@ -331,11 +394,11 @@ export function DataWorkbench({
                 >
                   <span className="block mb-1">
                     {field.label}
-                    {field.required && <span className="ml-1 text-warn">*</span>}
+                    {required && <span className="ml-1 text-warn">*</span>}
                   </span>
                   {field.type === "select" ? (
                     <select
-                      required={field.required}
+                      required={required}
                       value={values[field.name] ?? field.defaultValue ?? ""}
                       onChange={(event) =>
                         setValues((current) => {
@@ -360,7 +423,7 @@ export function DataWorkbench({
                   ) : field.type === "textarea" ? (
                     <textarea
                       rows={3}
-                      required={field.required}
+                      required={required}
                       placeholder={field.placeholder}
                       value={values[field.name] ?? field.defaultValue ?? ""}
                       onChange={(event) =>
@@ -376,7 +439,7 @@ export function DataWorkbench({
                       type={field.type ?? "text"}
                       min={field.type === "number" ? "0" : undefined}
                       step={field.step ?? (field.type === "number" ? "0.01" : undefined)}
-                      required={field.required}
+                      required={required}
                       placeholder={field.placeholder}
                       value={values[field.name] ?? field.defaultValue ?? ""}
                       onChange={(event) =>
@@ -534,6 +597,15 @@ export function DataWorkbench({
                               {lifecycle.restoreLabel?.(row) ?? "Restore"}
                             </button>
                           ) : null}
+                          {lifecycle && lifecycle.archiveBody && !lifecycle.isInactive(row) && updatePath ? (
+                            <button
+                              type="button"
+                              onClick={() => void archiveRow(row)}
+                              className="font-medium text-muted hover:underline cursor-pointer"
+                            >
+                              {lifecycle.archiveLabel ?? "Archive"}
+                            </button>
+                          ) : null}
                           {updatePath && (
                             <button
                               type="button"
@@ -543,7 +615,7 @@ export function DataWorkbench({
                               Edit
                             </button>
                           )}
-                          {(deletePath || onDelete) && !(lifecycle?.isInactive(row)) && (
+                          {(deletePath || (onDelete && !(lifecycle?.isInactive(row)))) && (
                             <button
                               type="button"
                               onClick={() => void handleDelete(row)}
@@ -582,7 +654,13 @@ function errorText(cause: unknown) {
 function formatCell(value: unknown, key: string) {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (key === "weekly_holidays" && Array.isArray(value)) {
+    return value.length ? value.map((day) => weekdays[Number(day)]?.label ?? String(day)).join(", ") : "None";
+  }
   if (typeof value === "object") return Array.isArray(value) ? `${value.length} items` : "—";
+  if (key === "breed") {
+    return ({ deshi: "Deshi", friesian: "Friesian", other: "Other / unknown" } as Record<string, string>)[String(value)] ?? String(value);
+  }
   if (isNumericKey(key) && !Number.isNaN(Number(value))) {
     return new Intl.NumberFormat("en-BD", { maximumFractionDigits: 2 }).format(Number(value));
   }

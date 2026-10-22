@@ -6,12 +6,16 @@ import { SafeDataHistory } from "@/components/safe-data-history";
 import { Icon } from "@/components/icons";
 import { Badge, btn, Segmented, Tabs, ui } from "@/components/ui";
 import { apiRequest, apiRoutes, apiQuery } from "@/lib/api";
+import { MilkRecordsWorkspace } from "@/components/milk-records-workspace";
 
 const cowColumns: TableColumn[] = [
   { key: "current_tag_number", label: "Tag" },
   { key: "category", label: "Category" },
+  { key: "breed", label: "Breed" },
   { key: "sex", label: "Sex" },
   { key: "birth_date", label: "Birth date" },
+  { key: "age", label: "Age" },
+  { key: "age_group", label: "Age group" },
   { key: "dam_tag", label: "Dam" },
   { key: "sire_tag", label: "Sire" },
   { key: "warehouse_name", label: "Warehouse" },
@@ -32,6 +36,17 @@ const cowFields: FormField[] = [
     ],
   },
   { name: "category", label: "Category", required: true, placeholder: "Milking cow, heifer…" },
+  {
+    name: "breed",
+    label: "Breed / calf type",
+    type: "select",
+    requiredOnCreate: true,
+    options: [
+      { value: "deshi", label: "Deshi" },
+      { value: "friesian", label: "Friesian" },
+      { value: "other", label: "Other / unknown" },
+    ],
+  },
   { name: "birth_date", label: "Birth date", type: "date" },
   {
     name: "acquisition_type",
@@ -434,6 +449,10 @@ export function PurchasesWorkspace() {
                   <p>Net weight = live weight × growth potential</p>
                   <p className="mt-1 font-medium text-ink tabular-nums">
                     {Number(liveWeight).toFixed(2)} kg × {Number(growthPercent).toFixed(2)}% = {Number(preview.est_net_weight_kg).toFixed(2)} kg
+                  </p>
+                  <p className="mt-2">Cow price per kg = cow price ÷ cow total weight</p>
+                  <p className="mt-1 font-medium text-ink tabular-nums">
+                    {money(offered)} ÷ {Number(liveWeight).toFixed(2)} kg = {money(Number(offered) / Number(liveWeight))}/kg
                   </p>
                   <p className="mt-2">Meat price = cow price ÷ net weight</p>
                   <p className="mt-1 font-medium text-ink tabular-nums">
@@ -1095,67 +1114,7 @@ export function MilkSalesWorkspace() {
       <Tabs items={tabs} active={tab} onChange={setTab} />
 
       {tab === "milk" && (
-        <DataWorkbench
-          title="Milk production"
-          description="Record per-cow production sessions."
-          addLabel="Add milk record"
-          path={apiRoutes.sales.milk}
-          updatePath={(row) => apiRoutes.sales.milkRecord(String(row.milk_id))}
-          lifecycle={{
-            includeQuery: "include_archived=true&include_void=true",
-            entityType: "milk_productions",
-            idKey: "milk_id",
-            isInactive: (row) => row.is_archived === true || row.is_void === true,
-            restoreBody: (row) => row.is_archived === true ? { is_archived: false } : { is_void: false },
-            restoreLabel: (row) => row.is_archived === true ? "Unarchive" : "Unvoid",
-          }}
-          deleteLabel="Void"
-          onDelete={async (row) => {
-            const reason = window.prompt("Reason for voiding this milk record:");
-            if (reason === null) return;
-            if (!reason.trim()) {
-              window.alert("A reason is required to void a milk record.");
-              return;
-            }
-            await apiRequest(apiRoutes.sales.milkRecord(String(row.milk_id)), {
-              method: "PATCH",
-              body: { is_void: true, void_reason: reason.trim() },
-            });
-          }}
-          columns={[
-            { key: "production_date", label: "Date" },
-            { key: "cow_tag_number", label: "Cow" },
-            { key: "session", label: "Session" },
-            { key: "liters", label: "Liters" },
-            { key: "is_archived", label: "Archived" },
-            { key: "is_void", label: "Voided" },
-            { key: "void_reason", label: "Void reason" },
-          ]}
-          fields={[
-            {
-              name: "cow_id",
-              label: "Cow",
-              type: "select",
-              sourcePath: apiRoutes.herd.cows,
-              sourceValue: "cow_id",
-              sourceLabel: "current_tag_number",
-              required: true,
-            },
-            { name: "production_date", label: "Date", type: "date", required: true },
-            {
-              name: "session",
-              label: "Session",
-              type: "select",
-              required: true,
-              options: [
-                { value: "morning", label: "Morning" },
-                { value: "noon", label: "Noon" },
-                { value: "evening", label: "Evening" },
-              ],
-            },
-            { name: "liters", label: "Liters", type: "number", required: true },
-          ]}
-        />
+        <MilkRecordsWorkspace />
       )}
 
       {tab === "customers" && (
@@ -1283,8 +1242,191 @@ export function MilkSalesWorkspace() {
   );
 }
 
+type PayrollWorker = { worker_id: string; name: string; monthly_salary: number | string; weekly_holidays?: number[] };
+type PayrollAttendance = { is_present: boolean; is_archived: boolean };
+const WEEKDAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function weekdayIndex(date: string) {
+  return (new Date(`${date}T00:00:00`).getDay() + 6) % 7;
+}
+
+function workerHasHoliday(worker: Record<string, unknown>, date: string) {
+  const holidays = Array.isArray(worker.weekly_holidays) ? worker.weekly_holidays : [];
+  return holidays.some((day) => Number(day) === weekdayIndex(date));
+}
+
+function localDateString() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+}
+
+function monthString(date: string) {
+  return date.slice(0, 7);
+}
+
+function SalaryPaymentEntry({ onSaved }: { onSaved: () => void }) {
+  const [workers, setWorkers] = useState<PayrollWorker[]>([]);
+  const [workerId, setWorkerId] = useState("");
+  const [payMonth, setPayMonth] = useState(monthString(localDateString()));
+  const [paidDate, setPaidDate] = useState(localDateString());
+  const [bonus, setBonus] = useState("");
+  const [status, setStatus] = useState("paid");
+  const [absentDays, setAbsentDays] = useState(0);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest<PayrollWorker[]>(apiRoutes.labor.workers)
+      .then((rows) => { if (!cancelled) setWorkers(rows); })
+      .catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Could not load workers."); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!workerId || !payMonth) {
+      setAbsentDays(0);
+      setAttendanceLoading(false);
+      setAttendanceError(false);
+      return;
+    }
+    let cancelled = false;
+    setAttendanceLoading(true);
+    setAttendanceError(false);
+    setAbsentDays(0);
+    apiRequest<PayrollAttendance[]>(`${apiRoutes.labor.attendance}?month=${payMonth}-01&worker_id=${workerId}`)
+      .then((rows) => {
+        if (!cancelled) setAbsentDays(rows.filter((row) => !row.is_present && !row.is_archived).length);
+      })
+      .catch((cause) => {
+        if (!cancelled) {
+          setAttendanceError(true);
+          setError(cause instanceof Error ? cause.message : "Could not load monthly attendance.");
+        }
+      })
+      .finally(() => { if (!cancelled) setAttendanceLoading(false); });
+    return () => { cancelled = true; };
+  }, [workerId, payMonth]);
+
+  const worker = workers.find((row) => row.worker_id === workerId);
+  const baseSalary = Number(worker?.monthly_salary ?? 0);
+  const [year, monthNumber] = payMonth.split("-").map(Number);
+  const daysInMonth = year && monthNumber ? new Date(year, monthNumber, 0).getDate() : 0;
+  const weeklyHolidayDays = worker?.weekly_holidays ?? [];
+  const holidayDatesInMonth = daysInMonth
+    ? Array.from({ length: daysInMonth }, (_, index) => {
+      const date = `${payMonth}-${String(index + 1).padStart(2, "0")}`;
+      return weeklyHolidayDays.includes(weekdayIndex(date));
+    }).filter(Boolean).length
+    : 0;
+  const absenceDeduction = daysInMonth > 0
+    ? Math.round((baseSalary / daysInMonth * absentDays + Number.EPSILON) * 100) / 100
+    : 0;
+  const netAmount = Math.max(0, baseSalary - absenceDeduction + Number(bonus || 0));
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workerId || !worker || !payMonth) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(apiRoutes.labor.salaries, {
+        method: "POST",
+        body: {
+          worker_id: workerId,
+          pay_month: `${payMonth}-01`,
+          base_salary: baseSalary,
+          absence_deduction: absenceDeduction,
+          bonus: Number(bonus || 0),
+          paid_date: paidDate,
+          status,
+        },
+      });
+      setNotice("Salary payment saved.");
+      setBonus("");
+      setWorkerId("");
+      onSaved();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save salary payment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="rounded-[8px] border border-line bg-surface p-4 space-y-3.5">
+      <div>
+        <h2 className="text-[15px] font-semibold text-ink">Add salary payment</h2>
+        <p className="mt-0.5 text-[12px] text-muted">Base salary and absence deduction are calculated from the worker record and selected month’s attendance.</p>
+      </div>
+      {error && <Notice>{error}</Notice>}
+      {notice && <Notice tone="success">{notice}</Notice>}
+      <form onSubmit={(event) => void submit(event)} className="rounded-[6px] border border-line bg-subtle p-4 space-y-3.5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Worker<span className="ml-1 text-warn">*</span></span>
+            <select required value={workerId} onChange={(event) => {
+              const nextWorkerId = event.target.value;
+              setWorkerId(nextWorkerId);
+              setAbsentDays(0);
+              setAttendanceLoading(Boolean(nextWorkerId && payMonth));
+              setAttendanceError(false);
+              setError("");
+            }} className={ui.select}>
+              <option value="">Choose worker</option>
+              {workers.map((row) => <option key={row.worker_id} value={row.worker_id}>{row.name}</option>)}
+            </select>
+          </label>
+          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Pay month<span className="ml-1 text-warn">*</span></span>
+            <input required type="month" value={payMonth} onChange={(event) => {
+              const nextMonth = event.target.value;
+              setPayMonth(nextMonth);
+              setAbsentDays(0);
+              setAttendanceLoading(Boolean(workerId && nextMonth));
+              setAttendanceError(false);
+              setError("");
+            }} className={ui.input} />
+          </label>
+          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Base salary ৳</span>
+            <input readOnly value={worker ? baseSalary.toFixed(2) : ""} placeholder="Select a worker" className={`${ui.input} bg-stone-100`} />
+          </label>
+          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Absent days</span>
+            <input readOnly value={attendanceLoading ? "Loading attendance…" : absentDays} className={`${ui.input} bg-stone-100`} />
+          </label>
+          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Absence deduction ৳</span>
+            <input readOnly value={worker ? absenceDeduction.toFixed(2) : ""} placeholder="Calculated from attendance" className={`${ui.input} bg-stone-100`} />
+          </label>
+          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Bonus ৳ <span className="font-normal text-muted">(optional)</span></span>
+            <input type="number" min="0" step="0.01" value={bonus} onChange={(event) => setBonus(event.target.value)} placeholder="Leave blank if none" className={ui.input} />
+            <span className="mt-1 block font-normal text-muted">Usually paid twice a year at 50% of monthly salary; enter an amount when applicable.</span>
+          </label>
+          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Net salary ৳</span>
+            <input readOnly value={worker ? netAmount.toFixed(2) : ""} className={`${ui.input} bg-stone-100`} />
+          </label>
+          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Paid date<span className="ml-1 text-warn">*</span></span>
+            <input required type="date" value={paidDate} onChange={(event) => setPaidDate(event.target.value)} className={ui.input} />
+          </label>
+          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Status</span>
+            <select value={status} onChange={(event) => setStatus(event.target.value)} className={ui.select}>
+              <option value="paid">Paid</option><option value="pending">Pending</option><option value="cancelled">Cancelled</option>
+            </select>
+          </label>
+        </div>
+        <p className="text-[11px] text-muted">Daily salary: monthly salary ÷ {daysInMonth || "number of"} days in the selected month. Deduction: daily salary × recorded absent days. Unrecorded days are not treated as absences.</p>
+        {worker && <p className="text-[11px] text-muted">{weeklyHolidayDays.length ? `${weeklyHolidayDays.map((day) => WEEKDAY_LABELS[day]).join(", ")} (${holidayDatesInMonth} date${holidayDatesInMonth === 1 ? "" : "s"} this month)` : "No weekly holidays set"}; holidays are excluded from attendance and deductions.</p>}
+        {attendanceError && <p role="alert" className="text-xs text-warn">Attendance could not be loaded. Retry by changing the worker or month before saving.</p>}
+        <div className="flex justify-end"><button type="submit" disabled={saving || attendanceLoading || attendanceError || !workerId || !daysInMonth} className={btn("primary", "sm")}>{saving ? "Saving…" : "Save salary payment"}</button></div>
+      </form>
+    </section>
+  );
+}
+
 export function PayrollWorkspace() {
   const [tab, setTab] = useState("workers");
+  const [salaryRefreshKey, setSalaryRefreshKey] = useState(0);
   const tabs = [
     { key: "workers", label: "Workers" },
     { key: "attendance", label: "Attendance" },
@@ -1301,14 +1443,29 @@ export function PayrollWorkspace() {
           title="Workers"
           description="Add staff and keep their employment details current."
           path={apiRoutes.labor.workers}
+          rowHref={(row) => `/payroll/workers/${String(row.worker_id)}`}
           updatePath={(row) => apiRoutes.labor.worker(String(row.worker_id))}
+          deletePath={(row) => apiRoutes.labor.worker(String(row.worker_id))}
+          deleteLabel="Remove"
+          lifecycle={{
+            includeQuery: "include_archived=true",
+            entityType: "workers",
+            idKey: "worker_id",
+            isInactive: (row) => row.is_archived === true,
+            archiveBody: () => ({ is_archived: true }),
+            archiveLabel: "Archive",
+            restoreBody: () => ({ is_archived: false }),
+            restoreLabel: () => "Unarchive",
+          }}
           columns={[
             { key: "name", label: "Name" },
             { key: "role", label: "Role" },
             { key: "phone", label: "Phone" },
             { key: "join_date", label: "Joined" },
             { key: "monthly_salary", label: "Monthly salary ৳" },
+            { key: "weekly_holidays", label: "Weekly holidays" },
             { key: "status", label: "Status" },
+            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             { name: "name", label: "Name", required: true },
@@ -1316,6 +1473,7 @@ export function PayrollWorkspace() {
             { name: "role", label: "Role" },
             { name: "join_date", label: "Join date", type: "date", required: true },
             { name: "monthly_salary", label: "Monthly salary ৳", type: "number", required: true },
+            { name: "weekly_holidays", label: "Weekly holidays", type: "weekdays" },
             {
               name: "status",
               label: "Status",
@@ -1332,70 +1490,61 @@ export function PayrollWorkspace() {
       {tab === "attendance" && <AttendanceWorkspace />}
 
       {tab === "salary" && (
-        <DataWorkbench
-          title="Salary payments"
-          description="Record a worker’s salary settlement for a month."
-          addLabel="Add salary payment"
-          path={apiRoutes.labor.salaries}
-          updatePath={(row) => apiRoutes.labor.salary(String(row.payment_id))}
-          lifecycle={{
-            includeQuery: "include_void=true",
-            entityType: "salary_payments",
-            idKey: "payment_id",
-            isInactive: (row) => row.is_void === true,
-            restoreBody: () => ({ is_void: false }),
-            restoreLabel: () => "Unvoid",
-          }}
-          deleteLabel="Void"
-          onDelete={async (row) => {
-            const reason = window.prompt("Reason for voiding this salary payment:");
-            if (reason === null) return;
-            if (!reason.trim()) {
-              window.alert("A reason is required to void a salary payment.");
-              return;
-            }
-            await apiRequest(apiRoutes.labor.salary(String(row.payment_id)), {
-              method: "PATCH",
-              body: { is_void: true, void_reason: reason.trim() },
-            });
-          }}
-          columns={[
-            { key: "worker_name", label: "Worker" },
-            { key: "pay_month", label: "Pay month" },
-            { key: "base_salary", label: "Base ৳" },
-            { key: "absence_deduction", label: "Deduction ৳" },
-            { key: "bonus", label: "Bonus ৳" },
-            { key: "net_paid", label: "Net ৳" },
-            { key: "paid_date", label: "Paid date" },
-            { key: "is_void", label: "Voided" },
-            { key: "void_reason", label: "Void reason" },
-          ]}
-          fields={[
-            {
-              name: "worker_id",
-              label: "Worker",
-              type: "select",
-              sourcePath: apiRoutes.labor.workers,
-              sourceValue: "worker_id",
-              required: true,
-            },
-            { name: "pay_month", label: "Pay month", type: "date", required: true },
-            { name: "base_salary", label: "Base salary ৳", type: "number", required: true },
-            { name: "absence_deduction", label: "Absence deduction ৳", type: "number" },
-            { name: "bonus", label: "Bonus ৳", type: "number" },
-            { name: "paid_date", label: "Paid date", type: "date", required: true },
-            {
-              name: "status",
-              label: "Status",
-              type: "select",
-              options: [
+        <div className="space-y-4">
+          <SalaryPaymentEntry onSaved={() => setSalaryRefreshKey((key) => key + 1)} />
+          <DataWorkbench
+            title="Salary payments"
+            description="Salary settlements, including their recorded attendance deduction and bonus."
+            path={apiRoutes.labor.salaries}
+            refreshKey={salaryRefreshKey}
+            updatePath={(row) => apiRoutes.labor.salary(String(row.payment_id))}
+            lifecycle={{
+              includeQuery: "include_void=true",
+              entityType: "salary_payments",
+              idKey: "payment_id",
+              isInactive: (row) => row.is_void === true,
+              restoreBody: () => ({ is_void: false }),
+              restoreLabel: () => "Unvoid",
+            }}
+            deleteLabel="Void"
+            onDelete={async (row) => {
+              const reason = window.prompt("Reason for voiding this salary payment:");
+              if (reason === null) return;
+              if (!reason.trim()) {
+                window.alert("A reason is required to void a salary payment.");
+                return;
+              }
+              await apiRequest(apiRoutes.labor.salary(String(row.payment_id)), {
+                method: "PATCH",
+                body: { is_void: true, void_reason: reason.trim() },
+              });
+            }}
+            columns={[
+              { key: "worker_name", label: "Worker" },
+              { key: "pay_month", label: "Pay month" },
+              { key: "base_salary", label: "Base ৳" },
+              { key: "absence_deduction", label: "Deduction ৳" },
+              { key: "bonus", label: "Bonus ৳" },
+              { key: "net_paid", label: "Net ৳" },
+              { key: "paid_date", label: "Paid date" },
+              { key: "is_void", label: "Voided" },
+              { key: "void_reason", label: "Void reason" },
+            ]}
+            fields={[
+              { name: "worker_id", label: "Worker", type: "select", sourcePath: apiRoutes.labor.workers, sourceValue: "worker_id", required: true },
+              { name: "pay_month", label: "Pay month", type: "date", required: true },
+              { name: "base_salary", label: "Base salary ৳", type: "number", required: true },
+              { name: "absence_deduction", label: "Absence deduction ৳", type: "number" },
+              { name: "bonus", label: "Bonus ৳", type: "number" },
+              { name: "paid_date", label: "Paid date", type: "date", required: true },
+              { name: "status", label: "Status", type: "select", options: [
                 { value: "paid", label: "Paid" },
                 { value: "pending", label: "Pending" },
                 { value: "cancelled", label: "Cancelled" },
-              ],
-            },
-          ]}
-        />
+              ] },
+            ]}
+          />
+        </div>
       )}
 
       {tab === "substitutes" && (
@@ -1540,7 +1689,7 @@ export function AttendanceWorkspace({
         method: "POST",
         body: {
           attendance_date: date,
-          records: workers.map((worker) => ({
+          records: workers.filter((worker) => !workerHasHoliday(worker, date)).map((worker) => ({
             worker_id: worker.worker_id,
             is_present: attendance[String(worker.worker_id)]?.present ?? true,
             note: attendance[String(worker.worker_id)]?.note || null,
@@ -1616,47 +1765,51 @@ export function AttendanceWorkspace({
                   </div>
 
                   <div className="flex flex-1 items-center justify-end gap-2.5 max-sm:w-full">
-                    <Segmented
-                      name={`att-${id}`}
-                      size="sm"
-                      value={value.present ? "present" : "absent"}
-                      onChange={(next) =>
-                        setAttendance((current) => ({
-                          ...current,
-                          [id]: { ...value, present: next === "present" },
-                        }))
-                      }
-                      disabled={value.isArchived}
-                      options={[
-                        { value: "present", label: "Present", tone: "accent" },
-                        { value: "absent", label: "Absent", tone: "warn" },
-                      ]}
-                    />
-                    {!value.present && (
-                      <input
-                        value={value.note}
-                        onChange={(event) =>
+                    {workerHasHoliday(worker, date) ? (
+                      <span className="rounded-full bg-amber-50 px-3 py-1.5 text-[12px] font-medium text-amber-800">Holiday · attendance excluded</span>
+                    ) : <>
+                      <Segmented
+                        name={`att-${id}`}
+                        size="sm"
+                        value={value.present ? "present" : "absent"}
+                        onChange={(next) =>
                           setAttendance((current) => ({
                             ...current,
-                            [id]: { ...value, note: event.target.value },
+                            [id]: { ...value, present: next === "present" },
                           }))
                         }
-                        placeholder="Reason for absence"
-                        className={`${ui.input} !h-8 w-44 sm:w-56 text-[12px]`}
+                        disabled={value.isArchived}
+                        options={[
+                          { value: "present", label: "Present", tone: "accent" },
+                          { value: "absent", label: "Absent", tone: "warn" },
+                        ]}
                       />
-                    )}
-                    {value.isSaved && value.attendanceId ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => void setArchived(value, !value.isArchived)}
-                          className="text-[11px] font-medium text-accent hover:underline"
-                        >
-                          {value.isArchived ? "Restore" : "Archive"}
-                        </button>
-                        <SafeDataHistory entityType="worker_attendances" entityId={value.attendanceId} />
-                      </>
-                    ) : null}
+                      {!value.present && (
+                        <input
+                          value={value.note}
+                          onChange={(event) =>
+                            setAttendance((current) => ({
+                              ...current,
+                              [id]: { ...value, note: event.target.value },
+                            }))
+                          }
+                          placeholder="Reason for absence"
+                          className={`${ui.input} !h-8 w-44 sm:w-56 text-[12px]`}
+                        />
+                      )}
+                      {value.isSaved && value.attendanceId ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void setArchived(value, !value.isArchived)}
+                            className="text-[11px] font-medium text-accent hover:underline"
+                          >
+                            {value.isArchived ? "Restore" : "Archive"}
+                          </button>
+                          <SafeDataHistory entityType="worker_attendances" entityId={value.attendanceId} />
+                        </>
+                      ) : null}
+                    </>}
                   </div>
                 </div>
               );
@@ -1666,10 +1819,10 @@ export function AttendanceWorkspace({
         <div className="flex justify-end border-t border-line bg-subtle px-3.5 py-2.5">
           <button
             onClick={() => void save()}
-            disabled={saving || workers.length === 0}
+            disabled={saving || workers.length === 0 || workers.every((worker) => workerHasHoliday(worker, date))}
             className={btn("primary", "sm")}
           >
-            {saving ? "Saving…" : "Save attendance"}
+            {saving ? "Saving…" : workers.length > 0 && workers.every((worker) => workerHasHoliday(worker, date)) ? "All workers on holiday" : "Save attendance"}
           </button>
         </div>
       </div>

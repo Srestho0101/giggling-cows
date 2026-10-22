@@ -21,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={hind.variable}>
+    <html lang="en" suppressHydrationWarning className={hind.variable} data-scroll-behavior="smooth">
       <head>
         <script
           dangerouslySetInnerHTML={{
