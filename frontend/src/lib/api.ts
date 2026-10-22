@@ -161,6 +161,7 @@ export const apiRoutes = {
     invoicePayments: (id: string) => `/sales/invoices/${id}/payments`,
     voidPayment: (invoiceId: string, paymentId: string) => `/sales/invoices/${invoiceId}/payments/${paymentId}/void`,
     milk: "/sales/milk", milkRecord: (id: string) => `/sales/milk/${id}`,
+    milkBatches: "/sales/milk/batches", milkCowSchedules: "/sales/milk/cow-schedules",
   },
   reports: {
     dashboard: "/reports/dashboard",

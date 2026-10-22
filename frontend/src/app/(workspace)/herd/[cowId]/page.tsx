@@ -14,6 +14,13 @@ type CowDetails = Record<string, unknown> & {
   id_history?: Record<string, unknown>[];
 };
 
+function breedLabel(value: unknown) {
+  if (value === "deshi") return "Deshi";
+  if (value === "friesian") return "Friesian";
+  if (value === "other") return "Other / unknown";
+  return "—";
+}
+
 export default function CowProfilePage() {
   const { cowId } = useParams<{ cowId: string }>();
   const [cow, setCow] = useState<CowDetails | null>(null);
@@ -59,7 +66,7 @@ export default function CowProfilePage() {
         }} className="mt-1 block rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800"><option value="active">Active</option><option value="sold">Sold</option><option value="deceased">Deceased</option><option value="archived">Archived</option></select></label>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[
-        ["Acquired", String(cow.acquisition_date ?? "—")], ["Acquisition", String(cow.acquisition_type ?? "—").replaceAll("_", " ")], ["Purchase price", cow.purchase_price ? `৳ ${cow.purchase_price}` : "—"], ["Dam", String(cow.dam_tag ?? "—")], ["Sire", String(cow.sire_tag ?? "—")], ["Latest weight", cow.latest_weight_kg ? `${cow.latest_weight_kg} kg` : "—"],
+        ["Acquired", String(cow.acquisition_date ?? "—")], ["Acquisition", String(cow.acquisition_type ?? "—").replaceAll("_", " ")], ["Age", String(cow.age ?? "—")], ["Age group", String(cow.age_group ?? "—")], ["Breed", breedLabel(cow.breed)], ["Purchase price", cow.purchase_price ? `৳ ${cow.purchase_price}` : "—"], ["Dam", String(cow.dam_tag ?? "—")], ["Sire", String(cow.sire_tag ?? "—")], ["Latest weight", cow.latest_weight_kg ? `${cow.latest_weight_kg} kg` : "—"],
       ].map(([label, value]) => <div key={label} className="rounded-xl border border-stone-200 bg-white p-4"><p className="text-xs text-stone-500">{label}</p><p className="mt-2 text-sm font-medium capitalize text-stone-800">{value}</p></div>)}</div>
       <div className="grid gap-5 xl:grid-cols-2">
         <WeightHistory
