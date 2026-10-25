@@ -1,147 +1,83 @@
 # Cow Farm
 
-An opinionated full-stack example for managing a small dairy/cattle operation. The project includes:
+Cow Farm is a web app for keeping the day-to-day records of a dairy farm in one place. It brings together the herd, milk production, purchases, breeding and health records, expenses, sales, and payroll, with reports for reviewing farm activity and finances.
 
-- A FastAPI backend (API, database models, services, and tests).
-- A Next.js frontend (React + TypeScript) that consumes the backend APIs.
-- Database migrations with Alembic and seed data utilities.
+The project has a Next.js frontend and a FastAPI backend. The backend uses SQLAlchemy and Alembic, and can connect to SQLite for local development or PostgreSQL for a shared deployment. The interface and defaults are set up for BDT (৳).
 
-This README explains how to run, test, and develop the application locally.
+## What’s here
 
-**Tech stack**
+- **Today:** a daily overview and shortcuts for common entries.
+- **Herd:** animal records, status, weights, housing, and history.
+- **Purchases and breeding:** evaluate animals before buying, and track breeding attempts and pregnancy checks.
+- **Health:** log care and treatment, with follow-up dates.
+- **Milk and sales:** record milk, manage customers, create invoices, and track payments.
+- **Expenses and payroll:** record farm spending, worker attendance, salary payments, and substitute costs.
+- **Reports and masters:** review farm and financial summaries, and maintain shared lists such as suppliers, feed types, and warehouses.
 
-- Backend: FastAPI, SQLAlchemy, Pydantic, Alembic, Uvicorn
-- Frontend: Next.js, TypeScript
-- Database: PostgreSQL (development), configured via SQLAlchemy
+## Run locally
 
-Quick links
+You’ll need Python 3.10 or newer, Node.js, and npm. SQLite is the default database, so PostgreSQL is optional for a local run.
 
-- Backend entry: [backend/app/main.py](backend/app/main.py)
-- Backend dependencies: [backend/requirements.txt](backend/requirements.txt)
-- Frontend app: [frontend/src/app/page.tsx](frontend/src/app/page.tsx)
-- OpenAPI spec (generated): [backend/openapi.json](backend/openapi.json)
+### Backend
 
-Prerequisites
-
-- Python 3.10+ (recommended) and Node.js 18+ / npm or yarn
-- PostgreSQL running locally (or a remote connection)
-
-Local development — Backend
-
-1. Open a terminal and change to the backend directory:
+From the repository root:
 
 ```bash
 cd backend
-```
-
-2. Create and activate a virtual environment, then install dependencies:
-
-```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
-3. Configure environment variables. Create a `.env` file in `backend/` with at minimum:
+The backend reads settings from a `.env` file at the repository root. With no database setting, it creates and uses `backend/cow_farm.db` when started from the `backend` directory. To use PostgreSQL, set `DATABASE_URL`, for example:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@localhost:5432/cowfarm
-SECRET_KEY=supersecret
+SECRET_KEY=replace-with-a-long-random-value
 ```
 
-See `backend/core/config.py` for other settings and optional variables.
-
-4. Run database migrations and seed the DB (Alembic is configured already):
+For PostgreSQL, apply the schema migrations from `backend/` before starting the app:
 
 ```bash
 alembic upgrade head
-python backend/db/seed.py
 ```
 
-5. Start the backend in development mode:
+SQLite tables are created automatically at startup. The API docs are at <http://localhost:8000/api/v1/docs>; the health endpoint is <http://localhost:8000/health>.
 
-```bash
-uvicorn app.main:app --reload --port 8000
-```
+### Frontend
 
-The API will be available at `http://localhost:8000`. API docs (Swagger UI) are at `http://localhost:8000/api/v1/docs`.
-
-Local development — Frontend
-
-1. In a second terminal, change to the frontend directory and install dependencies:
+In another terminal:
 
 ```bash
 cd frontend
 npm install
-# or: yarn
-```
-
-2. Start the Next.js development server:
-
-```bash
+cp .env.example .env.local
 npm run dev
 ```
 
-Open the frontend at `http://localhost:3000`. The frontend reads/writes to the API endpoints on the backend—keep both servers running.
+Open <http://localhost:3000>. `NEXT_PUBLIC_API_URL` in `frontend/.env.local` should point to the backend origin; the example file uses `http://localhost:8000`.
 
-Running tests
+## Configuration notes
 
-- Backend unit tests are in `backend/tests`. Run them with:
+The backend’s local auth setup is intended for development. The settings also include Supabase credentials and JWT options for deployments that use Supabase authentication. Keep secrets in environment variables, and set the allowed frontend origins in `BACKEND_CORS_ORIGINS` when deploying the API.
 
-```bash
-cd backend
-source .venv/bin/activate
-pytest -q
-```
+Docker Compose is available for running the frontend and backend containers. It expects `DATABASE_URL` and `SECRET_KEY` in the environment; configure the frontend’s API URL to reach the backend from its runtime environment.
 
-Project structure (important files)
+## Project layout
 
-- [backend/app](backend/app) — FastAPI application and API routers
-- [backend/core](backend/core) — configuration, database utilities, security helpers
-- [backend/models](backend/models) — SQLAlchemy models and domain entities
-- [backend/schemas](backend/schemas) — Pydantic request/response schemas
-- [backend/services](backend/services) — business logic and use-case implementations
-- [backend/alembic](backend/alembic) — database migrations
-- [frontend/src](frontend/src) — Next.js app, pages, and components
+- `backend/app/api/v1/` — API routes
+- `backend/app/models/`, `schemas/`, and `services/` — data models, API schemas, and business logic
+- `backend/alembic/` — database migrations
+- `frontend/src/app/` — application routes
+- `frontend/src/components/` — shared UI and workspaces
+- `Plans/` and `Documentation/` — project notes and reference material
 
-Deployment notes
+## Live deployments
 
-- For production, build the frontend (`npm run build`) and serve statically (Vercel, Netlify, or a CDN).
-- Run the backend behind a production ASGI server (e.g., Uvicorn + Gunicorn or similar) and point it to a managed PostgreSQL instance.
-- Make sure to set secure `SECRET_KEY` and appropriate CORS / security settings in `backend/core/config.py`.
+- [Web app](https://giggling-cows.vercel.app/today)
+- [API documentation](https://cow-farm-cakg.onrender.com/api/v1/docs)
 
-Contributing
+## License
 
-Feel free to open issues or pull requests. When contributing:
-
-- Follow the existing code style and tests.
-- Add tests for new business logic and API endpoints.
-- Run `pytest` and ensure migrations apply cleanly.
-
-Useful commands summary
-
-```bash
-# Backend
-cd backend
-source .venv/bin/activate
-pip install -r requirements.txt
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
-
-# Frontend
-cd frontend
-npm install
-npm run dev
-
-# Tests
-cd backend
-pytest -q
-```
-
-# Live URLs
-[Render Server](https://cow-farm-cakg.onrender.com/api/v1/docs#/Authentication%20%26%20Profile/get_current_user_profile_api_v1_auth_me_get)
-[Vercel Deployment](https://giggling-cows.vercel.app/today)
-
-MIT License
-
-Happy hacking!
+MIT
