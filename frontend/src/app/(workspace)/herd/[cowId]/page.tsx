@@ -137,6 +137,7 @@ export default function CowProfilePage() {
 
     const currentStay = (cow.warehouse_history ?? []).find((m) => !m.moved_out_date);
     const stayDays = currentStay ? daysBetween(currentStay.moved_in_date, today) : null;
+    const daysOnFarm = cow.acquisition_date ? daysBetween(cow.acquisition_date, today) : null;
 
     const activePregnancy = pregnancyReports.find(
       (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected")
@@ -163,6 +164,7 @@ export default function CowProfilePage() {
       weightDelta,
       currentStay,
       stayDays,
+      daysOnFarm,
       activePregnancy,
       dueCare,
       milkDaysCount,
@@ -264,7 +266,8 @@ export default function CowProfilePage() {
                   ) : null}
                 </div>
                 <p className="mt-1 text-[13px] text-muted capitalize">
-                  {cow.category} · {cow.sex}
+                  {cow.category}
+                  {cow.cow_type ? ` · ${cow.cow_type}` : ""} · {cow.sex}
                   {cow.breed ? ` · ${breedLabel(cow.breed)}` : ""} ·{" "}
                   {cow.warehouse_name ?? "No warehouse"}
                 </p>
@@ -339,7 +342,9 @@ export default function CowProfilePage() {
               label="Current housing"
               value={<span className="text-[18px]">{cow.warehouse_name ?? "—"}</span>}
               subtext={
-                kpis.currentStay
+                kpis.daysOnFarm !== null && kpis.daysOnFarm >= 0
+                  ? `${kpis.daysOnFarm} day${kpis.daysOnFarm === 1 ? "" : "s"} on farm${kpis.stayDays !== null && kpis.stayDays >= 0 ? ` · ${kpis.stayDays}d in shed` : ""}`
+                  : kpis.currentStay
                   ? `Since ${formatDisplayDate(kpis.currentStay.moved_in_date)}${
                       kpis.stayDays !== null && kpis.stayDays >= 0 ? ` (${kpis.stayDays} days)` : ""
                     }`
