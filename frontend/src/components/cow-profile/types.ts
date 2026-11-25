@@ -36,6 +36,7 @@ export type OffspringItem = {
   current_tag_number: string;
   sex: string;
   category: string;
+  cow_type?: string | null;
   birth_date?: string | null;
   status: string;
 };
@@ -45,6 +46,7 @@ export type CowDetail = {
   current_tag_number: string;
   sex: "male" | "female";
   category: string;
+  cow_type?: string | null;
   breed?: "deshi" | "friesian" | "other" | null;
   birth_date?: string | null;
   acquisition_type: "born_on_farm" | "bought_from_supplier" | "bought_from_bazar";
@@ -66,6 +68,7 @@ export type CowDetail = {
   age?: string | null;
   age_group?: string | null;
   latest_weight_kg?: string | number | null;
+  days_on_farm?: number | null;
   id_history: TagHistoryItem[];
   warehouse_history: WarehouseHistoryItem[];
   weight_records: WeightRecord[];

@@ -733,6 +733,15 @@ function errorText(cause: unknown) {
 function formatCell(value: unknown, key: string) {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (key === "days_on_farm" && !Number.isNaN(Number(value))) {
+    return `${value} d`;
+  }
+  if (key === "category") {
+    const s = String(value);
+    if (s === "dairy") return "Dairy";
+    if (s === "beef") return "Beef";
+    if (s === "duel-purpose") return "Duel-purpose";
+  }
   if (key === "weekly_holidays" && Array.isArray(value)) {
     return value.length ? value.map((day) => weekdays[Number(day)]?.label ?? String(day)).join(", ") : "None";
   }

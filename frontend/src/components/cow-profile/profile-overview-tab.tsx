@@ -57,6 +57,7 @@ export function ProfileOverviewTab({
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[12.5px]">
             <FieldItem label="Tag number" value={cow.current_tag_number} />
             <FieldItem label="Category" value={cow.category} capitalize />
+            <FieldItem label="Cow type" value={cow.cow_type ?? "—"} />
             <FieldItem label="Sex" value={cow.sex} capitalize />
             <FieldItem label="Breed" value={breedLabel(cow.breed)} />
             <FieldItem label="Birth date" value={formatDisplayDate(cow.birth_date)} />
@@ -77,6 +78,14 @@ export function ProfileOverviewTab({
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[12.5px]">
             <FieldItem label="Acquisition" value={acquisitionLabel(cow.acquisition_type)} />
             <FieldItem label="Acquired date" value={formatDisplayDate(cow.acquisition_date)} />
+            <FieldItem
+              label="Days on farm"
+              value={
+                cow.acquisition_date
+                  ? `${daysBetween(cow.acquisition_date, today) ?? 0} days`
+                  : "—"
+              }
+            />
             <FieldItem
               label="Supplier"
               value={cow.acquisition_type === "born_on_farm" ? "Born on farm" : cow.supplier_name ?? "—"}

@@ -33,6 +33,8 @@ export function EditProfilePanel({
     current_tag_number: cow.current_tag_number,
     sex: cow.sex,
     category: cow.category,
+    cow_type: cow.cow_type ?? "",
+    gives_milk: Boolean(cow.gives_milk),
     breed: cow.breed ?? "",
     birth_date: cow.birth_date ?? "",
     acquisition_type: cow.acquisition_type,
@@ -63,6 +65,8 @@ export function EditProfilePanel({
         current_tag_number: values.current_tag_number.trim(),
         sex: values.sex,
         category: values.category.trim(),
+        cow_type: values.cow_type.trim() || null,
+        gives_milk: values.sex === "female" ? values.gives_milk : false,
         breed: values.breed || null,
         birth_date: values.birth_date || null,
         acquisition_type: values.acquisition_type,
@@ -72,14 +76,11 @@ export function EditProfilePanel({
           : values.purchase_price !== ""
             ? Number(values.purchase_price)
             : null,
+        dam_id: values.dam_id || null,
+        sire_id: values.sire_id || null,
+        supplier_id: !isBornOnFarm ? (values.supplier_id || null) : null,
         notes: values.notes.trim() || null,
       };
-      if (isBornOnFarm) {
-        body.dam_id = values.dam_id || null;
-        body.sire_id = values.sire_id || null;
-      } else {
-        body.supplier_id = values.supplier_id || null;
-      }
       await apiRequest(apiRoutes.herd.cow(cow.cow_id), { method: "PATCH", body });
       onNotice("Cow profile updated.");
       await onSaved();
@@ -132,14 +133,46 @@ export function EditProfilePanel({
         </label>
         <label className={ui.label}>
           Category *
-          <input
+          <select
             required
-            maxLength={50}
             value={values.category}
             onChange={(e) => setValues((c) => ({ ...c, category: e.target.value }))}
-            className={ui.input}
-          />
+            className={ui.select}
+          >
+            <option value="dairy">Dairy</option>
+            <option value="beef">Beef</option>
+            <option value="duel-purpose">Duel-purpose</option>
+          </select>
         </label>
+        <label className={ui.label}>
+          Cow type
+          <select
+            value={values.cow_type}
+            onChange={(e) => setValues((c) => ({ ...c, cow_type: e.target.value }))}
+            className={ui.select}
+          >
+            <option value="">None / unspecified</option>
+            <option value="Bull Calf">Bull Calf</option>
+            <option value="Heifer Calf">Heifer Calf</option>
+            <option value="Bull">Bull</option>
+            <option value="Cow">Cow</option>
+            <option value="Heifer">Heifer</option>
+            <option value="Ox">Ox</option>
+          </select>
+        </label>
+        {values.sex === "female" && (
+          <label className={ui.label}>
+            Milking
+            <select
+              value={values.gives_milk ? "true" : "false"}
+              onChange={(e) => setValues((c) => ({ ...c, gives_milk: e.target.value === "true" }))}
+              className={ui.select}
+            >
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </label>
+        )}
         <label className={ui.label}>
           Breed / calf type
           <select
@@ -207,40 +240,37 @@ export function EditProfilePanel({
           />
         </label>
 
-        {isBornOnFarm ? (
-          <>
-            <label className={ui.label}>
-              Dam (Mother)
-              <select
-                value={values.dam_id}
-                onChange={(e) => setValues((c) => ({ ...c, dam_id: e.target.value }))}
-                className={ui.select}
-              >
-                <option value="">None / unknown</option>
-                {femaleCows.map((item) => (
-                  <option key={item.cow_id} value={item.cow_id}>
-                    {item.current_tag_number}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={ui.label}>
-              Sire (Father)
-              <select
-                value={values.sire_id}
-                onChange={(e) => setValues((c) => ({ ...c, sire_id: e.target.value }))}
-                className={ui.select}
-              >
-                <option value="">None / unknown</option>
-                {maleCows.map((item) => (
-                  <option key={item.cow_id} value={item.cow_id}>
-                    {item.current_tag_number}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        ) : (
+        <label className={ui.label}>
+          Dam (Mother) {isBornOnFarm ? "" : "(optional)"}
+          <select
+            value={values.dam_id}
+            onChange={(e) => setValues((c) => ({ ...c, dam_id: e.target.value }))}
+            className={ui.select}
+          >
+            <option value="">None / unknown</option>
+            {femaleCows.map((item) => (
+              <option key={item.cow_id} value={item.cow_id}>
+                {item.current_tag_number}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={ui.label}>
+          Sire (Father) (optional)
+          <select
+            value={values.sire_id}
+            onChange={(e) => setValues((c) => ({ ...c, sire_id: e.target.value }))}
+            className={ui.select}
+          >
+            <option value="">None / unknown</option>
+            {maleCows.map((item) => (
+              <option key={item.cow_id} value={item.cow_id}>
+                {item.current_tag_number}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!isBornOnFarm && (
           <label className={ui.label}>
             Supplier
             <select

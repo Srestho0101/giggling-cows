@@ -11,8 +11,10 @@ import { MilkRecordsWorkspace } from "@/components/milk-records-workspace";
 const cowColumns: TableColumn[] = [
   { key: "current_tag_number", label: "Tag" },
   { key: "category", label: "Category" },
+  { key: "cow_type", label: "Cow type" },
   { key: "breed", label: "Breed" },
   { key: "sex", label: "Sex" },
+  { key: "days_on_farm", label: "Days on farm" },
   { key: "birth_date", label: "Birth date" },
   { key: "age", label: "Age" },
   { key: "age_group", label: "Age group" },
@@ -35,7 +37,41 @@ const cowFields: FormField[] = [
       { value: "male", label: "Male" },
     ],
   },
-  { name: "category", label: "Category", required: true, placeholder: "Milking cow, heifer…" },
+  {
+    name: "gives_milk",
+    label: "Milking",
+    type: "select",
+    options: [
+      { value: "false", label: "No" },
+      { value: "true", label: "Yes" },
+    ],
+    defaultValue: "false",
+    showWhen: { field: "sex", equals: ["female"] },
+  },
+  {
+    name: "category",
+    label: "Category",
+    type: "select",
+    required: true,
+    options: [
+      { value: "dairy", label: "Dairy" },
+      { value: "beef", label: "Beef" },
+      { value: "duel-purpose", label: "Duel-purpose" },
+    ],
+  },
+  {
+    name: "cow_type",
+    label: "Cow type",
+    type: "select",
+    options: [
+      { value: "Bull Calf", label: "Bull Calf" },
+      { value: "Heifer Calf", label: "Heifer Calf" },
+      { value: "Bull", label: "Bull" },
+      { value: "Cow", label: "Cow" },
+      { value: "Heifer", label: "Heifer" },
+      { value: "Ox", label: "Ox" },
+    ],
+  },
   {
     name: "breed",
     label: "Breed / calf type",
@@ -73,13 +109,11 @@ const cowFields: FormField[] = [
   },
   {
     name: "dam_id",
-    label: "Dam",
+    label: "Dam (optional)",
     type: "select",
-    required: true,
     sourcePath: `${apiRoutes.herd.cows}?sex=female`,
     sourceValue: "cow_id",
     sourceLabel: "current_tag_number",
-    showWhen: { field: "acquisition_type", equals: ["born_on_farm"] },
   },
   {
     name: "sire_id",
@@ -88,7 +122,6 @@ const cowFields: FormField[] = [
     sourcePath: `${apiRoutes.herd.cows}?sex=male`,
     sourceValue: "cow_id",
     sourceLabel: "current_tag_number",
-    showWhen: { field: "acquisition_type", equals: ["born_on_farm"] },
   },
   {
     name: "warehouse_id",
@@ -250,7 +283,7 @@ export function PurchasesWorkspace() {
   const [convertValues, setConvertValues] = useState({
     tag_number: "",
     sex: "female",
-    category: "Milking cow",
+    category: "beef",
     warehouse_id: "",
     birth_date: "",
     notes: "",
@@ -568,14 +601,18 @@ export function PurchasesWorkspace() {
               </label>
               <label className="text-[12px] font-medium text-ink">
                 <span className="block mb-1">Category</span>
-                <input
+                <select
                   required
                   value={convertValues.category}
                   onChange={(event) =>
                     setConvertValues((v) => ({ ...v, category: event.target.value }))
                   }
-                  className={ui.input}
-                />
+                  className={ui.select}
+                >
+                  <option value="dairy">Dairy</option>
+                  <option value="beef">Beef</option>
+                  <option value="duel-purpose">Duel-purpose</option>
+                </select>
               </label>
               <label className="text-[12px] font-medium text-ink">
                 <span className="block mb-1">Warehouse</span>
@@ -1879,22 +1916,18 @@ function CategoryFilterSelect({
   placeholder: string;
 }) {
   const [categories, setCategories] = useState<string[]>([
-    "Milking cow",
-    "Heifer",
-    "Bull",
-    "Calf",
-    "Ox",
+    "dairy",
+    "beef",
+    "duel-purpose",
   ]);
   useEffect(() => {
     void apiRequest<Record<string, unknown>[]>(apiRoutes.herd.cows)
       .then((cows) => {
-        const defaults = ["Milking cow", "Heifer", "Bull", "Calf", "Ox"];
+        const defaults = ["dairy", "beef", "duel-purpose"];
         const fromDb = cows
           .map((c) => String(c.category ?? "").trim())
           .filter(Boolean);
-        const merged = Array.from(new Set([...fromDb, ...defaults])).sort((a, b) =>
-          a.localeCompare(b)
-        );
+        const merged = Array.from(new Set([...defaults, ...fromDb]));
         setCategories(merged);
       })
       .catch(() => {});
@@ -1904,7 +1937,13 @@ function CategoryFilterSelect({
       <option value="">{placeholder}</option>
       {categories.map((cat) => (
         <option key={cat} value={cat}>
-          {cat}
+          {cat === "dairy"
+            ? "Dairy"
+            : cat === "beef"
+            ? "Beef"
+            : cat === "duel-purpose"
+            ? "Duel-purpose"
+            : cat.charAt(0).toUpperCase() + cat.slice(1)}
         </option>
       ))}
     </select>
