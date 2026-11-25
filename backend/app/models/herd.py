@@ -47,7 +47,8 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     )
     current_tag_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     sex: Mapped[str] = mapped_column(String(10), nullable=False)  # 'male' | 'female'
-    category: Mapped[str] = mapped_column(String(50), nullable=False)  # dairy, bull, heifer, calf, ox
+    category: Mapped[str] = mapped_column(String(50), nullable=False)  # dairy, beef, duel-purpose
+    cow_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # bull_calf, heifer_calf, bull, cow, heifer, ox
     breed: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)  # deshi | friesian | other
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     acquisition_type: Mapped[str] = mapped_column(
@@ -79,7 +80,7 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     __table_args__ = (
         CheckConstraint(
             "(acquisition_type = 'born_on_farm' AND supplier_id IS NULL) OR "
-            "(acquisition_type != 'born_on_farm' AND dam_id IS NULL AND sire_id IS NULL)",
+            "(acquisition_type != 'born_on_farm')",
             name="check_acquisition_integrity",
         ),
         Index("idx_active_cow_tag", "current_tag_number", unique=False),

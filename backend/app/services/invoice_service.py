@@ -153,13 +153,13 @@ async def update_invoice_status(
 
     # Transition to VOID
     elif new_status == "void":
-        if not (void_reason or "").strip():
-            raise HTTPException(status_code=422, detail="A reason is required when voiding an invoice.")
         if invoice.paid_amount > Decimal("0.00"):
             raise HTTPException(
                 status_code=400,
                 detail="Cannot void an invoice that has payments recorded. Reverse payments first.",
             )
+        if not (void_reason or "").strip():
+            raise HTTPException(status_code=422, detail="A reason is required when voiding an invoice.")
         # Revert sold cows back to active
         for line in invoice.lines:
             if line.item_type == "animal" and line.cow_id:

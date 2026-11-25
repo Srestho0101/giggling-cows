@@ -339,6 +339,7 @@ async def create_cow(
         current_tag_number=data.current_tag_number,
         sex=data.sex,
         category=data.category,
+        cow_type=data.cow_type,
         breed=data.breed,
         birth_date=data.birth_date,
         acquisition_type=data.acquisition_type,
@@ -349,6 +350,7 @@ async def create_cow(
         sire_id=data.sire_id,
         warehouse_id=data.warehouse_id,
         status=data.status,
+        gives_milk=bool(data.gives_milk) if data.sex == "female" else False,
         notes=data.notes,
         created_by=current_user.id,
         updated_by=current_user.id,
@@ -485,17 +487,18 @@ async def update_cow(
         if next_birth_date is not None:
             next_acq_date = next_birth_date
             update_dict["acquisition_date"] = next_birth_date
-    else:
-        if update_dict.get("dam_id") is not None or update_dict.get("sire_id") is not None:
-            raise HTTPException(status_code=400, detail="Purchased cows cannot have on-farm dam or sire.")
-        update_dict["dam_id"] = None
-        update_dict["sire_id"] = None
 
     if next_birth_date is not None and next_acq_date < next_birth_date:
         raise HTTPException(
             status_code=400,
             detail="Acquisition date cannot be earlier than birth date.",
         )
+
+    next_sex = update_dict.get("sex", cow.sex)
+    if next_sex == "male":
+        update_dict["gives_milk"] = False
+    elif "gives_milk" in update_dict and update_dict["gives_milk"] is not None:
+        update_dict["gives_milk"] = bool(update_dict["gives_milk"])
 
     for field, val in update_dict.items():
         setattr(cow, field, val)

@@ -590,7 +590,7 @@ async def test_payment_voiding_and_invoice_recalibration(client: AsyncClient):
     # 5. Attempt to void invoice with active payments -> Must fail!
     void_fail = await client.patch(
         f"/api/v1/sales/invoices/{inv_id}/status",
-        json={"status": "void"},
+        json={"status": "void", "void_reason": "Customer cancelled"},
         headers=auth_headers,
     )
     assert void_fail.status_code == 400
@@ -627,7 +627,7 @@ async def test_payment_voiding_and_invoice_recalibration(client: AsyncClient):
     # 8. Now void the invoice -> Must succeed!
     void_inv = await client.patch(
         f"/api/v1/sales/invoices/{inv_id}/status",
-        json={"status": "void"},
+        json={"status": "void", "void_reason": "Order cancelled"},
         headers=auth_headers,
     )
     assert void_inv.status_code == 200

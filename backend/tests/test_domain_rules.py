@@ -717,5 +717,109 @@ async def test_cow_detail_read_with_legacy_future_weight(client: AsyncClient, db
     assert Decimal(data["weight_records"][0]["weight_kg"]) == Decimal("450.00")
 
 
+@pytest.mark.asyncio
+async def test_cow_category_cow_type_milking_dam_and_days_on_farm(client: AsyncClient):
+    auth_headers = {"Authorization": "Bearer dev-user:admin"}
+    today = date.today()
+
+    wh_resp = await client.post(
+        "/api/v1/herd/warehouses",
+        json={"name": "Features Barn", "capacity": 20},
+        headers=auth_headers,
+    )
+    wh_id = wh_resp.json()["warehouse_id"]
+
+    supp_resp = await client.post(
+        "/api/v1/herd/suppliers",
+        json={"name": "Bazar Cattle Supplier", "supplier_type": "individual"},
+        headers=auth_headers,
+    )
+    supp_id = supp_resp.json()["supplier_id"]
+
+    # 1. Dam cow: female, dairy, Cow, milking=True
+    dam_resp = await client.post(
+        "/api/v1/herd/cows",
+        json={
+            "current_tag_number": "DAM-MILK-101",
+            "sex": "female",
+            "category": "dairy",
+            "cow_type": "Cow",
+            "gives_milk": True,
+            "acquisition_type": "born_on_farm",
+            "acquisition_date": str(today - timedelta(days=60)),
+            "warehouse_id": wh_id,
+        },
+        headers=auth_headers,
+    )
+    assert dam_resp.status_code == 201
+    dam_data = dam_resp.json()
+    dam_id = dam_data["cow_id"]
+    assert dam_data["category"] == "dairy"
+    assert dam_data["cow_type"] == "Cow"
+    assert dam_data["gives_milk"] is True
+    assert dam_data["days_on_farm"] == 60
+
+    # 2. Purchased cow with dam_id (even though not born on farm!), cow_type=Bull Calf, male
+    calf_resp = await client.post(
+        "/api/v1/herd/cows",
+        json={
+            "current_tag_number": "PURCHASED-CALF-01",
+            "sex": "male",
+            "category": "beef",
+            "cow_type": "Bull Calf",
+            "gives_milk": True,  # male must reset gives_milk to False
+            "acquisition_type": "bought_from_supplier",
+            "acquisition_date": str(today - timedelta(days=25)),
+            "purchase_price": 45000.0,
+            "supplier_id": supp_id,
+            "dam_id": dam_id,  # Optional dam_id on purchased cow!
+            "warehouse_id": wh_id,
+        },
+        headers=auth_headers,
+    )
+    assert calf_resp.status_code == 201
+    calf_data = calf_resp.json()
+    assert calf_data["category"] == "beef"
+    assert calf_data["cow_type"] == "Bull Calf"
+    assert calf_data["dam_id"] == dam_id
+    assert calf_data["gives_milk"] is False  # Male cannot be milking
+    assert calf_data["days_on_farm"] == 25
+
+    # 3. Duel-purpose female cow with days_on_farm calculation
+    duel_resp = await client.post(
+        "/api/v1/herd/cows",
+        json={
+            "current_tag_number": "DUEL-COW-02",
+            "sex": "female",
+            "category": "duel-purpose",
+            "cow_type": "Heifer",
+            "gives_milk": True,
+            "acquisition_type": "bought_from_bazar",
+            "acquisition_date": str(today - timedelta(days=15)),
+            "purchase_price": 80000.0,
+            "supplier_id": supp_id,
+            "warehouse_id": wh_id,
+        },
+        headers=auth_headers,
+    )
+    assert duel_resp.status_code == 201
+    duel_data = duel_resp.json()
+    assert duel_data["category"] == "duel-purpose"
+    assert duel_data["cow_type"] == "Heifer"
+    assert duel_data["gives_milk"] is True
+    assert duel_data["days_on_farm"] == 15
+
+    # 4. Update purchased cow with dam_id
+    patch_resp = await client.patch(
+        f"/api/v1/herd/cows/{duel_data['cow_id']}",
+        json={"dam_id": dam_id, "cow_type": "Cow"},
+        headers=auth_headers,
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["dam_id"] == dam_id
+    assert patch_resp.json()["cow_type"] == "Cow"
+
+
+
 
 
