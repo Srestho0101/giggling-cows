@@ -160,7 +160,11 @@ export function HealthCareTab({
           >
             {row.is_archived ? "Restore" : "Archive"}
           </button>
-          <SafeDataHistory entityType="health_records" entityId={row.health_id} />
+          <SafeDataHistory
+            entityType="health_records"
+            entityId={row.health_id}
+            entityLabel={`${row.record_type} · ${formatDisplayDate(row.record_date)}`}
+          />
         </div>
       ),
     },
@@ -326,11 +330,36 @@ export function BreedingTab({
   const [actualCalving, setActualCalving] = useState("");
   const [pregNotes, setPregNotes] = useState("");
   const [pregSaving, setPregSaving] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [resolveDate, setResolveDate] = useState(today);
+  const [resolveBusy, setResolveBusy] = useState(false);
 
   const activePregnancies = pregnancyReports.filter(
-    (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected")
+    (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected") && !p.actual_calving_date
   );
   const maleSires = cows.filter((c) => c.cow_id !== cow.cow_id && c.sex === "male" && c.status === "active");
+
+  async function resolvePregnancy(pregnancyId: string) {
+    setResolveBusy(true);
+    onError("");
+    onNotice("");
+    try {
+      await apiRequest(apiRoutes.health.pregnancyReport(pregnancyId), {
+        method: "PATCH",
+        body: {
+          status: "calved",
+          actual_calving_date: resolveDate || today,
+        },
+      });
+      setResolvingId(null);
+      onNotice("Pregnancy marked as calved and alerts resolved.");
+      await reload();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Could not update pregnancy report.");
+    } finally {
+      setResolveBusy(false);
+    }
+  }
 
   async function submitBreeding(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -444,16 +473,56 @@ export function BreedingTab({
   return (
     <div className="space-y-5">
       {activePregnancies.length > 0 ? (
-        <section className="rounded-[8px] border border-accent/35 bg-accent-soft p-4">
+        <section className="rounded-[8px] border border-accent/35 bg-accent-soft p-4 space-y-2.5">
           <h3 className="text-[13px] font-semibold text-accent">Active pregnancy tracking</h3>
-          <div className="mt-2 flex flex-wrap gap-3 text-[13px] text-ink">
+          <div className="space-y-2 text-[13px] text-ink">
             {activePregnancies.map((item) => (
-              <span key={item.pregnancy_id}>
-                <strong className="capitalize">{item.status}</strong> (checked {formatDisplayDate(item.report_date)})
-                {item.expected_calving_date
-                  ? ` · Expected calving: ${formatDisplayDate(item.expected_calving_date)}`
-                  : ""}
-              </span>
+              <div key={item.pregnancy_id} className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  <strong className="capitalize">{item.status}</strong> (checked {formatDisplayDate(item.report_date)})
+                  {item.expected_calving_date
+                    ? ` · Expected calving: ${formatDisplayDate(item.expected_calving_date)}`
+                    : ""}
+                </span>
+                {resolvingId === item.pregnancy_id ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      max={today}
+                      value={resolveDate}
+                      onChange={(e) => setResolveDate(e.target.value)}
+                      className={`${ui.input} !h-8 w-auto`}
+                    />
+                    <button
+                      type="button"
+                      disabled={resolveBusy}
+                      onClick={() => void resolvePregnancy(item.pregnancy_id)}
+                      className={btn("primary", "sm")}
+                    >
+                      {resolveBusy ? "Saving…" : "Confirm calving"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={resolveBusy}
+                      onClick={() => setResolvingId(null)}
+                      className={btn("secondary", "sm")}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResolvingId(item.pregnancy_id);
+                      setResolveDate(today);
+                    }}
+                    className={btn("secondary", "sm")}
+                  >
+                    Record calving / Mark resolved
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         </section>
@@ -502,7 +571,7 @@ export function BreedingTab({
               Insemination date *
               <input type="date" required value={seedDate} onChange={(e) => setSeedDate(e.target.value)} className={ui.input} />
             </label>
-            <label className={ui.label}>
+            <label className={`${ui.label} sm:col-span-2`}>
               Method *
               <select value={method} onChange={(e) => setMethod(e.target.value)} className={ui.select}>
                 <option value="artificial_insemination">Artificial insemination</option>

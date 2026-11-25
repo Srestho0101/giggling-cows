@@ -101,6 +101,7 @@ export function DataWorkbench({
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<RecordRow | null>(null);
   const [showInactive, setShowInactive] = useState(false);
@@ -194,12 +195,27 @@ export function DataWorkbench({
     event.preventDefault();
     setSaving(true);
     setError("");
+    setFieldErrors({});
     setNotice("");
     let body: Record<string, unknown>;
     if (buildBody) {
+      const nextErrors: Record<string, string> = {};
+      for (const field of visibleFields) {
+        const value = (values[field.name] ?? field.defaultValue ?? "").trim();
+        if (!value && (field.required || (field.requiredOnCreate && !editing))) {
+          nextErrors[field.name] = `${field.label} is required.`;
+        }
+      }
+      if (Object.keys(nextErrors).length > 0) {
+        setFieldErrors(nextErrors);
+        setError("Please fill in all required fields highlighted below.");
+        setSaving(false);
+        return;
+      }
       body = buildBody(values);
     } else {
       body = {};
+      const nextErrors: Record<string, string> = {};
       for (const field of visibleFields) {
         const value = (values[field.name] ?? field.defaultValue ?? "").trim();
         if (field.type === "weekdays") {
@@ -208,13 +224,17 @@ export function DataWorkbench({
         }
         if (!value) {
           if (field.required || (field.requiredOnCreate && !editing)) {
-            setError(`${field.label} is required.`);
-            setSaving(false);
-            return;
+            nextErrors[field.name] = `${field.label} is required.`;
           }
           continue;
         }
         body[field.name] = field.type === "number" ? Number(value) : value;
+      }
+      if (Object.keys(nextErrors).length > 0) {
+        setFieldErrors(nextErrors);
+        setError("Please fill in all required fields highlighted below.");
+        setSaving(false);
+        return;
       }
     }
     try {
@@ -223,6 +243,7 @@ export function DataWorkbench({
         body,
       });
       setValues({});
+      setFieldErrors({});
       setEditing(null);
       setNotice(editing ? "Changes saved." : "Saved successfully.");
       setFormOpen(false);
@@ -243,6 +264,7 @@ export function DataWorkbench({
     );
     setNotice("");
     setError("");
+    setFieldErrors({});
     setFormOpen(true);
   }
 
@@ -323,6 +345,8 @@ export function DataWorkbench({
                 setFormOpen((open) => !open);
                 setEditing(null);
                 setValues({});
+                setError("");
+                setFieldErrors({});
               }}
               className={btn("primary", "sm")}
             >
@@ -347,6 +371,7 @@ export function DataWorkbench({
       {formOpen && (
         <form
           onSubmit={submit}
+          noValidate
           className="@container rounded-[6px] border border-line bg-subtle p-4 space-y-3.5"
         >
           <h3 className="text-[13px] font-semibold text-ink">
@@ -399,19 +424,32 @@ export function DataWorkbench({
                   {field.type === "select" ? (
                     <select
                       required={required}
+                      aria-invalid={Boolean(fieldErrors[field.name])}
                       value={values[field.name] ?? field.defaultValue ?? ""}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setFieldErrors((prev) => {
+                          if (!prev[field.name]) return prev;
+                          const copy = { ...prev };
+                          delete copy[field.name];
+                          return copy;
+                        });
                         setValues((current) => {
                           const next = { ...current, [field.name]: event.target.value };
                           if (field.name === "acquisition_type") {
                             next.supplier_id = "";
                             next.dam_id = "";
                             next.sire_id = "";
+                            if (event.target.value === "born_on_farm") {
+                              next.purchase_price = "";
+                              if (current.birth_date) {
+                                next.acquisition_date = current.birth_date;
+                              }
+                            }
                           }
                           return next;
-                        })
-                      }
-                      className={ui.select}
+                        });
+                      }}
+                      className={`${ui.select} ${fieldErrors[field.name] ? "border-warn" : ""}`}
                     >
                       <option value="">Choose {field.label.toLowerCase()}</option>
                       {fieldOptions.map((option) => (
@@ -424,15 +462,22 @@ export function DataWorkbench({
                     <textarea
                       rows={3}
                       required={required}
+                      aria-invalid={Boolean(fieldErrors[field.name])}
                       placeholder={field.placeholder}
                       value={values[field.name] ?? field.defaultValue ?? ""}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setFieldErrors((prev) => {
+                          if (!prev[field.name]) return prev;
+                          const copy = { ...prev };
+                          delete copy[field.name];
+                          return copy;
+                        });
                         setValues((current) => ({
                           ...current,
                           [field.name]: event.target.value,
-                        }))
-                      }
-                      className={ui.textarea}
+                        }));
+                      }}
+                      className={`${ui.textarea} ${fieldErrors[field.name] ? "border-warn" : ""}`}
                     />
                   ) : (
                     <input
@@ -440,16 +485,35 @@ export function DataWorkbench({
                       min={field.type === "number" ? "0" : undefined}
                       step={field.step ?? (field.type === "number" ? "0.01" : undefined)}
                       required={required}
+                      aria-invalid={Boolean(fieldErrors[field.name])}
                       placeholder={field.placeholder}
                       value={values[field.name] ?? field.defaultValue ?? ""}
-                      onChange={(event) =>
-                        setValues((current) => ({
-                          ...current,
-                          [field.name]: event.target.value,
-                        }))
-                      }
-                      className={ui.input}
+                      onChange={(event) => {
+                        setFieldErrors((prev) => {
+                          if (!prev[field.name]) return prev;
+                          const copy = { ...prev };
+                          delete copy[field.name];
+                          return copy;
+                        });
+                        setValues((current) => {
+                          const next = { ...current, [field.name]: event.target.value };
+                          if (
+                            field.name === "birth_date" &&
+                            current.acquisition_type === "born_on_farm" &&
+                            event.target.value
+                          ) {
+                            next.acquisition_date = event.target.value;
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`${ui.input} ${fieldErrors[field.name] ? "border-warn" : ""}`}
                     />
+                  )}
+                  {fieldErrors[field.name] && (
+                    <span className="mt-1 block text-[11px] font-medium text-warn">
+                      {fieldErrors[field.name]}
+                    </span>
                   )}
                 </label>
               );
@@ -462,6 +526,8 @@ export function DataWorkbench({
                 setFormOpen(false);
                 setEditing(null);
                 setValues({});
+                setError("");
+                setFieldErrors({});
               }}
               className={btn("secondary", "sm")}
             >
@@ -490,7 +556,7 @@ export function DataWorkbench({
                 </th>
               ))}
               {(rowActions || updatePath || deletePath || onDelete || lifecycle) && (
-                <th className="px-3 py-2.5 text-[12px] font-medium text-muted whitespace-nowrap text-right">
+                <th className="sticky right-0 z-10 border-l border-line bg-subtle px-3 py-2.5 text-[12px] font-medium text-muted whitespace-nowrap text-right">
                   Actions
                 </th>
               )}
@@ -537,7 +603,7 @@ export function DataWorkbench({
                     index
                 );
                 return (
-                  <tr key={rowKey} className="hover:bg-wash transition-colors">
+                  <tr key={rowKey} className="group hover:bg-wash transition-colors">
                     {columns.map((column, columnIndex) => {
                       const href = rowHref?.(row);
                       const rawValue = row[column.key];
@@ -585,7 +651,7 @@ export function DataWorkbench({
                       );
                     })}
                     {(rowActions || updatePath || deletePath || onDelete || lifecycle) && (
-                      <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                      <td className="sticky right-0 z-10 border-l border-line bg-surface group-hover:bg-wash px-3 py-2.5 whitespace-nowrap text-right transition-colors">
                         <div className="flex items-center justify-end gap-2.5 text-[12px]">
                           {rowActions?.(row)}
                           {lifecycle && lifecycle.isInactive(row) && updatePath ? (
@@ -628,6 +694,19 @@ export function DataWorkbench({
                             <SafeDataHistory
                               entityType={lifecycle.entityType}
                               entityId={String(row[lifecycle.idKey] ?? "")}
+                              entityLabel={
+                                String(
+                                  row.current_tag_number ??
+                                    row.invoice_number ??
+                                    row.name ??
+                                    row.evaluation_date ??
+                                    row.report_date ??
+                                    row.seed_date ??
+                                    row.record_date ??
+                                    row.expense_date ??
+                                    ""
+                                ).trim() || undefined
+                              }
                             />
                           ) : null}
                         </div>

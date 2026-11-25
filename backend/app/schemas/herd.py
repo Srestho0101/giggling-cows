@@ -56,9 +56,17 @@ class SupplierRead(SupplierBase, AuditBase):
 
 
 # WEIGHT RECORD
-class WeightRecordCreate(BaseModel):
+class WeightRecordBase(BaseModel):
     weigh_date: date
     weight_kg: Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
+
+
+class WeightRecordCreate(WeightRecordBase):
+    @model_validator(mode="after")
+    def validate_weigh_date_not_future(self) -> "WeightRecordCreate":
+        if self.weigh_date > date.today():
+            raise ValueError("Weigh date cannot be in the future.")
+        return self
 
 
 class WeightRecordUpdate(BaseModel):
@@ -66,8 +74,14 @@ class WeightRecordUpdate(BaseModel):
     weight_kg: Optional[Decimal] = Field(None, gt=0, max_digits=8, decimal_places=2)
     is_archived: Optional[bool] = None
 
+    @model_validator(mode="after")
+    def validate_weigh_date_not_future(self) -> "WeightRecordUpdate":
+        if self.weigh_date is not None and self.weigh_date > date.today():
+            raise ValueError("Weigh date cannot be in the future.")
+        return self
 
-class WeightRecordRead(WeightRecordCreate, AuditBase):
+
+class WeightRecordRead(WeightRecordBase, AuditBase):
     weight_id: uuid.UUID
     cow_id: uuid.UUID
     is_archived: bool = False
@@ -123,7 +137,8 @@ class CowWarehouseHistoryRead(AuditBase):
 class CowBase(BaseModel):
     current_tag_number: str = Field(..., max_length=50)
     sex: str = Field(..., pattern="^(male|female)$")
-    category: str = Field(..., max_length=50)  # dairy, bull, heifer, calf, ox
+    category: str = Field(..., max_length=50)  # dairy, beef, duel-purpose
+    cow_type: Optional[str] = Field(None, max_length=50)
     breed: Optional[str] = Field(None, pattern="^(deshi|friesian|other)$")
     birth_date: Optional[date] = None
     acquisition_type: str = Field(..., pattern="^(born_on_farm|bought_from_supplier|bought_from_bazar)$")
@@ -134,6 +149,7 @@ class CowBase(BaseModel):
     sire_id: Optional[uuid.UUID] = None
     warehouse_id: uuid.UUID
     status: str = Field("active", pattern="^(active|sold|deceased|archived)$")
+    gives_milk: Optional[bool] = False
     notes: Optional[str] = None
 
 
@@ -143,9 +159,15 @@ class CowCreate(CowBase):
         if self.acquisition_type == "born_on_farm":
             if self.supplier_id is not None:
                 raise ValueError("Born on farm cows cannot have a supplier_id.")
-        else:
-            if self.dam_id is not None or self.sire_id is not None:
-                raise ValueError("Purchased cows cannot have on-farm dam_id or sire_id.")
+            # Born-on-farm cows must not carry a purchase price
+            self.purchase_price = Decimal("0")
+            if self.birth_date is not None:
+                self.acquisition_date = self.birth_date
+        # Acquisition date must not precede birth date
+        if self.birth_date is not None and self.acquisition_date < self.birth_date:
+            raise ValueError("Acquisition date cannot be earlier than birth date.")
+        if self.sex == "male":
+            self.gives_milk = False
         return self
 
 
@@ -153,6 +175,7 @@ class CowUpdate(BaseModel):
     current_tag_number: Optional[str] = Field(None, max_length=50)
     sex: Optional[str] = Field(None, pattern="^(male|female)$")
     category: Optional[str] = Field(None, max_length=50)
+    cow_type: Optional[str] = Field(None, max_length=50)
     breed: Optional[str] = Field(None, pattern="^(deshi|friesian|other)$")
     birth_date: Optional[date] = None
     acquisition_type: Optional[str] = Field(None, pattern="^(born_on_farm|bought_from_supplier|bought_from_bazar)$")
@@ -163,6 +186,7 @@ class CowUpdate(BaseModel):
     sire_id: Optional[uuid.UUID] = None
     warehouse_id: Optional[uuid.UUID] = None
     status: Optional[str] = Field(None, pattern="^(active|sold|deceased|archived)$")
+    gives_milk: Optional[bool] = None
     notes: Optional[str] = None
     is_archived: Optional[bool] = None
 
@@ -179,9 +203,15 @@ class CowRead(CowBase, AuditBase):
     age: Optional[str] = None
     age_group: Optional[str] = None
     latest_weight_kg: Optional[Decimal] = None
+    days_on_farm: Optional[int] = None
 
     @model_validator(mode="after")
-    def calculate_age(self) -> "CowRead":
+    def calculate_derived_fields(self) -> "CowRead":
+        if self.acquisition_date:
+            self.days_on_farm = max(0, (date.today() - self.acquisition_date).days)
+        else:
+            self.days_on_farm = None
+
         category = self.category.strip().casefold()
         if "dairy" in category or "milk" in category:
             self.age = None
@@ -232,6 +262,7 @@ class CowOffspringRead(BaseModel):
     current_tag_number: str
     sex: str
     category: str
+    cow_type: Optional[str] = None
     birth_date: Optional[date] = None
     status: str
 

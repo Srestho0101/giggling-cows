@@ -53,6 +53,11 @@ export function EditProfilePanel({
     setSaving(true);
     onError("");
     onNotice("");
+    if (values.birth_date && values.acquisition_date && values.acquisition_date < values.birth_date) {
+      onError("Acquisition date cannot be earlier than birth date.");
+      setSaving(false);
+      return;
+    }
     try {
       const body: Record<string, unknown> = {
         current_tag_number: values.current_tag_number.trim(),
@@ -61,8 +66,12 @@ export function EditProfilePanel({
         breed: values.breed || null,
         birth_date: values.birth_date || null,
         acquisition_type: values.acquisition_type,
-        acquisition_date: values.acquisition_date,
-        purchase_price: values.purchase_price !== "" ? Number(values.purchase_price) : null,
+        acquisition_date: isBornOnFarm && values.birth_date ? values.birth_date : values.acquisition_date,
+        purchase_price: isBornOnFarm
+          ? 0
+          : values.purchase_price !== ""
+            ? Number(values.purchase_price)
+            : null,
         notes: values.notes.trim() || null,
       };
       if (isBornOnFarm) {
@@ -149,7 +158,15 @@ export function EditProfilePanel({
           <input
             type="date"
             value={values.birth_date}
-            onChange={(e) => setValues((c) => ({ ...c, birth_date: e.target.value }))}
+            onChange={(e) => {
+              const nextBirth = e.target.value;
+              setValues((c) => ({
+                ...c,
+                birth_date: nextBirth,
+                acquisition_date:
+                  c.acquisition_type === "born_on_farm" && nextBirth ? nextBirth : c.acquisition_date,
+              }));
+            }}
             className={ui.input}
           />
         </label>
@@ -162,6 +179,9 @@ export function EditProfilePanel({
               setValues((c) => ({
                 ...c,
                 acquisition_type: nextType,
+                acquisition_date:
+                  nextType === "born_on_farm" && c.birth_date ? c.birth_date : c.acquisition_date,
+                purchase_price: nextType === "born_on_farm" ? "0" : c.purchase_price,
                 supplier_id: nextType === "born_on_farm" ? "" : c.supplier_id,
                 dam_id: nextType === "born_on_farm" ? c.dam_id : "",
                 sire_id: nextType === "born_on_farm" ? c.sire_id : "",
@@ -179,9 +199,11 @@ export function EditProfilePanel({
           <input
             required
             type="date"
-            value={values.acquisition_date}
+            min={values.birth_date || undefined}
+            disabled={isBornOnFarm && Boolean(values.birth_date)}
+            value={isBornOnFarm && values.birth_date ? values.birth_date : values.acquisition_date}
             onChange={(e) => setValues((c) => ({ ...c, acquisition_date: e.target.value }))}
-            className={ui.input}
+            className={`${ui.input} disabled:opacity-65 disabled:cursor-not-allowed`}
           />
         </label>
 
@@ -242,9 +264,10 @@ export function EditProfilePanel({
             type="number"
             min="0"
             step="0.01"
-            value={values.purchase_price}
+            disabled={isBornOnFarm}
+            value={isBornOnFarm ? "0" : values.purchase_price}
             onChange={(e) => setValues((c) => ({ ...c, purchase_price: e.target.value }))}
-            className={ui.input}
+            className={`${ui.input} disabled:opacity-65 disabled:cursor-not-allowed`}
           />
         </label>
 

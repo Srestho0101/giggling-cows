@@ -98,7 +98,15 @@ const cowFields: FormField[] = [
     sourcePath: apiRoutes.herd.warehouses,
     sourceValue: "warehouse_id",
   },
-  { name: "purchase_price", label: "Purchase price ৳", type: "number" },
+  {
+    name: "purchase_price",
+    label: "Purchase price ৳",
+    type: "number",
+    showWhen: {
+      field: "acquisition_type",
+      equals: ["bought_from_supplier", "bought_from_bazar"],
+    },
+  },
   {
     name: "status",
     label: "Status",
@@ -154,11 +162,10 @@ export function HerdWorkspace() {
           <option value="sold">Sold</option>
           <option value="deceased">Deceased</option>
         </select>
-        <input
+        <CategoryFilterSelect
           value={category}
-          onChange={(event) => setCategory(event.target.value)}
-          placeholder="Category"
-          className={ui.input}
+          onChange={setCategory}
+          placeholder="All categories"
         />
         <select
           value={sex}
@@ -235,7 +242,8 @@ export function PurchasesWorkspace() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
-  const [decision, setDecision] = useState("returned");
+  const [manualDecision, setManualDecision] = useState<string | null>(null);
+  const decision = manualDecision ?? (preview ? (preview.is_profitable ? "bought" : "returned") : "pending");
   const [revision, setRevision] = useState(0);
   const [convertRow, setConvertRow] = useState<Record<string, unknown> | null>(null);
   const [convertBusy, setConvertBusy] = useState(false);
@@ -282,6 +290,7 @@ export function PurchasesWorkspace() {
       });
       setNotice("Evaluation saved.");
       form.reset();
+      setManualDecision(null);
       setRevision((value) => value + 1);
     } catch (cause) {
       setError(messageFor(cause));
@@ -417,9 +426,10 @@ export function PurchasesWorkspace() {
               <span className="block mb-1">Decision</span>
               <select
                 value={decision}
-                onChange={(event) => setDecision(event.target.value)}
+                onChange={(event) => setManualDecision(event.target.value)}
                 className={ui.select}
               >
+                <option value="pending">Pending</option>
                 <option value="returned">Return</option>
                 <option value="bought">Bought</option>
               </select>
@@ -1856,6 +1866,48 @@ export function AttendanceWorkspace({
       </div>
       {content}
     </section>
+  );
+}
+
+function CategoryFilterSelect({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const [categories, setCategories] = useState<string[]>([
+    "Milking cow",
+    "Heifer",
+    "Bull",
+    "Calf",
+    "Ox",
+  ]);
+  useEffect(() => {
+    void apiRequest<Record<string, unknown>[]>(apiRoutes.herd.cows)
+      .then((cows) => {
+        const defaults = ["Milking cow", "Heifer", "Bull", "Calf", "Ox"];
+        const fromDb = cows
+          .map((c) => String(c.category ?? "").trim())
+          .filter(Boolean);
+        const merged = Array.from(new Set([...fromDb, ...defaults])).sort((a, b) =>
+          a.localeCompare(b)
+        );
+        setCategories(merged);
+      })
+      .catch(() => {});
+  }, []);
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value)} className={ui.select}>
+      <option value="">{placeholder}</option>
+      {categories.map((cat) => (
+        <option key={cat} value={cat}>
+          {cat}
+        </option>
+      ))}
+    </select>
   );
 }
 

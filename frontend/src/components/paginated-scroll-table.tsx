@@ -83,7 +83,7 @@ export function PaginatedTableCard<T>({
       {topContent ? <div className="border-b border-line bg-subtle/60 px-4 py-3">{topContent}</div> : null}
 
       {total > 0 ? (
-        <div className={`${scrollHeightClass} overflow-auto`}>
+        <div className={scrollHeightClass ? `${scrollHeightClass} overflow-auto` : "overflow-x-auto"}>
           <table className="w-full border-collapse text-left text-[12.5px]">
             <thead className="sticky top-0 z-10 border-b border-line bg-subtle text-[11.5px] font-medium text-muted">
               <tr>

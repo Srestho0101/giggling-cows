@@ -6,6 +6,7 @@ import { MilkRecorder } from "@/components/milk-recorder";
 import { DataWorkbench, Notice } from "@/components/data-workbench";
 import { Badge, btn, StatTile, Tabs, ui } from "@/components/ui";
 import { useWorkspaceDate } from "@/components/workspace-date";
+import { usePreference } from "@/lib/preferences";
 import { apiQuery, apiRequest, apiRoutes, apiUrl } from "@/lib/api";
 
 type Row = Record<string, unknown>;
@@ -54,6 +55,17 @@ type Profitability = {
   cash_net_margin: number;
   profit_margin_percent: number;
 };
+
+export function TodaySubtitle() {
+  const [language] = usePreference<"en" | "bn">("cf-language", "en");
+  return (
+    <>
+      {language === "bn"
+        ? "আজকের খামারের কাজ এবং দৈনিক এন্ট্রি"
+        : "Daily farm tasks and entries"}
+    </>
+  );
+}
 
 export function TodayWorkspace() {
   const { date, isReady } = useWorkspaceDate();
@@ -934,8 +946,11 @@ function money(value: unknown) {
 
 function fmt(value: unknown) {
   return value == null
-    ? "0"
-    : new Intl.NumberFormat("en-BD", { maximumFractionDigits: 2 }).format(Number(value));
+    ? "0.00"
+    : new Intl.NumberFormat("en-BD", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(Number(value));
 }
 
 function today() {

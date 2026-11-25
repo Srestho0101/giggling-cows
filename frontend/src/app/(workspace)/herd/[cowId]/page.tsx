@@ -103,6 +103,7 @@ export default function CowProfilePage() {
       queryClient.invalidateQueries({ queryKey: ["cow-milk", cowId] }),
       queryClient.invalidateQueries({ queryKey: ["cow-expenses", cowId] }),
       queryClient.invalidateQueries({ queryKey: ["cow-feeding", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
     ]);
   }, [queryClient, cowId]);
 
@@ -212,9 +213,8 @@ export default function CowProfilePage() {
 
   const loadError = cowQuery.error instanceof Error ? cowQuery.error.message : "";
   const activeHealthCount = healthRecords.filter((h) => !h.is_archived).length;
-  const activeBreedingCount =
-    breedingRecords.filter((b) => !b.is_archived).length +
-    pregnancyReports.filter((p) => !p.is_archived).length;
+  const activeBreedingCount = breedingRecords.filter((b) => !b.is_archived).length;
+  const activePregnancyCount = pregnancyReports.filter((p) => !p.is_archived).length;
   const activeMilkAndCostCount =
     milkRecords.filter((m) => !m.is_archived && !m.is_void).length +
     expenses.filter((e) => !e.is_archived && !e.is_void).length +
@@ -223,7 +223,7 @@ export default function CowProfilePage() {
   const tabItems = [
     { key: "overview", label: "Overview & logs" },
     { key: "health", label: `Health (${activeHealthCount})` },
-    { key: "breeding", label: `Breeding (${activeBreedingCount})` },
+    { key: "breeding", label: `Breeding (${activeBreedingCount}) · Pregnancy (${activePregnancyCount})` },
     { key: "milk_costs", label: `Milk & costs (${activeMilkAndCostCount})` },
   ] as const;
 
@@ -301,7 +301,7 @@ export default function CowProfilePage() {
                   {cow.is_archived ? "Restore" : "Archive"}
                 </button>
                 <div className="inline-flex h-9 items-center rounded-[6px] border border-line-strong bg-surface px-3 text-[12.5px]">
-                  <SafeDataHistory entityType="cows" entityId={cow.cow_id} />
+                  <SafeDataHistory entityType="cows" entityId={cow.cow_id} entityLabel={`Cow #${cow.current_tag_number}`} />
                 </div>
               </div>
             </div>
@@ -370,15 +370,17 @@ export default function CowProfilePage() {
               }
             />
             <StatTile
-              label={cow.gives_milk || milkRecords.length > 0 ? "30-day milk (est.)" : "Direct cow costs"}
+              label={cow.gives_milk || milkRecords.length > 0 ? "30-day milk" : "Direct cow costs"}
               value={
                 cow.gives_milk || milkRecords.length > 0
-                  ? `${formatNumber(kpis.milk30Liters)} L`
+                  ? kpis.milkDaysCount > 0
+                    ? `${formatNumber(kpis.milk30Liters / kpis.milkDaysCount)} L/day`
+                    : "0 L/day"
                   : formatMoney(kpis.totalDirectCost)
               }
               subtext={
                 cow.gives_milk || milkRecords.length > 0
-                  ? `${kpis.milkDaysCount > 0 ? `${formatNumber(kpis.milk30Liters / kpis.milkDaysCount)} L/day · ` : ""}Direct cost: ${formatMoney(kpis.totalDirectCost)}`
+                  ? `${formatNumber(kpis.milk30Liters)} L total over ${kpis.milkDaysCount} day${kpis.milkDaysCount !== 1 ? "s" : ""} · Direct cost: ${formatMoney(kpis.totalDirectCost)}`
                   : "Health, breeding, expenses & feeding"
               }
             />
