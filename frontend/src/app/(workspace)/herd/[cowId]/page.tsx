@@ -2,159 +2,438 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ModulePage } from "@/components/module-page";
 import { Notice } from "@/components/data-workbench";
 import { SafeDataHistory } from "@/components/safe-data-history";
+import { Badge, btn, StatTile, statusTone, Tabs, ui } from "@/components/ui";
+import { shiftIsoDate, todayInDhaka } from "@/components/workspace-date";
 import { apiRequest, apiRoutes } from "@/lib/api";
-
-type CowDetails = Record<string, unknown> & {
-  weight_records?: Record<string, unknown>[];
-  warehouse_history?: Record<string, unknown>[];
-  id_history?: Record<string, unknown>[];
-};
-
-function breedLabel(value: unknown) {
-  if (value === "deshi") return "Deshi";
-  if (value === "friesian") return "Friesian";
-  if (value === "other") return "Other / unknown";
-  return "—";
-}
+import { EditProfilePanel } from "@/components/cow-profile/edit-profile-panel";
+import { ProfileOverviewTab } from "@/components/cow-profile/profile-overview-tab";
+import { BreedingTab, HealthCareTab, MilkCostsTab } from "@/components/cow-profile/profile-domain-tabs";
+import {
+  breedLabel,
+  daysBetween,
+  formatDisplayDate,
+  formatMoney,
+  formatNumber,
+  sessionLabel,
+  type BreedingRecord,
+  type CowDetail,
+  type CowExpense,
+  type CowFeedingRecord,
+  type CowListOption,
+  type HealthRecord,
+  type MilkRecord,
+  type PregnancyReport,
+  type SupplierOption,
+  type WarehouseOption,
+} from "@/components/cow-profile/types";
 
 export default function CowProfilePage() {
   const { cowId } = useParams<{ cowId: string }>();
-  const [cow, setCow] = useState<CowDetails | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [editOpen, setEditOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError("");
-    try { setCow(await apiRequest<CowDetails>(apiRoutes.herd.cow(cowId))); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load this cow."); }
-    finally { setLoading(false); }
-  }, [cowId]);
-  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
+  const cowQuery = useQuery({
+    queryKey: ["cow-profile", cowId],
+    queryFn: () => apiRequest<CowDetail>(apiRoutes.herd.cow(cowId)),
+  });
 
-  async function submit(event: React.FormEvent<HTMLFormElement>, kind: "weight" | "move") {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const body = kind === "weight"
-      ? { weigh_date: data.get("date"), weight_kg: Number(data.get("weight_kg")) }
-      : { warehouse_id: data.get("warehouse_id"), moved_in_date: data.get("date"), reason: data.get("reason") || null };
-    setBusy(true); setError(""); setNotice("");
+  const healthQuery = useQuery({
+    queryKey: ["cow-health", cowId],
+    queryFn: () => apiRequest<HealthRecord[]>(`${apiRoutes.health.records}?cow_id=${cowId}&include_archived=true`),
+  });
+
+  const breedingQuery = useQuery({
+    queryKey: ["cow-breeding", cowId],
+    queryFn: () => apiRequest<BreedingRecord[]>(`${apiRoutes.health.breeding}?cow_id=${cowId}&include_archived=true`),
+  });
+
+  const pregnancyQuery = useQuery({
+    queryKey: ["cow-pregnancy", cowId],
+    queryFn: () => apiRequest<PregnancyReport[]>(`${apiRoutes.health.pregnancy}?cow_id=${cowId}&include_archived=true`),
+  });
+
+  const milkQuery = useQuery({
+    queryKey: ["cow-milk", cowId],
+    queryFn: () => apiRequest<MilkRecord[]>(`${apiRoutes.sales.milk}?cow_id=${cowId}`),
+  });
+
+  const expenseQuery = useQuery({
+    queryKey: ["cow-expenses", cowId],
+    queryFn: () => apiRequest<CowExpense[]>(`${apiRoutes.feeding.expenses}?cow_id=${cowId}`),
+  });
+
+  const feedingQuery = useQuery({
+    queryKey: ["cow-feeding", cowId],
+    queryFn: () => apiRequest<CowFeedingRecord[]>(`${apiRoutes.feeding.records}?cow_id=${cowId}`),
+  });
+
+  const warehousesQuery = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: () => apiRequest<WarehouseOption[]>(apiRoutes.herd.warehouses),
+    staleTime: 60_000,
+  });
+
+  const suppliersQuery = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: () => apiRequest<SupplierOption[]>(apiRoutes.herd.suppliers),
+    staleTime: 60_000,
+  });
+
+  const cowsListQuery = useQuery({
+    queryKey: ["cows-options"],
+    queryFn: () => apiRequest<CowListOption[]>(apiRoutes.herd.cows),
+    staleTime: 60_000,
+  });
+
+  const reloadAll = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["cow-profile", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["cow-health", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["cow-breeding", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["cow-pregnancy", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["cow-milk", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["cow-expenses", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["cow-feeding", cowId] }),
+    ]);
+  }, [queryClient, cowId]);
+
+  const cow = cowQuery.data ?? null;
+  const healthRecords = useMemo(() => healthQuery.data ?? [], [healthQuery.data]);
+  const breedingRecords = useMemo(() => breedingQuery.data ?? [], [breedingQuery.data]);
+  const pregnancyReports = useMemo(() => pregnancyQuery.data ?? [], [pregnancyQuery.data]);
+  const milkRecords = useMemo(() => milkQuery.data ?? [], [milkQuery.data]);
+  const expenses = useMemo(() => expenseQuery.data ?? [], [expenseQuery.data]);
+  const feedingRecords = useMemo(() => feedingQuery.data ?? [], [feedingQuery.data]);
+  const warehouses = warehousesQuery.data ?? [];
+  const suppliers = suppliersQuery.data ?? [];
+  const allCows = cowsListQuery.data ?? [];
+
+  const today = todayInDhaka();
+
+  // Compute KPI strip metrics
+  const kpis = useMemo(() => {
+    if (!cow) return null;
+
+    const activeWeights = (cow.weight_records ?? [])
+      .filter((w) => !w.is_archived)
+      .slice()
+      .sort((a, b) => b.weigh_date.localeCompare(a.weigh_date));
+    const latestWeight = activeWeights[0];
+    const previousWeight = activeWeights[1];
+    const weightDelta =
+      latestWeight && previousWeight
+        ? Number(latestWeight.weight_kg) - Number(previousWeight.weight_kg)
+        : null;
+
+    const currentStay = (cow.warehouse_history ?? []).find((m) => !m.moved_out_date);
+    const stayDays = currentStay ? daysBetween(currentStay.moved_in_date, today) : null;
+
+    const activePregnancy = pregnancyReports.find(
+      (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected")
+    );
+    const dueCare = healthRecords
+      .filter((h) => !h.is_archived && h.next_due_date)
+      .sort((a, b) => String(a.next_due_date).localeCompare(String(b.next_due_date)))[0];
+
+    const cutoff30 = shiftIsoDate(today, -30);
+    const activeMilk30 = milkRecords.filter(
+      (m) => !m.is_archived && !m.is_void && m.production_date >= cutoff30
+    );
+    const milkDaysCount = new Set(activeMilk30.map((m) => m.production_date)).size;
+    const milk30Liters = activeMilk30.reduce((sum, m) => sum + Number(m.liters), 0);
+
+    const totalDirectCost =
+      healthRecords.filter((h) => !h.is_archived).reduce((s, h) => s + Number(h.cost ?? 0), 0) +
+      breedingRecords.filter((b) => !b.is_archived).reduce((s, b) => s + Number(b.cost ?? 0), 0) +
+      expenses.filter((e) => !e.is_archived && !e.is_void).reduce((s, e) => s + Number(e.amount ?? 0), 0) +
+      feedingRecords.filter((f) => !f.is_archived).reduce((s, f) => s + Number(f.cost ?? 0), 0);
+
+    return {
+      latestWeight,
+      weightDelta,
+      currentStay,
+      stayDays,
+      activePregnancy,
+      dueCare,
+      milkDaysCount,
+      milk30Liters,
+      totalDirectCost,
+    };
+  }, [cow, today, pregnancyReports, healthRecords, breedingRecords, milkRecords, expenses, feedingRecords]);
+
+  async function updateStatus(status: string) {
+    if (!cow) return;
+    setStatusBusy(true);
+    setError("");
+    setNotice("");
     try {
-      await apiRequest(kind === "weight" ? apiRoutes.herd.weight(cowId) : apiRoutes.herd.move(cowId), { method: "POST", body });
-      form.reset(); setNotice(kind === "weight" ? "Weight saved." : "Warehouse move saved."); await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save this record."); }
-    finally { setBusy(false); }
-  }
-
-  return <ModulePage title="Cow profile" subtitle="Cow record details, weight and housing history.">
-    {loading && <p className="text-sm text-stone-500">Loading cow…</p>}
-    {error && <Notice>{error}</Notice>}
-    {notice && <div className="mb-4"><Notice tone="success">{notice}</Notice></div>}
-    {cow && <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
-        <div><Link href="/herd" className="text-xs text-emerald-800 hover:underline">← Back to herd</Link><h2 className="mt-3 text-xl font-semibold">Cow {String(cow.current_tag_number)}</h2><p className="mt-1 text-sm text-stone-500">{String(cow.category)} · {String(cow.sex)} · {String(cow.warehouse_name ?? "No warehouse")}</p></div>
-        <label className="text-xs font-medium text-stone-500">Status<select value={String(cow.status ?? "active")} onChange={async (event) => {
-          const status = event.target.value; setError(""); setNotice("");
-          try { const updated = await apiRequest<CowDetails>(apiRoutes.herd.cow(cowId), { method: "PATCH", body: { status } }); setCow(updated); setNotice("Cow status updated."); }
-          catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update status."); }
-        }} className="mt-1 block rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800"><option value="active">Active</option><option value="sold">Sold</option><option value="deceased">Deceased</option><option value="archived">Archived</option></select></label>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[
-        ["Acquired", String(cow.acquisition_date ?? "—")], ["Acquisition", String(cow.acquisition_type ?? "—").replaceAll("_", " ")], ["Age", String(cow.age ?? "—")], ["Age group", String(cow.age_group ?? "—")], ["Breed", breedLabel(cow.breed)], ["Purchase price", cow.purchase_price ? `৳ ${cow.purchase_price}` : "—"], ["Dam", String(cow.dam_tag ?? "—")], ["Sire", String(cow.sire_tag ?? "—")], ["Latest weight", cow.latest_weight_kg ? `${cow.latest_weight_kg} kg` : "—"],
-      ].map(([label, value]) => <div key={label} className="rounded-xl border border-stone-200 bg-white p-4"><p className="text-xs text-stone-500">{label}</p><p className="mt-2 text-sm font-medium capitalize text-stone-800">{value}</p></div>)}</div>
-      <div className="grid gap-5 xl:grid-cols-2">
-        <WeightHistory
-          cowId={cowId}
-          rows={cow.weight_records ?? []}
-          reload={load}
-          onError={setError}
-          onNotice={setNotice}
-        />
-        <form onSubmit={(event) => void submit(event, "weight")} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"><h3 className="text-sm font-semibold">Log a weight</h3><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className={labelClass}>Date<input name="date" type="date" required defaultValue={localToday()} className={inputClass} /></label><label className={labelClass}>Weight (kg)<input name="weight_kg" type="number" min="0.1" step="0.1" required className={inputClass} /></label></div><button disabled={busy} className={buttonClass}>{busy ? "Saving…" : "Save weight"}</button></form>
-      </div>
-      <div className="grid gap-5 xl:grid-cols-2">
-        <HistoryCard title="Warehouse history" columns={["Warehouse", "Moved in", "Moved out", "Reason"]} rows={cow.warehouse_history ?? []} keys={["warehouse_name", "moved_in_date", "moved_out_date", "reason"]} />
-        <form onSubmit={(event) => void submit(event, "move")} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"><h3 className="text-sm font-semibold">Move cow</h3><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className={labelClass}>New warehouse<select name="warehouse_id" required className={inputClass}><WarehouseOptions /></select></label><label className={labelClass}>Move date<input name="date" type="date" required defaultValue={localToday()} className={inputClass} /></label><label className={`${labelClass} sm:col-span-2`}>Reason<input name="reason" className={inputClass} /></label></div><button disabled={busy} className={buttonClass}>{busy ? "Saving…" : "Save move"}</button></form>
-      </div>
-      <HistoryCard title="Tag history" columns={["Tag", "Type", "Assigned", "Removed", "Reason"]} rows={cow.id_history ?? []} keys={["tag_number", "tag_type", "assigned_date", "removed_date", "reason"]} />
-    </div>}
-  </ModulePage>;
-}
-
-function WeightHistory({
-  cowId,
-  rows,
-  reload,
-  onError,
-  onNotice,
-}: {
-  cowId: string;
-  rows: Record<string, unknown>[];
-  reload: () => Promise<void>;
-  onError: (message: string) => void;
-  onNotice: (message: string) => void;
-}) {
-  async function setArchived(row: Record<string, unknown>, archived: boolean) {
-    const label = archived ? "archive" : "restore";
-    if (archived && !window.confirm("Archive this weight record?")) return;
-    onError("");
-    onNotice("");
-    try {
-      await apiRequest(apiRoutes.herd.weightRecord(cowId, String(row.weight_id)), {
+      await apiRequest(apiRoutes.herd.cow(cowId), {
         method: "PATCH",
-        body: { is_archived: archived },
+        body: { status },
       });
-      onNotice(archived ? "Weight record archived." : "Weight record restored.");
-      await reload();
+      setNotice("Cow status updated.");
+      await reloadAll();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : `Could not ${label} weight record.`);
+      setError(cause instanceof Error ? cause.message : "Could not update status.");
+    } finally {
+      setStatusBusy(false);
     }
   }
 
+  async function toggleArchive() {
+    if (!cow) return;
+    const archive = !cow.is_archived;
+    if (!window.confirm(`${archive ? "Archive" : "Restore"} cow ${cow.current_tag_number}?`)) return;
+    setStatusBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(apiRoutes.herd.cow(cowId), {
+        method: "PATCH",
+        body: { is_archived: archive },
+      });
+      setNotice(archive ? "Cow archived." : "Cow restored.");
+      await reloadAll();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not update archive status.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  const loadError = cowQuery.error instanceof Error ? cowQuery.error.message : "";
+  const activeHealthCount = healthRecords.filter((h) => !h.is_archived).length;
+  const activeBreedingCount =
+    breedingRecords.filter((b) => !b.is_archived).length +
+    pregnancyReports.filter((p) => !p.is_archived).length;
+  const activeMilkAndCostCount =
+    milkRecords.filter((m) => !m.is_archived && !m.is_void).length +
+    expenses.filter((e) => !e.is_archived && !e.is_void).length +
+    feedingRecords.filter((f) => !f.is_archived).length;
+
+  const tabItems = [
+    { key: "overview", label: "Overview & logs" },
+    { key: "health", label: `Health (${activeHealthCount})` },
+    { key: "breeding", label: `Breeding (${activeBreedingCount})` },
+    { key: "milk_costs", label: `Milk & costs (${activeMilkAndCostCount})` },
+  ] as const;
+
   return (
-    <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
-      <h3 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold">Weight history</h3>
-      {rows.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-stone-50 text-stone-500"><tr><th className="px-4 py-2.5">Date</th><th className="px-4 py-2.5">Weight</th><th className="px-4 py-2.5">Archived</th><th className="px-4 py-2.5">Actions</th></tr></thead>
-            <tbody className="divide-y divide-stone-100">
-              {rows.map((row) => (
-                <tr key={String(row.weight_id)}>
-                  <td className="whitespace-nowrap px-4 py-3">{String(row.weigh_date)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{String(row.weight_kg)} kg</td>
-                  <td className="px-4 py-3">{row.is_archived ? "Yes" : "No"}</td>
-                  <td className="px-4 py-3"><div className="flex items-center gap-3">
-                    <button type="button" onClick={() => void setArchived(row, !row.is_archived)} className="font-medium text-accent hover:underline">{row.is_archived ? "Restore" : "Archive"}</button>
-                    <SafeDataHistory entityType="weight_records" entityId={String(row.weight_id)} />
-                  </div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <ModulePage title="Cow profile" subtitle="Detailed animal record, weights, housing, tags, health, and lineage.">
+      <div className="mb-4">
+        <Link href="/herd" className={ui.link}>
+          ← Back to herd
+        </Link>
+      </div>
+
+      {cowQuery.isLoading ? <p className="text-[13px] text-muted">Loading cow profile…</p> : null}
+      {loadError ? <Notice>{loadError}</Notice> : null}
+      {error ? <div className="mb-4"><Notice>{error}</Notice></div> : null}
+      {notice ? <div className="mb-4"><Notice tone="success">{notice}</Notice></div> : null}
+
+      {cow && kpis ? (
+        <div className="space-y-5">
+          {/* Header Card */}
+          <section className="rounded-[8px] border border-line bg-surface p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[20px] font-semibold tracking-tight text-ink">
+                    Cow {cow.current_tag_number}
+                  </h2>
+                  <Badge tone={statusTone(cow.status)}>
+                    <span className="capitalize">{cow.status}</span>
+                  </Badge>
+                  {cow.is_archived ? <Badge tone="warn">Archived</Badge> : null}
+                  {cow.gives_milk ? (
+                    <Badge tone="good">
+                      Milking
+                      {cow.milking_sessions?.length
+                        ? ` · ${cow.milking_sessions.map(sessionLabel).join(", ")}`
+                        : ""}
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-[13px] text-muted capitalize">
+                  {cow.category} · {cow.sex}
+                  {cow.breed ? ` · ${breedLabel(cow.breed)}` : ""} ·{" "}
+                  {cow.warehouse_name ?? "No warehouse"}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="text-[12px] font-medium text-muted">
+                  <span className="mb-1 block">Status</span>
+                  <select
+                    disabled={statusBusy}
+                    value={cow.status}
+                    onChange={(event) => void updateStatus(event.target.value)}
+                    className={`${ui.select} w-32`}
+                  >
+                    <option value="active">Active</option>
+                    <option value="sold">Sold</option>
+                    <option value="deceased">Deceased</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setEditOpen((open) => !open)}
+                  className={btn("secondary", "md")}
+                >
+                  {editOpen ? "Close edit" : "Edit profile"}
+                </button>
+                <button
+                  type="button"
+                  disabled={statusBusy}
+                  onClick={() => void toggleArchive()}
+                  className={btn("secondary", "md")}
+                >
+                  {cow.is_archived ? "Restore" : "Archive"}
+                </button>
+                <div className="inline-flex h-9 items-center rounded-[6px] border border-line-strong bg-surface px-3 text-[12.5px]">
+                  <SafeDataHistory entityType="cows" entityId={cow.cow_id} />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {editOpen ? (
+            <EditProfilePanel
+              key={`${cow.cow_id}-${cow.current_tag_number}-${cow.acquisition_type}`}
+              cow={cow}
+              suppliers={suppliers}
+              cows={allCows}
+              onSaved={reloadAll}
+              onCancel={() => setEditOpen(false)}
+              onError={setError}
+              onNotice={setNotice}
+            />
+          ) : null}
+
+          {/* Summary Stat Strip */}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatTile
+              label="Latest weight"
+              value={cow.latest_weight_kg != null ? `${formatNumber(cow.latest_weight_kg)} kg` : "—"}
+              subtext={
+                kpis.latestWeight
+                  ? `${formatDisplayDate(kpis.latestWeight.weigh_date)}${
+                      kpis.weightDelta !== null
+                        ? ` · ${kpis.weightDelta >= 0 ? "+" : ""}${formatNumber(kpis.weightDelta)} kg vs prev`
+                        : ""
+                    }`
+                  : "No active weight recorded"
+              }
+            />
+            <StatTile
+              label="Current housing"
+              value={<span className="text-[18px]">{cow.warehouse_name ?? "—"}</span>}
+              subtext={
+                kpis.currentStay
+                  ? `Since ${formatDisplayDate(kpis.currentStay.moved_in_date)}${
+                      kpis.stayDays !== null && kpis.stayDays >= 0 ? ` (${kpis.stayDays} days)` : ""
+                    }`
+                  : "No active stay record"
+              }
+            />
+            <StatTile
+              label={kpis.activePregnancy ? "Pregnancy status" : "Next care due"}
+              value={
+                <span className="text-[18px]">
+                  {kpis.activePregnancy
+                    ? kpis.activePregnancy.expected_calving_date
+                      ? formatDisplayDate(kpis.activePregnancy.expected_calving_date)
+                      : "Confirmed"
+                    : kpis.dueCare?.next_due_date
+                      ? formatDisplayDate(kpis.dueCare.next_due_date)
+                      : "Up to date"}
+                </span>
+              }
+              subtext={
+                kpis.activePregnancy
+                  ? `Expected calving (${kpis.activePregnancy.status})`
+                  : kpis.dueCare?.next_due_date
+                    ? `${kpis.dueCare.record_type}${
+                        kpis.dueCare.next_due_date < today ? " · Overdue" : ""
+                      }`
+                    : "No pending care dates"
+              }
+            />
+            <StatTile
+              label={cow.gives_milk || milkRecords.length > 0 ? "30-day milk (est.)" : "Direct cow costs"}
+              value={
+                cow.gives_milk || milkRecords.length > 0
+                  ? `${formatNumber(kpis.milk30Liters)} L`
+                  : formatMoney(kpis.totalDirectCost)
+              }
+              subtext={
+                cow.gives_milk || milkRecords.length > 0
+                  ? `${kpis.milkDaysCount > 0 ? `${formatNumber(kpis.milk30Liters / kpis.milkDaysCount)} L/day · ` : ""}Direct cost: ${formatMoney(kpis.totalDirectCost)}`
+                  : "Health, breeding, expenses & feeding"
+              }
+            />
+          </div>
+
+          <Tabs items={tabItems} active={activeTab} onChange={setActiveTab} />
+
+          {activeTab === "overview" ? (
+            <ProfileOverviewTab
+              cow={cow}
+              warehouses={warehouses}
+              reload={reloadAll}
+              onError={setError}
+              onNotice={setNotice}
+            />
+          ) : null}
+
+          {activeTab === "health" ? (
+            <HealthCareTab
+              cowId={cow.cow_id}
+              records={healthRecords}
+              reload={reloadAll}
+              onError={setError}
+              onNotice={setNotice}
+            />
+          ) : null}
+
+          {activeTab === "breeding" ? (
+            <BreedingTab
+              cow={cow}
+              breedingRecords={breedingRecords}
+              pregnancyReports={pregnancyReports}
+              cows={allCows}
+              reload={reloadAll}
+              onError={setError}
+              onNotice={setNotice}
+            />
+          ) : null}
+
+          {activeTab === "milk_costs" ? (
+            <MilkCostsTab
+              key={`${cow.cow_id}-${cow.gives_milk}-${(cow.milking_sessions ?? []).join(",")}`}
+              cow={cow}
+              milkRecords={milkRecords}
+              expenses={expenses}
+              feedingRecords={feedingRecords}
+              healthRecords={healthRecords}
+              breedingRecords={breedingRecords}
+              reload={reloadAll}
+              onError={setError}
+              onNotice={setNotice}
+            />
+          ) : null}
         </div>
-      ) : <p className="px-4 py-8 text-center text-xs text-stone-400">No weight records yet.</p>}
-    </div>
+      ) : null}
+    </ModulePage>
   );
 }
-
-function HistoryCard({ title, columns, rows, keys, suffixes = [] }: { title: string; columns: string[]; rows: Record<string, unknown>[]; keys: string[]; suffixes?: string[] }) {
-  return <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><h3 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold">{title}</h3>{rows.length ? <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="bg-stone-50 text-stone-500"><tr>{columns.map((column) => <th key={column} className="px-4 py-2.5 font-medium">{column}</th>)}</tr></thead><tbody className="divide-y divide-stone-100">{rows.map((row, index) => <tr key={String(row.weight_id ?? row.movement_id ?? row.history_id ?? index)}>{keys.map((key, cell) => <td key={key} className="whitespace-nowrap px-4 py-3 text-stone-700">{String(row[key] ?? "—")}{suffixes[cell]}</td>)}</tr>)}</tbody></table></div> : <p className="px-4 py-8 text-center text-xs text-stone-400">No history recorded.</p>}</div>;
-}
-
-function WarehouseOptions() {
-  const [warehouses, setWarehouses] = useState<Record<string, unknown>[]>([]);
-  useEffect(() => { void apiRequest<Record<string, unknown>[]>(apiRoutes.herd.warehouses).then(setWarehouses).catch(() => setWarehouses([])); }, []);
-  return <><option value="">Choose warehouse</option>{warehouses.map((warehouse) => <option key={String(warehouse.warehouse_id)} value={String(warehouse.warehouse_id)}>{String(warehouse.name)}</option>)}</>;
-}
-
-const inputClass = "mt-1 block w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10";
-const labelClass = "block text-xs font-medium text-stone-600";
-const buttonClass = "mt-4 rounded-md bg-emerald-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50";
-function localToday() { const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()); const date = Object.fromEntries(parts.map((part) => [part.type, part.value])); return `${date.year}-${date.month}-${date.day}`; }

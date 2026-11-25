@@ -75,16 +75,31 @@ class WeightRecordRead(WeightRecordCreate, AuditBase):
 
 # COW ID / TAG HISTORY
 class CowIDHistoryCreate(BaseModel):
-    tag_number: str = Field(..., max_length=50)
+    tag_number: str = Field(..., min_length=1, max_length=50)
     tag_type: str = Field("ear_tag", max_length=50)
     assigned_date: date
     removed_date: Optional[date] = None
-    reason: Optional[str] = None
+    reason: Optional[str] = Field(None, max_length=500)
+    set_as_current: bool = True
+
+    @model_validator(mode="after")
+    def validate_dates_and_tag(self) -> "CowIDHistoryCreate":
+        self.tag_number = self.tag_number.strip()
+        if not self.tag_number:
+            raise ValueError("Tag number cannot be empty.")
+        if self.removed_date is not None and self.removed_date < self.assigned_date:
+            raise ValueError("Removed date cannot be earlier than assigned date.")
+        return self
 
 
-class CowIDHistoryRead(CowIDHistoryCreate, AuditBase):
+class CowIDHistoryRead(AuditBase):
     history_id: uuid.UUID
     cow_id: uuid.UUID
+    tag_number: str
+    tag_type: str
+    assigned_date: date
+    removed_date: Optional[date] = None
+    reason: Optional[str] = None
 
 
 # COW WAREHOUSE MOVEMENT HISTORY
@@ -212,7 +227,19 @@ def _add_months(value: date, months: int) -> date:
     return date(year, month, day)
 
 
+class CowOffspringRead(BaseModel):
+    cow_id: uuid.UUID
+    current_tag_number: str
+    sex: str
+    category: str
+    birth_date: Optional[date] = None
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CowDetailRead(CowRead):
     id_history: List[CowIDHistoryRead] = []
     warehouse_history: List[CowWarehouseHistoryRead] = []
     weight_records: List[WeightRecordRead] = []
+    offspring: List[CowOffspringRead] = []

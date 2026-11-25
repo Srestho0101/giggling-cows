@@ -370,3 +370,162 @@ async def test_error_handler_cors_and_json(client: AsyncClient):
     assert resp.headers.get("access-control-allow-origin") == "https://giggling-cows.vercel.app"
 
 
+@pytest.mark.asyncio
+async def test_cow_profile_details_weights_tags_moves_and_offspring(client: AsyncClient):
+    auth_headers = {"Authorization": "Bearer dev-user:admin"}
+
+    wh1 = (
+        await client.post(
+            "/api/v1/herd/warehouses",
+            json={"name": "Profile Shed 1", "housing_type": "tie_stall", "capacity": 20},
+            headers=auth_headers,
+        )
+    ).json()["warehouse_id"]
+    wh2 = (
+        await client.post(
+            "/api/v1/herd/warehouses",
+            json={"name": "Profile Shed 2", "housing_type": "pen", "capacity": 10},
+            headers=auth_headers,
+        )
+    ).json()["warehouse_id"]
+
+    dam_resp = await client.post(
+        "/api/v1/herd/cows",
+        json={
+            "current_tag_number": "PROF-DAM-01",
+            "sex": "female",
+            "category": "dairy",
+            "breed": "friesian",
+            "acquisition_type": "bought_from_bazar",
+            "acquisition_date": "2026-01-10",
+            "warehouse_id": wh1,
+            "status": "active",
+        },
+        headers=auth_headers,
+    )
+    assert dam_resp.status_code == 201
+    dam_id = dam_resp.json()["cow_id"]
+
+    # Create offspring linked to dam
+    calf_resp = await client.post(
+        "/api/v1/herd/cows",
+        json={
+            "current_tag_number": "PROF-CALF-01",
+            "sex": "female",
+            "category": "calf",
+            "breed": "friesian",
+            "birth_date": "2026-05-01",
+            "acquisition_type": "born_on_farm",
+            "acquisition_date": "2026-05-01",
+            "dam_id": dam_id,
+            "warehouse_id": wh1,
+            "status": "active",
+        },
+        headers=auth_headers,
+    )
+    assert calf_resp.status_code == 201
+    calf_id = calf_resp.json()["cow_id"]
+
+    # Moving to the same warehouse must return 400
+    same_move = await client.post(
+        f"/api/v1/herd/cows/{dam_id}/move",
+        json={"warehouse_id": wh1, "moved_in_date": "2026-06-01", "reason": "No-op"},
+        headers=auth_headers,
+    )
+    assert same_move.status_code == 400
+
+    # Moving to wh2 succeeds and sorts newest-first
+    ok_move = await client.post(
+        f"/api/v1/herd/cows/{dam_id}/move",
+        json={"warehouse_id": wh2, "moved_in_date": "2026-06-01", "reason": "Isolation"},
+        headers=auth_headers,
+    )
+    assert ok_move.status_code == 200
+    assert ok_move.json()["warehouse_id"] == wh2
+    assert ok_move.json()["warehouse_history"][0]["warehouse_id"] == wh2
+    assert ok_move.json()["warehouse_history"][1]["moved_out_date"] == "2026-06-01"
+
+    # Log two weights, then archive the newer one -> latest_weight_kg must fall back to active weight
+    w1 = (
+        await client.post(
+            f"/api/v1/herd/cows/{dam_id}/weight",
+            json={"weigh_date": "2026-05-01", "weight_kg": 440.0},
+            headers=auth_headers,
+        )
+    ).json()
+    w2 = (
+        await client.post(
+            f"/api/v1/herd/cows/{dam_id}/weight",
+            json={"weigh_date": "2026-06-01", "weight_kg": 465.0},
+            headers=auth_headers,
+        )
+    ).json()
+    assert Decimal(w2["weight_kg"]) == Decimal("465.00")
+
+    arch_w2 = await client.patch(
+        f"/api/v1/herd/cows/{dam_id}/weight/{w2['weight_id']}",
+        json={"is_archived": True},
+        headers=auth_headers,
+    )
+    assert arch_w2.status_code == 200
+
+    detail_after_archive = (await client.get(f"/api/v1/herd/cows/{dam_id}", headers=auth_headers)).json()
+    assert Decimal(detail_after_archive["latest_weight_kg"]) == Decimal("440.00")
+    assert detail_after_archive["weight_records"][0]["weight_id"] == w2["weight_id"]
+    assert detail_after_archive["offspring"][0]["cow_id"] == calf_id
+
+    # Add secondary RFID tag without changing primary tag
+    rfid_resp = await client.post(
+        f"/api/v1/herd/cows/{dam_id}/tags",
+        json={
+            "tag_number": "RFID-9901",
+            "tag_type": "rfid",
+            "assigned_date": "2026-06-05",
+            "reason": "Electronic collar",
+            "set_as_current": False,
+        },
+        headers=auth_headers,
+    )
+    assert rfid_resp.status_code == 201
+    assert rfid_resp.json()["current_tag_number"] == "PROF-DAM-01"
+
+    # Replace primary tag (must reject duplicate active tag, succeed for unique tag)
+    dup_tag = await client.post(
+        f"/api/v1/herd/cows/{dam_id}/tags",
+        json={
+            "tag_number": "PROF-CALF-01",
+            "tag_type": "ear_tag",
+            "assigned_date": "2026-06-10",
+            "set_as_current": True,
+        },
+        headers=auth_headers,
+    )
+    assert dup_tag.status_code == 400
+
+    new_tag = await client.post(
+        f"/api/v1/herd/cows/{dam_id}/tags",
+        json={
+            "tag_number": "PROF-DAM-02",
+            "tag_type": "ear_tag",
+            "assigned_date": "2026-06-10",
+            "reason": "Replacement ear tag",
+            "set_as_current": True,
+        },
+        headers=auth_headers,
+    )
+    assert new_tag.status_code == 201
+    new_tag_data = new_tag.json()
+    assert new_tag_data["current_tag_number"] == "PROF-DAM-02"
+    assert len(new_tag_data["id_history"]) == 3
+    old_primary = next(t for t in new_tag_data["id_history"] if t["tag_number"] == "PROF-DAM-01")
+    assert old_primary["removed_date"] == "2026-06-10"
+
+    # Self-parent guard on PATCH
+    self_parent = await client.patch(
+        f"/api/v1/herd/cows/{calf_id}",
+        json={"dam_id": calf_id},
+        headers=auth_headers,
+    )
+    assert self_parent.status_code == 400
+
+

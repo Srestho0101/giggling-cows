@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import List, Optional
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -13,7 +13,9 @@ from app.models.herd import Cow, CowIDHistory, CowWarehouseHistory, Supplier, Wa
 from app.schemas.herd import (
     CowCreate,
     CowDetailRead,
+    CowIDHistoryCreate,
     CowIDHistoryRead,
+    CowOffspringRead,
     CowRead,
     CowUpdate,
     CowWarehouseHistoryCreate,
@@ -260,10 +262,25 @@ async def get_cow_detail(
     detail.supplier_name = cow.supplier.name if cow.supplier else None
     detail.dam_tag = cow.dam.current_tag_number if cow.dam else None
     detail.sire_tag = cow.sire.current_tag_number if cow.sire else None
-    if cow.weight_records:
-        latest_w = max(cow.weight_records, key=lambda w: w.weigh_date)
-        detail.latest_weight_kg = latest_w.weight_kg
 
+    active_weights = [w for w in cow.weight_records if not w.is_archived]
+    if active_weights:
+        latest_w = max(active_weights, key=lambda w: (w.weigh_date, w.created_at))
+        detail.latest_weight_kg = latest_w.weight_kg
+    else:
+        detail.latest_weight_kg = None
+
+    sorted_weights = sorted(cow.weight_records, key=lambda w: (w.weigh_date, w.created_at), reverse=True)
+    detail.weight_records = [WeightRecordRead.model_validate(w) for w in sorted_weights]
+
+    sorted_id_history = sorted(cow.id_history, key=lambda h: (h.assigned_date, h.created_at), reverse=True)
+    detail.id_history = [CowIDHistoryRead.model_validate(h) for h in sorted_id_history]
+
+    sorted_warehouse_history = sorted(
+        cow.warehouse_history,
+        key=lambda m: (m.moved_in_date, m.created_at),
+        reverse=True,
+    )
     detail.warehouse_history = [
         CowWarehouseHistoryRead(
             movement_id=m.movement_id,
@@ -278,8 +295,19 @@ async def get_cow_detail(
             created_by=m.created_by,
             updated_by=m.updated_by,
         )
-        for m in cow.warehouse_history
+        for m in sorted_warehouse_history
     ]
+
+    offspring_stmt = (
+        select(Cow)
+        .where(
+            Cow.is_archived == False,
+            or_(Cow.dam_id == cow_id, Cow.sire_id == cow_id),
+        )
+        .order_by(Cow.birth_date.desc(), Cow.acquisition_date.desc())
+    )
+    offspring_rows = (await db.execute(offspring_stmt)).scalars().all()
+    detail.offspring = [CowOffspringRead.model_validate(child) for child in offspring_rows]
 
     return detail
 
@@ -441,6 +469,21 @@ async def update_cow(
         db.add(new_mov)
 
     update_dict = data.model_dump(exclude_unset=True)
+
+    if update_dict.get("dam_id") == cow_id or update_dict.get("sire_id") == cow_id:
+        raise HTTPException(status_code=400, detail="A cow cannot be its own dam or sire.")
+
+    next_acquisition = update_dict.get("acquisition_type", cow.acquisition_type)
+    if next_acquisition == "born_on_farm":
+        if update_dict.get("supplier_id") is not None:
+            raise HTTPException(status_code=400, detail="Born on farm cows cannot have a supplier.")
+        update_dict["supplier_id"] = None
+    else:
+        if update_dict.get("dam_id") is not None or update_dict.get("sire_id") is not None:
+            raise HTTPException(status_code=400, detail="Purchased cows cannot have on-farm dam or sire.")
+        update_dict["dam_id"] = None
+        update_dict["sire_id"] = None
+
     for field, val in update_dict.items():
         setattr(cow, field, val)
 
@@ -525,35 +568,94 @@ async def move_cow_warehouse(
     if not warehouse:
         raise HTTPException(status_code=404, detail="Destination warehouse not found")
 
-    if cow.warehouse_id != data.warehouse_id:
-        # Close old movement
-        old_mov_stmt = (
-            select(CowWarehouseHistory)
-            .where(
-                CowWarehouseHistory.cow_id == cow_id,
-                CowWarehouseHistory.warehouse_id == cow.warehouse_id,
-                CowWarehouseHistory.moved_out_date.is_(None),
-            )
-            .order_by(CowWarehouseHistory.moved_in_date.desc())
+    if cow.warehouse_id == data.warehouse_id:
+        raise HTTPException(status_code=400, detail="Cow is already in the selected warehouse.")
+
+    # Close old movement
+    old_mov_stmt = (
+        select(CowWarehouseHistory)
+        .where(
+            CowWarehouseHistory.cow_id == cow_id,
+            CowWarehouseHistory.warehouse_id == cow.warehouse_id,
+            CowWarehouseHistory.moved_out_date.is_(None),
         )
-        old_mov = (await db.execute(old_mov_stmt)).scalars().first()
-        if old_mov:
-            old_mov.moved_out_date = data.moved_in_date
+        .order_by(CowWarehouseHistory.moved_in_date.desc())
+    )
+    old_mov = (await db.execute(old_mov_stmt)).scalars().first()
+    if old_mov:
+        old_mov.moved_out_date = data.moved_in_date
 
-        # Add new movement
-        new_mov = CowWarehouseHistory(
-            cow_id=cow_id,
-            warehouse_id=data.warehouse_id,
-            moved_in_date=data.moved_in_date,
-            reason=data.reason,
-            created_by=current_user.id,
-            updated_by=current_user.id,
-        )
-        db.add(new_mov)
+    # Add new movement
+    new_mov = CowWarehouseHistory(
+        cow_id=cow_id,
+        warehouse_id=data.warehouse_id,
+        moved_in_date=data.moved_in_date,
+        reason=data.reason,
+        created_by=current_user.id,
+        updated_by=current_user.id,
+    )
+    db.add(new_mov)
 
-        cow.warehouse_id = data.warehouse_id
-        cow.updated_by = current_user.id
+    cow.warehouse_id = data.warehouse_id
+    cow.updated_by = current_user.id
 
-        await db.commit()
+    await db.commit()
 
     return await get_cow_detail(cow.cow_id, db, current_user)
+
+
+# ---------------------- TAG HISTORY ----------------------
+@router.post("/cows/{cow_id}/tags", response_model=CowDetailRead, status_code=status.HTTP_201_CREATED)
+async def add_cow_tag_history(
+    cow_id: uuid.UUID,
+    data: CowIDHistoryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER, UserRole.DATA_ENTRY])),
+):
+    cow = await db.get(Cow, cow_id)
+    if not cow:
+        raise HTTPException(status_code=404, detail="Cow not found")
+
+    if data.set_as_current and data.removed_date is None:
+        if data.tag_number != cow.current_tag_number:
+            dup_stmt = select(Cow).where(
+                Cow.current_tag_number == data.tag_number,
+                Cow.cow_id != cow_id,
+                Cow.status != "archived",
+                Cow.is_archived == False,
+            )
+            if (await db.execute(dup_stmt)).scalar_one_or_none():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"An active cow with tag number '{data.tag_number}' already exists.",
+                )
+
+            old_tag_stmt = (
+                select(CowIDHistory)
+                .where(
+                    CowIDHistory.cow_id == cow_id,
+                    CowIDHistory.tag_number == cow.current_tag_number,
+                    CowIDHistory.removed_date.is_(None),
+                )
+                .order_by(CowIDHistory.assigned_date.desc())
+            )
+            old_tag_record = (await db.execute(old_tag_stmt)).scalars().first()
+            if old_tag_record:
+                old_tag_record.removed_date = data.assigned_date
+
+            cow.current_tag_number = data.tag_number
+            cow.updated_by = current_user.id
+
+    new_tag = CowIDHistory(
+        cow_id=cow_id,
+        tag_number=data.tag_number,
+        tag_type=data.tag_type,
+        assigned_date=data.assigned_date,
+        removed_date=data.removed_date,
+        reason=data.reason,
+        created_by=current_user.id,
+        updated_by=current_user.id,
+    )
+    db.add(new_tag)
+    await db.commit()
+    return await get_cow_detail(cow_id, db, current_user)

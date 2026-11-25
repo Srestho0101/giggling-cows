@@ -128,6 +128,7 @@ export const apiRoutes = {
     weight: (id: string) => `/herd/cows/${id}/weight`,
     weightRecord: (cowId: string, weightId: string) => `/herd/cows/${cowId}/weight/${weightId}`,
     move: (id: string) => `/herd/cows/${id}/move`,
+    tags: (id: string) => `/herd/cows/${id}/tags`,
     warehouses: "/herd/warehouses", warehouse: (id: string) => `/herd/warehouses/${id}`,
     suppliers: "/herd/suppliers", supplier: (id: string) => `/herd/suppliers/${id}`,
   },
