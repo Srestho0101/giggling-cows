@@ -1,4 +1,5 @@
-from datetime import date
+import uuid
+from datetime import date, timedelta
 from decimal import Decimal
 import pytest
 from httpx import AsyncClient
@@ -527,5 +528,194 @@ async def test_cow_profile_details_weights_tags_moves_and_offspring(client: Asyn
         headers=auth_headers,
     )
     assert self_parent.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_qa_audit_p0_p1_invariants(client: AsyncClient):
+    auth_headers = {"Authorization": "Bearer dev-user:admin"}
+    today = date.today()
+    month_start = today.replace(day=1)
+
+    wh_resp = await client.post(
+        "/api/v1/herd/warehouses",
+        json={"name": "QA Audit Shed", "housing_type": "shed", "capacity": 10},
+        headers=auth_headers,
+    )
+    wh_id = wh_resp.json()["warehouse_id"]
+
+    # 1. Cow date & price invariants (#6)
+    bad_dates = await client.post(
+        "/api/v1/herd/cows",
+        json={
+            "current_tag_number": "QA-BAD-DATE",
+            "sex": "female",
+            "category": "heifer",
+            "birth_date": "2025-12-21",
+            "acquisition_type": "bought_from_bazar",
+            "acquisition_date": "2025-12-12",
+            "purchase_price": 50000,
+            "warehouse_id": wh_id,
+        },
+        headers=auth_headers,
+    )
+    assert bad_dates.status_code == 422
+
+    born_cow_resp = await client.post(
+        "/api/v1/herd/cows",
+        json={
+            "current_tag_number": "QA-208",
+            "sex": "female",
+            "category": "heifer",
+            "birth_date": "2022-12-21",
+            "acquisition_type": "born_on_farm",
+            "acquisition_date": "2022-12-12",
+            "purchase_price": 99999,
+            "warehouse_id": wh_id,
+        },
+        headers=auth_headers,
+    )
+    assert born_cow_resp.status_code == 201
+    born_cow = born_cow_resp.json()
+    cow_id = born_cow["cow_id"]
+    assert Decimal(born_cow["purchase_price"]) == Decimal("0.00")
+    assert born_cow["acquisition_date"] == "2022-12-21"
+
+    # Future weigh_date must be rejected
+    future_wt = await client.post(
+        f"/api/v1/herd/cows/{cow_id}/weight",
+        json={"weigh_date": str(today + timedelta(days=1)), "weight_kg": 400},
+        headers=auth_headers,
+    )
+    assert future_wt.status_code == 422
+
+    # 2. Pregnancy calving alert state machine & sidebar alert domain split (#3, #4)
+    preg_resp = await client.post(
+        "/api/v1/health/pregnancy",
+        json={
+            "cow_id": cow_id,
+            "report_date": str(today - timedelta(days=30)),
+            "status": "suspected",
+            "expected_calving_date": str(today - timedelta(days=5)),
+        },
+        headers=auth_headers,
+    )
+    assert preg_resp.status_code == 201
+    preg_id = preg_resp.json()["pregnancy_id"]
+
+    dash_before = (await client.get("/api/v1/reports/dashboard", headers=auth_headers)).json()
+    assert dash_before["breeding_alert_count"] == 1
+    assert dash_before["health_alert_count"] == 0
+
+    # Setting actual_calving_date auto-transitions status -> calved and clears alert
+    calved_patch = await client.patch(
+        f"/api/v1/health/pregnancy/{preg_id}",
+        json={"actual_calving_date": str(today - timedelta(days=2))},
+        headers=auth_headers,
+    )
+    assert calved_patch.status_code == 200
+    assert calved_patch.json()["status"] == "calved"
+
+    dash_after = (await client.get("/api/v1/reports/dashboard", headers=auth_headers)).json()
+    assert dash_after["breeding_alert_count"] == 0
+    assert all(a["id"] != preg_id for a in dash_after["alerts"])
+
+    # 3. Discounted invoice revenue & receivables reconciliation (#1)
+    cust = (
+        await client.post(
+            "/api/v1/sales/customers",
+            json={"name": "QA Buyer", "customer_type": "wholesaler"},
+            headers=auth_headers,
+        )
+    ).json()
+    inv = (
+        await client.post(
+            "/api/v1/sales/invoices",
+            json={
+                "customer_id": cust["customer_id"],
+                "invoice_date": str(today),
+                "discount": 100.0,
+                "lines": [
+                    {
+                        "item_type": "milk",
+                        "description": "Bulk milk",
+                        "quantity": 1000.0,
+                        "unit_price": 120.0,
+                    }
+                ],
+            },
+            headers=auth_headers,
+        )
+    ).json()
+    inv_id = inv["invoice_id"]
+    await client.patch(
+        f"/api/v1/sales/invoices/{inv_id}/status",
+        json={"status": "issued"},
+        headers=auth_headers,
+    )
+    await client.post(
+        f"/api/v1/sales/invoices/{inv_id}/payments",
+        json={"payment_date": str(today), "amount": 119900.0, "payment_method": "cash"},
+        headers=auth_headers,
+    )
+
+    dash_fin = (await client.get("/api/v1/reports/dashboard", headers=auth_headers)).json()
+    prof_fin = (
+        await client.get(
+            f"/api/v1/reports/profitability?start_date={month_start}&end_date={today}",
+            headers=auth_headers,
+        )
+    ).json()
+    assert Decimal(dash_fin["month_invoiced_revenue"]) == Decimal("119900.00")
+    assert Decimal(dash_fin["total_unpaid_receivables"]) == Decimal("0.00")
+    assert Decimal(prof_fin["total_invoiced_revenue"]) == Decimal("119900.00")
+    assert Decimal(prof_fin["cash_collected"]) == Decimal("119900.00")
+    assert Decimal(prof_fin["receivables_uncollected"]) == Decimal("0.00")
+
+
+async def test_cow_detail_read_with_legacy_future_weight(client: AsyncClient, db_session: AsyncSession):
+    today = date.today()
+    auth_headers = {"X-User-Role": "admin", "X-User-Id": "00000000-0000-0000-0000-000000000001"}
+
+    wh_resp = await client.post(
+        "/api/v1/herd/warehouses",
+        json={"name": "Legacy Barn", "capacity": 20},
+        headers=auth_headers,
+    )
+    wh_id = wh_resp.json()["warehouse_id"]
+
+    cow_resp = await client.post(
+        "/api/v1/herd/cows",
+        json={
+            "current_tag_number": "LEGACY-999",
+            "sex": "female",
+            "category": "dairy",
+            "acquisition_type": "born_on_farm",
+            "acquisition_date": str(today),
+            "warehouse_id": wh_id,
+        },
+        headers=auth_headers,
+    )
+    assert cow_resp.status_code == 201
+    cow_id = cow_resp.json()["cow_id"]
+
+    from app.models.herd import WeightRecord
+
+    future_record = WeightRecord(
+        cow_id=uuid.UUID(cow_id),
+        weigh_date=today + timedelta(days=5),
+        weight_kg=Decimal("450.00"),
+        created_by=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+    )
+    db_session.add(future_record)
+    await db_session.commit()
+
+    # Reading cow profile must succeed without ValidationError or 500
+    resp = await client.get(f"/api/v1/herd/cows/{cow_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["weight_records"]) == 1
+    assert Decimal(data["weight_records"][0]["weight_kg"]) == Decimal("450.00")
+
+
 
 

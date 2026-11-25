@@ -191,7 +191,7 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
             )
         )
 
-    # Upcoming calvings within next 14 days
+    # Upcoming calvings within next 14 days — exclude already-calved pregnancies
     preg_alerts_stmt = (
         select(PregnancyReport, Cow.current_tag_number)
         .join(Cow, PregnancyReport.cow_id == Cow.cow_id)
@@ -199,6 +199,7 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
             PregnancyReport.status.in_(["confirmed", "suspected"]),
             PregnancyReport.expected_calving_date.is_not(None),
             PregnancyReport.expected_calving_date <= today + timedelta(days=14),
+            PregnancyReport.actual_calving_date.is_(None),
             PregnancyReport.is_archived == False,
             Cow.status == "active",
             Cow.is_archived == False,
@@ -220,6 +221,10 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
             )
         )
 
+    # Split alert counts by domain for sidebar badge routing
+    health_alert_count = sum(1 for a in alerts if a.item_type != "expected_calving")
+    breeding_alert_count = sum(1 for a in alerts if a.item_type == "expected_calving")
+
     return DashboardOverviewResponse(
         total_cows=total_cows,
         active_cows=active_cows,
@@ -235,13 +240,28 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
         month_total_expenses=month_expenses,
         total_unpaid_receivables=total_receivables,
         alerts=alerts,
+        health_alert_count=health_alert_count,
+        breeding_alert_count=breeding_alert_count,
     )
 
 
 async def get_profitability_report(
     session: AsyncSession, start_date: date, end_date: date
 ) -> ProfitabilityReport:
-    # 1. Invoiced revenue lines in date range
+    # 1. Invoiced revenue — use net invoice totals (after discount) instead of
+    #    gross line_total sums so that revenue & receivables stay consistent
+    #    with the dashboard (which sums SalesInvoice.total_amount).
+    net_inv_stmt = (
+        select(func.coalesce(func.sum(SalesInvoice.total_amount), 0))
+        .where(
+            SalesInvoice.invoice_date >= start_date,
+            SalesInvoice.invoice_date <= end_date,
+            SalesInvoice.status.in_(["issued", "partially_paid", "paid"]),
+        )
+    )
+    total_invoiced = Decimal(str((await session.execute(net_inv_stmt)).scalar() or 0))
+
+    # Per-type gross breakdown (for informational split only)
     lines_stmt = (
         select(SalesInvoiceLine.item_type, func.coalesce(func.sum(SalesInvoiceLine.line_total), 0))
         .join(SalesInvoice, SalesInvoiceLine.invoice_id == SalesInvoice.invoice_id)
@@ -254,10 +274,19 @@ async def get_profitability_report(
     )
     line_results = dict((await session.execute(lines_stmt)).all())
 
-    milk_rev = Decimal(str(line_results.get("milk", 0)))
-    cow_rev = Decimal(str(line_results.get("animal", 0)))
-    other_rev = Decimal(str(line_results.get("other", 0)))
-    total_invoiced = milk_rev + cow_rev + other_rev
+    gross_milk = Decimal(str(line_results.get("milk", 0)))
+    gross_cow = Decimal(str(line_results.get("animal", 0)))
+    gross_other = Decimal(str(line_results.get("other", 0)))
+    gross_total = gross_milk + gross_cow + gross_other
+
+    # Pro-rate the net invoice total across item types so the breakdown sums
+    # to total_invoiced (net of discounts).
+    if gross_total > 0:
+        milk_rev = (gross_milk / gross_total * total_invoiced).quantize(Decimal("0.01"))
+        cow_rev = (gross_cow / gross_total * total_invoiced).quantize(Decimal("0.01"))
+        other_rev = total_invoiced - milk_rev - cow_rev  # remainder to avoid rounding gap
+    else:
+        milk_rev = cow_rev = other_rev = Decimal("0.00")
 
     # 2. All costs and cash collected in date range in a single scalar subquery round trip
     costs_stmt = select(

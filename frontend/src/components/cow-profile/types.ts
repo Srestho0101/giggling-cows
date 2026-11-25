@@ -177,7 +177,7 @@ export function formatNumber(value: string | number | null | undefined, digits =
   if (value === null || value === undefined || value === "") return "—";
   const num = Number(value);
   if (!Number.isFinite(num)) return "—";
-  return new Intl.NumberFormat("en-BD", { maximumFractionDigits: digits }).format(num);
+  return new Intl.NumberFormat("en-BD", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(num);
 }
 
 export function formatDisplayDate(iso: string | null | undefined): string {

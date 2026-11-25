@@ -221,7 +221,10 @@ function WeightSection({
   const [editSaving, setEditSaving] = useState(false);
 
   const visibleRows = useMemo(
-    () => (showArchived ? rows : rows.filter((row) => !row.is_archived)),
+    () =>
+      (showArchived ? rows : rows.filter((row) => !row.is_archived))
+        .slice()
+        .sort((a, b) => b.weigh_date.localeCompare(a.weigh_date)),
     [rows, showArchived]
   );
 
@@ -243,9 +246,13 @@ function WeightSection({
 
   async function handleLogWeight(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true);
     onError("");
     onNotice("");
+    if (weighDate > today) {
+      onError("Weigh date cannot be in the future.");
+      return;
+    }
+    setSaving(true);
     try {
       await apiRequest(apiRoutes.herd.weight(cowId), {
         method: "POST",
@@ -264,9 +271,13 @@ function WeightSection({
   async function handleEditSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editing) return;
-    setEditSaving(true);
     onError("");
     onNotice("");
+    if (editDate > today) {
+      onError("Weigh date cannot be in the future.");
+      return;
+    }
+    setEditSaving(true);
     try {
       await apiRequest(apiRoutes.herd.weightRecord(cowId, editing.weight_id), {
         method: "PATCH",
@@ -360,7 +371,11 @@ function WeightSection({
           >
             {row.is_archived ? "Restore" : "Archive"}
           </button>
-          <SafeDataHistory entityType="weight_records" entityId={row.weight_id} />
+          <SafeDataHistory
+            entityType="weight_records"
+            entityId={row.weight_id}
+            entityLabel={`Weight · ${formatDisplayDate(row.weigh_date)}`}
+          />
         </div>
       ),
     },
@@ -370,13 +385,13 @@ function WeightSection({
     <div className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr] items-start">
       <PaginatedTableCard
         title="Weight history"
-        subtitle="Frequent weight logs are paginated and scrollable."
+        subtitle="Newest weight logs appear first."
         rows={visibleRows}
         rowKey={(row) => row.weight_id}
         columns={columns}
         emptyMessage={showArchived ? "No weight records yet." : "No active weight records."}
-        defaultPageSize={10}
-        scrollHeightClass="max-h-[260px]"
+        defaultPageSize={5}
+        scrollHeightClass=""
         headerActions={
           <label className="flex cursor-pointer items-center gap-1.5 text-[12px] text-muted">
             <input
@@ -403,6 +418,7 @@ function WeightSection({
                   <input
                     type="date"
                     required
+                    max={today}
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
                     className={`${ui.input} mt-1 h-8 w-36`}
@@ -454,6 +470,7 @@ function WeightSection({
             <input
               type="date"
               required
+              max={today}
               value={weighDate}
               onChange={(e) => setWeighDate(e.target.value)}
               className={ui.input}
@@ -689,6 +706,16 @@ function TagSection({
     }
   }
 
+  const primaryActiveTagId = useMemo(() => {
+    const active = (cow.id_history ?? []).filter((h) => !h.removed_date);
+    const matchingCurrent = active.filter((h) => h.tag_number === cow.current_tag_number);
+    return (
+      matchingCurrent.find((h) => h.tag_type === "ear_tag")?.history_id ??
+      matchingCurrent[0]?.history_id ??
+      null
+    );
+  }, [cow.id_history, cow.current_tag_number]);
+
   const columns: PaginatedColumn<TagHistoryItem>[] = [
     {
       key: "tag_number",
@@ -711,8 +738,10 @@ function TagSection({
       render: (row) =>
         row.removed_date ? (
           formatDisplayDate(row.removed_date)
+        ) : row.history_id === primaryActiveTagId ? (
+          <Badge tone={statusTone("active")}>Current ({tagTypeLabel(row.tag_type)})</Badge>
         ) : (
-          <Badge tone={statusTone("active")}>Current</Badge>
+          <Badge tone="neutral">Active ({tagTypeLabel(row.tag_type)})</Badge>
         ),
     },
     {
@@ -785,7 +814,7 @@ function TagSection({
             Reason
             <input
               maxLength={200}
-              placeholder="e.g. Replacement for lost tag"
+              placeholder="e.g. Lost tag replacement"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className={ui.input}

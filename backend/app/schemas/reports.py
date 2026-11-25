@@ -32,6 +32,8 @@ class DashboardOverviewResponse(BaseModel):
     total_unpaid_receivables: Decimal
     
     alerts: List[DashboardAlertItem]
+    health_alert_count: int = 0
+    breeding_alert_count: int = 0
 
 
 class ProfitabilityReport(BaseModel):

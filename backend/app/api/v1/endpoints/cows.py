@@ -474,15 +474,28 @@ async def update_cow(
         raise HTTPException(status_code=400, detail="A cow cannot be its own dam or sire.")
 
     next_acquisition = update_dict.get("acquisition_type", cow.acquisition_type)
+    next_birth_date = update_dict.get("birth_date", cow.birth_date)
+    next_acq_date = update_dict.get("acquisition_date", cow.acquisition_date)
+
     if next_acquisition == "born_on_farm":
         if update_dict.get("supplier_id") is not None:
             raise HTTPException(status_code=400, detail="Born on farm cows cannot have a supplier.")
         update_dict["supplier_id"] = None
+        update_dict["purchase_price"] = Decimal("0")
+        if next_birth_date is not None:
+            next_acq_date = next_birth_date
+            update_dict["acquisition_date"] = next_birth_date
     else:
         if update_dict.get("dam_id") is not None or update_dict.get("sire_id") is not None:
             raise HTTPException(status_code=400, detail="Purchased cows cannot have on-farm dam or sire.")
         update_dict["dam_id"] = None
         update_dict["sire_id"] = None
+
+    if next_birth_date is not None and next_acq_date < next_birth_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Acquisition date cannot be earlier than birth date.",
+        )
 
     for field, val in update_dict.items():
         setattr(cow, field, val)

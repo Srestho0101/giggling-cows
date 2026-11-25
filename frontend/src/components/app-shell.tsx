@@ -15,7 +15,9 @@ type Language = "en" | "bn";
 type ThemeMode = "system" | "light" | "dark";
 
 type DashboardData = {
-  alerts?: { id: string }[];
+  alerts?: { id: string; item_type?: string }[];
+  health_alert_count?: number;
+  breeding_alert_count?: number;
 };
 
 const navigation = [
@@ -67,7 +69,8 @@ export function AppShell({ children }: AppShellProps) {
     refetchOnWindowFocus: false,
   });
 
-  const alertCount = dashboard?.alerts?.length ?? 0;
+  const healthAlertCount = dashboard?.health_alert_count ?? 0;
+  const breedingAlertCount = dashboard?.breeding_alert_count ?? 0;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -171,10 +174,16 @@ export function AppShell({ children }: AppShellProps) {
               >
                 <Icon name={item.icon as IconName} className="size-[18px]" />
                 <span className="truncate">{language === "bn" ? item.bn : item.en}</span>
-                {item.href === "/health" && alertCount > 0 && (
+                {item.href === "/health" && healthAlertCount > 0 && (
                   <span className="ml-auto rounded-[4px] bg-warn-soft px-1.5 py-0.5 text-[11px] font-semibold text-warn">
-                    {alertCount}
-                    <span className="sr-only"> {alertCount === 1 ? "alert" : "alerts"}</span>
+                    {healthAlertCount}
+                    <span className="sr-only"> {healthAlertCount === 1 ? "alert" : "alerts"}</span>
+                  </span>
+                )}
+                {item.href === "/breeding" && breedingAlertCount > 0 && (
+                  <span className="ml-auto rounded-[4px] bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent">
+                    {breedingAlertCount}
+                    <span className="sr-only"> {breedingAlertCount === 1 ? "calving alert" : "calving alerts"}</span>
                   </span>
                 )}
               </Link>

@@ -56,9 +56,17 @@ class SupplierRead(SupplierBase, AuditBase):
 
 
 # WEIGHT RECORD
-class WeightRecordCreate(BaseModel):
+class WeightRecordBase(BaseModel):
     weigh_date: date
     weight_kg: Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
+
+
+class WeightRecordCreate(WeightRecordBase):
+    @model_validator(mode="after")
+    def validate_weigh_date_not_future(self) -> "WeightRecordCreate":
+        if self.weigh_date > date.today():
+            raise ValueError("Weigh date cannot be in the future.")
+        return self
 
 
 class WeightRecordUpdate(BaseModel):
@@ -66,8 +74,14 @@ class WeightRecordUpdate(BaseModel):
     weight_kg: Optional[Decimal] = Field(None, gt=0, max_digits=8, decimal_places=2)
     is_archived: Optional[bool] = None
 
+    @model_validator(mode="after")
+    def validate_weigh_date_not_future(self) -> "WeightRecordUpdate":
+        if self.weigh_date is not None and self.weigh_date > date.today():
+            raise ValueError("Weigh date cannot be in the future.")
+        return self
 
-class WeightRecordRead(WeightRecordCreate, AuditBase):
+
+class WeightRecordRead(WeightRecordBase, AuditBase):
     weight_id: uuid.UUID
     cow_id: uuid.UUID
     is_archived: bool = False
@@ -143,9 +157,16 @@ class CowCreate(CowBase):
         if self.acquisition_type == "born_on_farm":
             if self.supplier_id is not None:
                 raise ValueError("Born on farm cows cannot have a supplier_id.")
+            # Born-on-farm cows must not carry a purchase price
+            self.purchase_price = Decimal("0")
+            if self.birth_date is not None:
+                self.acquisition_date = self.birth_date
         else:
             if self.dam_id is not None or self.sire_id is not None:
                 raise ValueError("Purchased cows cannot have on-farm dam_id or sire_id.")
+        # Acquisition date must not precede birth date
+        if self.birth_date is not None and self.acquisition_date < self.birth_date:
+            raise ValueError("Acquisition date cannot be earlier than birth date.")
         return self
 
 

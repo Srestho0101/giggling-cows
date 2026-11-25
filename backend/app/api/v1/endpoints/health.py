@@ -439,6 +439,14 @@ async def update_pregnancy_report(
     update_dict = data.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
         setattr(report, field, val)
+
+    # Auto-transition status to "calved" when actual_calving_date is recorded
+    if (
+        report.actual_calving_date is not None
+        and report.status in ("confirmed", "suspected")
+    ):
+        report.status = "calved"
+
     record_lifecycle_changes(db, report, lifecycle_before, current_user.id, current_user.email)
     report.updated_by = current_user.id
 

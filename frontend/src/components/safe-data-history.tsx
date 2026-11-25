@@ -11,7 +11,7 @@ type OperationEvent = {
   occurred_at: string;
 };
 
-export function SafeDataHistory({ entityType, entityId }: { entityType: string; entityId: string }) {
+export function SafeDataHistory({ entityType, entityId, entityLabel }: { entityType: string; entityId: string; entityLabel?: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -47,7 +47,9 @@ export function SafeDataHistory({ entityType, entityId }: { entityType: string; 
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-base font-semibold text-ink">Archive and void history</h2>
-                <p className="mt-1 text-xs text-muted">{entityType} · {entityId}</p>
+                <p className="mt-1 text-xs text-muted">
+                  {entityLabel ? `${entityType.replaceAll("_", " ")} · ${entityLabel}` : entityType.replaceAll("_", " ")}
+                </p>
               </div>
               <button type="button" onClick={() => setOpen(false)} className="text-sm text-muted hover:text-ink">Close</button>
             </div>
