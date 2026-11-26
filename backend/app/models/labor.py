@@ -32,6 +32,9 @@ class Worker(Base, AuditMixin, ArchiveAuditMixin):
     salary_payments: Mapped[List["SalaryPayment"]] = relationship(
         "SalaryPayment", back_populates="worker", cascade="save-update, merge"
     )
+    advances: Mapped[List["WorkerAdvance"]] = relationship(
+        "WorkerAdvance", back_populates="worker", cascade="save-update, merge"
+    )
 
 
 class WorkerAttendance(Base, AuditMixin, ArchiveAuditMixin):
@@ -68,7 +71,9 @@ class SalaryPayment(Base, AuditMixin, VoidAuditMixin):
     pay_month: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     base_salary: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     absence_deduction: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0.00)
+    advance_deduction: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0.00)
     bonus: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0.00)
+    overtime_pay: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0.00)
     net_paid: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     paid_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="paid")  # 'paid' | 'pending' | 'cancelled'
@@ -77,6 +82,25 @@ class SalaryPayment(Base, AuditMixin, VoidAuditMixin):
 
     # Relationships
     worker: Mapped["Worker"] = relationship("Worker", back_populates="salary_payments")
+
+
+class WorkerAdvance(Base, AuditMixin, VoidAuditMixin):
+    __tablename__ = "worker_advances"
+
+    advance_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    worker_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("workers.worker_id", ondelete="RESTRICT"), nullable=False
+    )
+    advance_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_void: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Relationships
+    worker: Mapped["Worker"] = relationship("Worker", back_populates="advances")
 
 
 class MillCharge(Base, AuditMixin, ArchiveAuditMixin, VoidAuditMixin):

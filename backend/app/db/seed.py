@@ -23,6 +23,11 @@ DEFAULT_CATEGORIES = [
     {"name": "Electronic Items", "name_bn": "বৈদ্যুতিক সরঞ্জাম", "category_group": "miscellaneous"},
     {"name": "Electricity Bill", "name_bn": "বিদ্যুৎ বিল", "category_group": "miscellaneous"},
     {"name": "Veterinary Services", "name_bn": "চিকিৎসা ও পশু চিকিৎসক ফি", "category_group": "miscellaneous"},
+    {"name": "Veterinary & Medicine", "name_bn": "পশু চিকিৎসা ও ওষুধ", "category_group": "miscellaneous"},
+    {"name": "Electricity & Diesel", "name_bn": "বিদ্যুৎ ও ডিজেল", "category_group": "miscellaneous"},
+    {"name": "Shed Maintenance", "name_bn": "শেড মেরামত ও রক্ষণাবেক্ষণ", "category_group": "miscellaneous"},
+    {"name": "Transport & Haat", "name_bn": "পরিবহন ও হাট খরচ", "category_group": "miscellaneous"},
+    {"name": "Bedding / Straw", "name_bn": "বিছানা ও খড়", "category_group": "miscellaneous"},
     {"name": "Labor Food", "name_bn": "শ্রমিকদের খাবার খরচ", "category_group": "miscellaneous"},
 ]
 
@@ -64,7 +69,7 @@ async def seed_data():
 
         today = date.today()
         if not (await session.execute(select(MarketPrice).where(MarketPrice.price_date == today))).scalar_one_or_none():
-            session.add(MarketPrice(price_date=today, price_per_kg_net=Decimal("650.00"), source="Local Cattle Market Average"))
+            session.add(MarketPrice(price_date=today, price_per_kg_net=Decimal("650.00"), price_basis="dressed_meat", source="Local Cattle Market Average"))
 
         await session.commit()
         print("Base data seeded.")

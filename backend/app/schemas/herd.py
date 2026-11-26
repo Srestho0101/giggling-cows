@@ -1,11 +1,16 @@
 from calendar import monthrange
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 import uuid
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.common import AuditBase
+
+
+def _dhaka_today() -> date:
+    return datetime.now(ZoneInfo("Asia/Dhaka")).date()
 
 
 # WAREHOUSE
@@ -149,7 +154,8 @@ class CowBase(BaseModel):
     sire_id: Optional[uuid.UUID] = None
     warehouse_id: uuid.UUID
     status: str = Field("active", pattern="^(active|sold|deceased|archived)$")
-    gives_milk: Optional[bool] = False
+    gives_milk: Optional[bool] = None
+    milking_sessions: Optional[List[Literal["morning", "noon", "evening"]]] = None
     notes: Optional[str] = None
 
 
@@ -166,8 +172,17 @@ class CowCreate(CowBase):
         # Acquisition date must not precede birth date
         if self.birth_date is not None and self.acquisition_date < self.birth_date:
             raise ValueError("Acquisition date cannot be earlier than birth date.")
-        if self.sex == "male":
+        if self.sex == "male" or self.status != "active":
             self.gives_milk = False
+            self.milking_sessions = []
+        else:
+            if self.gives_milk is None:
+                self.gives_milk = (self.cow_type or "").strip().lower() == "cow"
+            if self.gives_milk:
+                if not self.milking_sessions:
+                    self.milking_sessions = ["morning", "noon", "evening"]
+            else:
+                self.milking_sessions = []
         return self
 
 
@@ -187,6 +202,7 @@ class CowUpdate(BaseModel):
     warehouse_id: Optional[uuid.UUID] = None
     status: Optional[str] = Field(None, pattern="^(active|sold|deceased|archived)$")
     gives_milk: Optional[bool] = None
+    milking_sessions: Optional[List[Literal["morning", "noon", "evening"]]] = None
     notes: Optional[str] = None
     is_archived: Optional[bool] = None
 
@@ -207,8 +223,9 @@ class CowRead(CowBase, AuditBase):
 
     @model_validator(mode="after")
     def calculate_derived_fields(self) -> "CowRead":
+        today = _dhaka_today()
         if self.acquisition_date:
-            self.days_on_farm = max(0, (date.today() - self.acquisition_date).days)
+            self.days_on_farm = max(0, (today - self.acquisition_date).days)
         else:
             self.days_on_farm = None
 
@@ -218,12 +235,11 @@ class CowRead(CowBase, AuditBase):
             self.age_group = None
             return self
 
-        if self.birth_date is None or self.birth_date > date.today():
+        if self.birth_date is None or self.birth_date > today:
             self.age = None
             self.age_group = None
             return self
 
-        today = date.today()
         months = (today.year - self.birth_date.year) * 12 + today.month - self.birth_date.month
         if today.day < self.birth_date.day:
             months -= 1

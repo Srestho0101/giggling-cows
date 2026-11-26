@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Literal, Optional
 import uuid
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -55,6 +55,7 @@ class WorkerUpdate(BaseModel):
 class WorkerRead(WorkerBase, AuditBase):
     worker_id: uuid.UUID
     is_archived: bool = False
+    outstanding_advance: Decimal = Decimal("0.00")
 
 
 # ATTENDANCE
@@ -92,19 +93,23 @@ class SalaryPaymentBase(BaseModel):
     pay_month: date
     base_salary: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)
     absence_deduction: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
+    advance_deduction: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
     bonus: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
+    overtime_pay: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
     paid_date: date
     status: str = Field("paid", pattern="^(paid|pending|cancelled)$")
 
 
 class SalaryPaymentCreate(SalaryPaymentBase):
-    pass
+    payroll_day_basis: Literal["calendar", "fixed_30"] = "calendar"
 
 
 class SalaryPaymentUpdate(BaseModel):
     base_salary: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
     absence_deduction: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    advance_deduction: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
     bonus: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    overtime_pay: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
     paid_date: Optional[date] = None
     status: Optional[str] = Field(None, pattern="^(paid|pending|cancelled)$")
     is_void: Optional[bool] = None
@@ -121,6 +126,39 @@ class SalaryPaymentRead(SalaryPaymentBase, AuditBase):
     payment_id: uuid.UUID
     worker_name: Optional[str] = None
     net_paid: Decimal
+    is_void: bool = False
+    void_reason: Optional[str] = None
+
+
+# WORKER ADVANCE (OGRIM)
+class WorkerAdvanceBase(BaseModel):
+    worker_id: uuid.UUID
+    advance_date: date
+    amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
+    notes: Optional[str] = None
+
+
+class WorkerAdvanceCreate(WorkerAdvanceBase):
+    pass
+
+
+class WorkerAdvanceUpdate(BaseModel):
+    advance_date: Optional[date] = None
+    amount: Optional[Decimal] = Field(None, gt=0, max_digits=12, decimal_places=2)
+    notes: Optional[str] = None
+    is_void: Optional[bool] = None
+    void_reason: Optional[str] = None
+
+    @model_validator(mode="after")
+    def require_void_reason(self):
+        if self.is_void is True and not (self.void_reason or "").strip():
+            raise ValueError("A reason is required when voiding an advance.")
+        return self
+
+
+class WorkerAdvanceRead(WorkerAdvanceBase, AuditBase):
+    advance_id: uuid.UUID
+    worker_name: Optional[str] = None
     is_void: bool = False
     void_reason: Optional[str] = None
 

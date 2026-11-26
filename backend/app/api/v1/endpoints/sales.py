@@ -29,11 +29,13 @@ from app.schemas.sales import (
     SalesInvoiceLineRead,
     SalesInvoiceRead,
     SalesInvoiceStatusUpdate,
+    SalesInvoiceUpdate,
 )
 from app.services.invoice_service import (
     add_invoice_payment,
     create_sales_invoice,
     update_invoice_status,
+    update_sales_invoice,
     void_invoice_payment,
 )
 from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
@@ -130,7 +132,18 @@ async def update_customer(
 
     await db.commit()
     await db.refresh(customer)
-    return CustomerRead.model_validate(customer)
+    totals_stmt = select(
+        func.coalesce(func.sum(SalesInvoice.total_amount), 0),
+        func.coalesce(func.sum(SalesInvoice.paid_amount), 0),
+    ).where(SalesInvoice.customer_id == customer_id, SalesInvoice.status != "void")
+    total_inv, total_paid = (await db.execute(totals_stmt)).one()
+    total_inv_dec = Decimal(str(total_inv))
+    total_paid_dec = Decimal(str(total_paid))
+    r = CustomerRead.model_validate(customer)
+    r.total_invoiced = total_inv_dec
+    r.total_paid = total_paid_dec
+    r.current_balance = total_inv_dec - total_paid_dec
+    return r
 
 
 # ---------------------- MILK PRODUCTION ----------------------
@@ -631,6 +644,18 @@ async def create_invoice(
     invoice = await create_sales_invoice(db, data, user_id=current_user.id)
     await db.commit()
     return await get_sales_invoice(invoice.invoice_id, db, current_user)
+
+
+@router.patch("/invoices/{invoice_id}", response_model=SalesInvoiceRead)
+async def update_invoice_endpoint(
+    invoice_id: uuid.UUID,
+    data: SalesInvoiceUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    await update_sales_invoice(db, invoice_id, data, user_id=current_user.id)
+    await db.commit()
+    return await get_sales_invoice(invoice_id, db, current_user)
 
 
 @router.patch("/invoices/{invoice_id}/status", response_model=SalesInvoiceRead)

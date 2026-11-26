@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_db
 from app.core.security import AuthUser, UserRole, get_current_user, require_roles
-from app.models.feeding import Expense, ExpenseCategory, FeedType, FeedingRecord
+from app.models.feeding import Expense, ExpenseCategory, FeedStockEntry, FeedType, FeedingRecord
 from app.models.herd import Cow, Warehouse
 from app.schemas.feeding import (
     ExpenseCategoryCreate,
@@ -18,6 +18,9 @@ from app.schemas.feeding import (
     ExpenseCreate,
     ExpenseRead,
     ExpenseUpdate,
+    FeedStockEntryCreate,
+    FeedStockEntryRead,
+    FeedStockEntryUpdate,
     FeedTypeCreate,
     FeedTypeRead,
     FeedTypeUpdate,
@@ -129,6 +132,8 @@ async def create_feed_type(
         name_bn=data.name_bn,
         unit=data.unit,
         unit_cost=data.unit_cost,
+        stock_quantity=data.stock_quantity,
+        reorder_level=data.reorder_level,
         created_by=current_user.id,
         updated_by=current_user.id,
     )
@@ -243,6 +248,7 @@ async def create_feeding_record(
         created_by=current_user.id,
         updated_by=current_user.id,
     )
+    ft.stock_quantity = (ft.stock_quantity or Decimal("0.00")) - data.quantity
     db.add(record)
     await db.commit()
     await db.refresh(record)
@@ -285,6 +291,10 @@ async def update_feeding_record(
         raise HTTPException(status_code=404, detail="Feeding record not found")
 
     lifecycle_before = capture_lifecycle_state(rec)
+    old_feed_type_id = rec.feed_type_id
+    old_qty = rec.quantity
+    old_archived = rec.is_archived
+
     feed_type_id = data.feed_type_id or rec.feed_type_id
     ft = await db.get(FeedType, feed_type_id)
     if not ft:
@@ -306,6 +316,13 @@ async def update_feeding_record(
         unit_cost = data.custom_unit_cost if data.custom_unit_cost is not None else ft.unit_cost
         rec.quantity = qty
         rec.cost = (qty * unit_cost).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    if not old_archived:
+        old_ft = ft if old_feed_type_id == ft.feed_type_id else await db.get(FeedType, old_feed_type_id)
+        if old_ft:
+            old_ft.stock_quantity = (old_ft.stock_quantity or Decimal("0.00")) + old_qty
+    if not rec.is_archived:
+        ft.stock_quantity = (ft.stock_quantity or Decimal("0.00")) - rec.quantity
 
     record_lifecycle_changes(db, rec, lifecycle_before, current_user.id, current_user.email)
     rec.updated_by = current_user.id
@@ -335,6 +352,145 @@ async def update_feeding_record(
         updated_at=rec.updated_at,
         created_by=rec.created_by,
         updated_by=rec.updated_by,
+    )
+
+
+# ---------------------- FEED STOCK ENTRIES ----------------------
+@router.get("/stock-entries", response_model=List[FeedStockEntryRead])
+async def list_feed_stock_entries(
+    feed_type_id: Optional[uuid.UUID] = None,
+    include_archived: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    stmt = (
+        select(FeedStockEntry)
+        .options(selectinload(FeedStockEntry.feed_type))
+        .order_by(FeedStockEntry.entry_date.desc())
+    )
+    if feed_type_id:
+        stmt = stmt.where(FeedStockEntry.feed_type_id == feed_type_id)
+    if not include_archived:
+        stmt = stmt.where(FeedStockEntry.is_archived == False)
+
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        FeedStockEntryRead(
+            stock_entry_id=row.stock_entry_id,
+            feed_type_id=row.feed_type_id,
+            feed_name=row.feed_type.name if row.feed_type else None,
+            feed_name_bn=row.feed_type.name_bn if row.feed_type else None,
+            unit=row.feed_type.unit if row.feed_type else None,
+            entry_date=row.entry_date,
+            quantity_added=row.quantity_added,
+            unit_cost=row.unit_cost,
+            total_cost=row.total_cost,
+            notes=row.notes,
+            is_archived=row.is_archived,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            created_by=row.created_by,
+            updated_by=row.updated_by,
+        )
+        for row in rows
+    ]
+
+
+@router.post("/stock-entries", response_model=FeedStockEntryRead, status_code=status.HTTP_201_CREATED)
+async def create_feed_stock_entry(
+    data: FeedStockEntryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER, UserRole.DATA_ENTRY])),
+):
+    ft = await db.get(FeedType, data.feed_type_id)
+    if not ft:
+        raise HTTPException(status_code=404, detail="Feed type not found")
+
+    unit_cost = data.unit_cost if data.unit_cost is not None else ft.unit_cost
+    total_cost = (data.quantity_added * unit_cost).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    entry = FeedStockEntry(
+        feed_type_id=data.feed_type_id,
+        entry_date=data.entry_date,
+        quantity_added=data.quantity_added,
+        unit_cost=unit_cost,
+        total_cost=total_cost,
+        notes=data.notes,
+        created_by=current_user.id,
+        updated_by=current_user.id,
+    )
+    ft.stock_quantity = (ft.stock_quantity or Decimal("0.00")) + data.quantity_added
+    if data.unit_cost is not None:
+        ft.unit_cost = data.unit_cost
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+
+    return FeedStockEntryRead(
+        stock_entry_id=entry.stock_entry_id,
+        feed_type_id=entry.feed_type_id,
+        feed_name=ft.name,
+        feed_name_bn=ft.name_bn,
+        unit=ft.unit,
+        entry_date=entry.entry_date,
+        quantity_added=entry.quantity_added,
+        unit_cost=entry.unit_cost,
+        total_cost=entry.total_cost,
+        notes=entry.notes,
+        is_archived=entry.is_archived,
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+        created_by=entry.created_by,
+        updated_by=entry.updated_by,
+    )
+
+
+@router.patch("/stock-entries/{stock_entry_id}", response_model=FeedStockEntryRead)
+async def update_feed_stock_entry(
+    stock_entry_id: uuid.UUID,
+    data: FeedStockEntryUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER, UserRole.DATA_ENTRY])),
+):
+    entry = await db.get(FeedStockEntry, stock_entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Feed stock entry not found")
+
+    ft = await db.get(FeedType, entry.feed_type_id)
+    lifecycle_before = capture_lifecycle_state(entry)
+    old_archived = entry.is_archived
+    if data.is_archived is not None:
+        entry.is_archived = data.is_archived
+    if data.notes is not None:
+        entry.notes = data.notes
+
+    if ft is not None and old_archived != entry.is_archived:
+        if entry.is_archived:
+            ft.stock_quantity = (ft.stock_quantity or Decimal("0.00")) - entry.quantity_added
+        else:
+            ft.stock_quantity = (ft.stock_quantity or Decimal("0.00")) + entry.quantity_added
+
+    record_lifecycle_changes(db, entry, lifecycle_before, current_user.id, current_user.email)
+    entry.updated_by = current_user.id
+    await db.commit()
+    await db.refresh(entry)
+
+    return FeedStockEntryRead(
+        stock_entry_id=entry.stock_entry_id,
+        feed_type_id=entry.feed_type_id,
+        feed_name=ft.name if ft else None,
+        feed_name_bn=ft.name_bn if ft else None,
+        unit=ft.unit if ft else None,
+        entry_date=entry.entry_date,
+        quantity_added=entry.quantity_added,
+        unit_cost=entry.unit_cost,
+        total_cost=entry.total_cost,
+        notes=entry.notes,
+        is_archived=entry.is_archived,
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+        created_by=entry.created_by,
+        updated_by=entry.updated_by,
     )
 
 

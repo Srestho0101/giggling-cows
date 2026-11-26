@@ -16,6 +16,7 @@ class MarketPrice(Base, AuditMixin, ArchiveAuditMixin):
     )
     price_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     price_per_kg_net: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    price_basis: Mapped[str] = mapped_column(String(30), nullable=False, default="dressed_meat")  # 'dressed_meat' | 'live_weight'
     source: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 

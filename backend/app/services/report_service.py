@@ -1,8 +1,9 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import List
 import uuid
-from sqlalchemy import func, literal, select, union_all
+from zoneinfo import ZoneInfo
+from sqlalchemy import exists, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.health import BreedingRecord, HealthRecord, PregnancyReport
@@ -15,7 +16,7 @@ from app.schemas.reports import DashboardAlertItem, DashboardOverviewResponse, P
 
 
 async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResponse:
-    today = date.today()
+    today = datetime.now(ZoneInfo("Asia/Dhaka")).date()
     week_ago = today - timedelta(days=7)
     month_ago = today - timedelta(days=30)
     month_start = today.replace(day=1)
@@ -192,6 +193,18 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
         )
 
     # Upcoming calvings within next 14 days — exclude already-calved pregnancies
+    calved_sibling = PregnancyReport.__table__.alias("calved_sibling")
+    has_subsequent_calving = exists(
+        select(calved_sibling.c.pregnancy_id).where(
+            calved_sibling.c.cow_id == PregnancyReport.cow_id,
+            calved_sibling.c.is_archived == False,
+            calved_sibling.c.report_date >= PregnancyReport.report_date,
+            (
+                (calved_sibling.c.actual_calving_date.is_not(None))
+                | (calved_sibling.c.status.in_(["calved", "aborted", "failed"]))
+            ),
+        )
+    )
     preg_alerts_stmt = (
         select(PregnancyReport, Cow.current_tag_number)
         .join(Cow, PregnancyReport.cow_id == Cow.cow_id)
@@ -203,6 +216,7 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
             PregnancyReport.is_archived == False,
             Cow.status == "active",
             Cow.is_archived == False,
+            ~has_subsequent_calving,
         )
         .order_by(PregnancyReport.expected_calving_date.asc())
         .limit(10)

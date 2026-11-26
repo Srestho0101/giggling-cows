@@ -11,6 +11,7 @@ from app.schemas.common import AuditBase
 class MarketPriceBase(BaseModel):
     price_date: date
     price_per_kg_net: Decimal = Field(..., gt=0, max_digits=10, decimal_places=2)
+    price_basis: str = Field("dressed_meat", pattern="^(dressed_meat|live_weight)$")
     source: Optional[str] = Field(None, max_length=100)
 
 
@@ -21,6 +22,7 @@ class MarketPriceCreate(MarketPriceBase):
 class MarketPriceUpdate(BaseModel):
     price_date: Optional[date] = None
     price_per_kg_net: Optional[Decimal] = Field(None, gt=0, max_digits=10, decimal_places=2)
+    price_basis: Optional[str] = Field(None, pattern="^(dressed_meat|live_weight)$")
     source: Optional[str] = Field(None, max_length=100)
     is_archived: Optional[bool] = None
 
@@ -71,6 +73,14 @@ class PurchaseEvaluationCreate(PurchaseEvaluationBase):
 
 
 class PurchaseEvaluationUpdate(BaseModel):
+    evaluation_date: Optional[date] = None
+    supplier_id: Optional[uuid.UUID] = None
+    live_weight_kg: Optional[Decimal] = Field(None, gt=0, max_digits=8, decimal_places=2)
+    growth_potential: Optional[str] = Field(None, pattern="^(good|poor)$")
+    custom_net_weight_percent: Optional[Decimal] = Field(None, ge=40, le=80, max_digits=5, decimal_places=2)
+    offered_price: Optional[Decimal] = Field(None, gt=0, max_digits=12, decimal_places=2)
+    market_price_id: Optional[uuid.UUID] = None
+    market_price_per_kg: Optional[Decimal] = Field(None, gt=0, max_digits=10, decimal_places=2)
     decision: Optional[str] = Field(None, pattern="^(bought|returned|pending)$")
     notes: Optional[str] = None
     is_archived: Optional[bool] = None
