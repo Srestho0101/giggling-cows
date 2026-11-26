@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DataWorkbench, Notice, type FormField, type TableColumn } from "@/components/data-workbench";
-import { SafeDataHistory } from "@/components/safe-data-history";
 import { Icon } from "@/components/icons";
-import { Badge, btn, Segmented, Tabs, ui } from "@/components/ui";
+import { Badge, btn, DateInput, Segmented, StatTile, Tabs, ui } from "@/components/ui";
 import { apiRequest, apiRoutes, apiQuery } from "@/lib/api";
 import { MilkRecordsWorkspace } from "@/components/milk-records-workspace";
+import { SalesInvoicesManager } from "@/components/sales-invoices-manager";
+import { useI18n } from "@/lib/i18n";
 
 const cowColumns: TableColumn[] = [
   { key: "current_tag_number", label: "Tag" },
@@ -20,7 +22,7 @@ const cowColumns: TableColumn[] = [
   { key: "age_group", label: "Age group" },
   { key: "dam_tag", label: "Dam" },
   { key: "sire_tag", label: "Sire" },
-  { key: "warehouse_name", label: "Warehouse" },
+  { key: "warehouse_name", label: "Shed" },
   { key: "status", label: "Status" },
   { key: "latest_weight_kg", label: "Latest kg" },
 ];
@@ -56,7 +58,7 @@ const cowFields: FormField[] = [
     options: [
       { value: "dairy", label: "Dairy" },
       { value: "beef", label: "Beef" },
-      { value: "duel-purpose", label: "Duel-purpose" },
+      { value: "duel-purpose", label: "Dual-purpose" },
     ],
   },
   {
@@ -80,7 +82,7 @@ const cowFields: FormField[] = [
     options: [
       { value: "deshi", label: "Deshi" },
       { value: "friesian", label: "Friesian" },
-      { value: "other", label: "Other / unknown" },
+      { value: "other", label: "Other / Unknown" },
     ],
   },
   { name: "birth_date", label: "Birth date", type: "date" },
@@ -90,9 +92,9 @@ const cowFields: FormField[] = [
     type: "select",
     required: true,
     options: [
-      { value: "born_on_farm", label: "Born on farm" },
-      { value: "bought_from_supplier", label: "Bought from supplier" },
-      { value: "bought_from_bazar", label: "Bought from bazar" },
+      { value: "born_on_farm", label: "Born on Farm" },
+      { value: "bought_from_supplier", label: "Bought from Supplier" },
+      { value: "bought_from_bazar", label: "Bought from Bazar" },
     ],
   },
   { name: "acquisition_date", label: "Acquisition date", type: "date", required: true },
@@ -125,7 +127,7 @@ const cowFields: FormField[] = [
   },
   {
     name: "warehouse_id",
-    label: "Warehouse",
+    label: "Shed",
     type: "select",
     required: true,
     sourcePath: apiRoutes.herd.warehouses,
@@ -144,6 +146,7 @@ const cowFields: FormField[] = [
     name: "status",
     label: "Status",
     type: "select",
+    editOnly: true,
     options: [
       { value: "active", label: "Active" },
       { value: "sold", label: "Sold" },
@@ -153,6 +156,7 @@ const cowFields: FormField[] = [
 ];
 
 export function HerdWorkspace() {
+  const { tr } = useI18n();
   const [search, setSearch] = useState("");
   const [warehouse, setWarehouse] = useState("");
   const [status, setStatus] = useState("");
@@ -175,7 +179,7 @@ export function HerdWorkspace() {
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by tag"
+          placeholder={tr("Search by tag")}
           className={ui.input}
         />
         <FilterSelect
@@ -183,36 +187,37 @@ export function HerdWorkspace() {
           valueKey="warehouse_id"
           value={warehouse}
           onChange={setWarehouse}
-          placeholder="All warehouses"
+          placeholder={tr("All sheds")}
         />
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value)}
           className={ui.select}
         >
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="sold">Sold</option>
-          <option value="deceased">Deceased</option>
+          <option value="">{tr("All statuses")}</option>
+          <option value="active">{tr("Active")}</option>
+          <option value="sold">{tr("Sold")}</option>
+          <option value="deceased">{tr("Deceased")}</option>
         </select>
         <CategoryFilterSelect
           value={category}
           onChange={setCategory}
-          placeholder="All categories"
+          placeholder={tr("All categories")}
         />
         <select
           value={sex}
           onChange={(event) => setSex(event.target.value)}
           className={ui.select}
         >
-          <option value="">All sexes</option>
-          <option value="female">Female</option>
-          <option value="male">Male</option>
+          <option value="">{tr("All sexes")}</option>
+          <option value="female">{tr("Female", "গাভী/বকনা")}</option>
+          <option value="male">{tr("Male", "ষাঁড়/বাছুর")}</option>
         </select>
       </div>
 
       <DataWorkbench
         title="Cows"
+        singularLabel="Cow"
         description="Search and register animals. Select a tag to open its record."
         path={apiRoutes.herd.cows}
         updatePath={(row) => apiRoutes.herd.cow(String(row.cow_id))}
@@ -226,58 +231,37 @@ export function HerdWorkspace() {
         }}
         deleteLabel="Archive"
         onDelete={async (row) => {
-          if (!window.confirm("Archive this cow?")) return;
-          await apiRequest(apiRoutes.herd.cow(String(row.cow_id)), { method: "PATCH", body: { is_archived: true } });
+          await apiRequest(apiRoutes.herd.cow(String(row.cow_id)), {
+            method: "PATCH",
+            body: { is_archived: true },
+          });
         }}
         columns={cowColumns}
         fields={cowFields}
         query={query}
         rowHref={(row) => `/herd/${String(row.cow_id)}`}
+        invalidateKeys={[["herd-cows"], ["global-cow-search"], ["milk-workspace-cows"]]}
       />
     </div>
   );
 }
 
 export function PurchasesWorkspace() {
+  const { tr, money, num } = useI18n();
+  const queryClient = useQueryClient();
+
+  const [evalDate, setEvalDate] = useState(today);
+  const [supplierId, setSupplierId] = useState("");
   const [liveWeight, setLiveWeight] = useState("350");
-  const [growthPercent, setGrowthPercent] = useState("61");
+  const [dressingPercent, setDressingPercent] = useState("61");
   const [offered, setOffered] = useState("");
   const [market, setMarket] = useState("");
-  const preview = useMemo(() => {
-    const liveWeightKg = Number(liveWeight);
-    const growthPotentialPercent = Number(growthPercent);
-    const cowPrice = Number(offered);
-    const marketPricePerKg = Number(market);
-
-    if (
-      !Number.isFinite(liveWeightKg) || liveWeightKg <= 0 ||
-      !Number.isFinite(growthPotentialPercent) || growthPotentialPercent < 40 || growthPotentialPercent > 80 ||
-      !Number.isFinite(cowPrice) || cowPrice <= 0 ||
-      !Number.isFinite(marketPricePerKg) || marketPricePerKg <= 0
-    ) {
-      return null;
-    }
-
-    const roundMoneyOrWeight = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
-    const est_net_weight_kg = roundMoneyOrWeight(liveWeightKg * growthPotentialPercent / 100);
-    const net_price_per_kg = roundMoneyOrWeight(cowPrice / est_net_weight_kg);
-    const price_difference_per_kg = roundMoneyOrWeight(marketPricePerKg - net_price_per_kg);
-
-    return {
-      est_net_weight_kg,
-      net_price_per_kg,
-      market_price_per_kg: marketPricePerKg,
-      price_difference_per_kg,
-      total_projected_margin: roundMoneyOrWeight(price_difference_per_kg * est_net_weight_kg),
-      is_profitable: net_price_per_kg < marketPricePerKg,
-    };
-  }, [liveWeight, growthPercent, offered, market]);
+  const [notes, setNotes] = useState("");
+  const [manualDecision, setManualDecision] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
-  const [manualDecision, setManualDecision] = useState<string | null>(null);
-  const decision = manualDecision ?? (preview ? (preview.is_profitable ? "bought" : "returned") : "pending");
-  const [revision, setRevision] = useState(0);
+
   const [convertRow, setConvertRow] = useState<Record<string, unknown> | null>(null);
   const [convertBusy, setConvertBusy] = useState(false);
   const [convertValues, setConvertValues] = useState({
@@ -289,6 +273,38 @@ export function PurchasesWorkspace() {
     notes: "",
   });
 
+  const preview = useMemo(() => {
+    const liveWeightKg = Number(liveWeight);
+    const netPct = Number(dressingPercent);
+    const cowPrice = Number(offered);
+    const marketPricePerKg = Number(market);
+
+    if (
+      !Number.isFinite(liveWeightKg) || liveWeightKg <= 0 ||
+      !Number.isFinite(netPct) || netPct < 40 || netPct > 80 ||
+      !Number.isFinite(cowPrice) || cowPrice <= 0 ||
+      !Number.isFinite(marketPricePerKg) || marketPricePerKg <= 0
+    ) {
+      return null;
+    }
+
+    const roundMoneyOrWeight = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+    const est_net_weight_kg = roundMoneyOrWeight(liveWeightKg * netPct / 100);
+    const net_price_per_kg = roundMoneyOrWeight(cowPrice / est_net_weight_kg);
+    const price_difference_per_kg = roundMoneyOrWeight(marketPricePerKg - net_price_per_kg);
+
+    return {
+      est_net_weight_kg,
+      net_price_per_kg,
+      market_price_per_kg: marketPricePerKg,
+      price_difference_per_kg,
+      total_projected_margin: roundMoneyOrWeight(price_difference_per_kg * est_net_weight_kg),
+      is_profitable: net_price_per_kg < marketPricePerKg,
+    };
+  }, [liveWeight, dressingPercent, offered, market]);
+
+  const decision = manualDecision ?? (preview ? (preview.is_profitable ? "bought" : "returned") : "pending");
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && convertRow) {
@@ -299,32 +315,40 @@ export function PurchasesWorkspace() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [convertRow]);
 
+  async function refreshEvaluations() {
+    await queryClient.invalidateQueries({ queryKey: ["data-workbench", apiRoutes.evaluations.root] });
+  }
+
   async function saveEvaluation(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
     setSaving(true);
     setError("");
     setNotice("");
-    const formData = new FormData(event.currentTarget);
     try {
       await apiRequest(apiRoutes.evaluations.root, {
         method: "POST",
         body: {
-          evaluation_date: formData.get("evaluation_date"),
-          supplier_id: formData.get("supplier_id") || null,
+          evaluation_date: evalDate,
+          supplier_id: supplierId || null,
           live_weight_kg: Number(liveWeight),
-          growth_potential: "good",
-          custom_net_weight_percent: Number(growthPercent),
+          growth_potential: Number(dressingPercent) >= 58 ? "good" : "poor",
+          custom_net_weight_percent: Number(dressingPercent),
           offered_price: Number(offered),
           market_price_per_kg: Number(market),
           decision,
-          notes: formData.get("notes") || null,
+          notes: notes.trim() || null,
         },
       });
-      setNotice("Evaluation saved.");
-      form.reset();
+      setNotice(tr("Evaluation saved.", "মূল্যায়ন সংরক্ষিত হয়েছে।"));
+      setEvalDate(today());
+      setSupplierId("");
+      setLiveWeight("350");
+      setDressingPercent("61");
+      setOffered("");
+      setMarket("");
+      setNotes("");
       setManualDecision(null);
-      setRevision((value) => value + 1);
+      await refreshEvaluations();
     } catch (cause) {
       setError(messageFor(cause));
     } finally {
@@ -339,8 +363,8 @@ export function PurchasesWorkspace() {
         method: "PATCH",
         body: { decision: "returned" },
       });
-      setRevision((value) => value + 1);
-      setNotice("Evaluation marked returned.");
+      await refreshEvaluations();
+      setNotice(tr("Evaluation marked returned.", "মূল্যায়ন ফেরত হিসেবে চিহ্নিত হয়েছে।"));
     } catch (cause) {
       setError(messageFor(cause));
     }
@@ -361,8 +385,12 @@ export function PurchasesWorkspace() {
         },
       });
       setConvertRow(null);
-      setRevision((value) => value + 1);
-      setNotice("Cow registered from this purchase.");
+      await Promise.all([
+        refreshEvaluations(),
+        queryClient.invalidateQueries({ queryKey: ["data-workbench", apiRoutes.herd.cows] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+      setNotice(tr("Cow registered from this purchase.", "এই ক্রয় থেকে গরু নিবন্ধিত হয়েছে।"));
     } catch (cause) {
       setError(messageFor(cause));
     } finally {
@@ -379,26 +407,27 @@ export function PurchasesWorkspace() {
         {/* Form Card */}
         <form onSubmit={saveEvaluation} className="rounded-[8px] border border-line bg-surface p-4 space-y-4">
           <div>
-            <h2 className="text-[15px] font-semibold text-ink">Evaluate an animal</h2>
+            <h2 className="text-[15px] font-semibold text-ink">{tr("Evaluate an animal")}</h2>
             <p className="mt-0.5 text-[12px] text-muted">
-              Enter the measured live weight and compare the estimated meat price with the market rate.
+              {tr(
+                "Enter the measured live weight and compare the estimated meat price with the market rate.",
+                "জীবন্ত ওজন লিখে বাজার দরের সাথে আনুমানিক মাংসের দাম তুলনা করুন।"
+              )}
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-[12px] font-medium text-ink">
-              <span className="block mb-1">Evaluation date</span>
-              <input
-                name="evaluation_date"
-                type="date"
-                required
-                defaultValue={today()}
-                className={ui.input}
-              />
+              <span className="block mb-1">{tr("Evaluation date")}</span>
+              <DateInput value={evalDate} onChange={setEvalDate} required />
             </label>
             <label className="text-[12px] font-medium text-ink">
-              <span className="block mb-1">Supplier</span>
-              <select name="supplier_id" className={ui.select}>
-                <option value="">Unknown / bazar</option>
+              <span className="block mb-1">{tr("Supplier")}</span>
+              <select
+                value={supplierId}
+                onChange={(event) => setSupplierId(event.target.value)}
+                className={ui.select}
+              >
+                <option value="">{tr("Unknown / bazar", "অজানা / বাজার")}</option>
                 <RemoteOptions
                   path={apiRoutes.herd.suppliers}
                   valueKey="supplier_id"
@@ -407,7 +436,7 @@ export function PurchasesWorkspace() {
               </select>
             </label>
             <label className="text-[12px] font-medium text-ink">
-              <span className="block mb-1">Live weight (kg)</span>
+              <span className="block mb-1">{tr("Live weight (kg)")}</span>
               <input
                 type="number"
                 min="1"
@@ -419,23 +448,23 @@ export function PurchasesWorkspace() {
               />
             </label>
             <label className="text-[12px] font-medium text-ink">
-              <span className="block mb-1">Growth potential (%)</span>
+              <span className="block mb-1">{tr("Meat yield / Dressing (%)")}</span>
               <input
                 type="number"
                 min="40"
                 max="80"
                 step="0.01"
                 required
-                value={growthPercent}
-                onChange={(event) => setGrowthPercent(event.target.value)}
+                value={dressingPercent}
+                onChange={(event) => setDressingPercent(event.target.value)}
                 className={ui.input}
               />
             </label>
             <label className="text-[12px] font-medium text-ink">
-              <span className="block mb-1">Cow price (৳)</span>
+              <span className="block mb-1">{tr("Cow price (৳)")}</span>
               <input
                 type="number"
-                min="0"
+                min="0.01"
                 step="0.01"
                 required
                 value={offered}
@@ -444,10 +473,10 @@ export function PurchasesWorkspace() {
               />
             </label>
             <label className="text-[12px] font-medium text-ink">
-              <span className="block mb-1">Market price (৳/kg)</span>
+              <span className="block mb-1">{tr("Market price (৳/kg)")}</span>
               <input
                 type="number"
-                min="0"
+                min="0.01"
                 step="0.01"
                 required
                 value={market}
@@ -456,25 +485,30 @@ export function PurchasesWorkspace() {
               />
             </label>
             <label className="text-[12px] font-medium text-ink">
-              <span className="block mb-1">Decision</span>
+              <span className="block mb-1">{tr("Decision")}</span>
               <select
                 value={decision}
                 onChange={(event) => setManualDecision(event.target.value)}
                 className={ui.select}
               >
-                <option value="pending">Pending</option>
-                <option value="returned">Return</option>
-                <option value="bought">Bought</option>
+                <option value="pending">{tr("Pending", "অপেক্ষমাণ")}</option>
+                <option value="returned">{tr("Return", "ফেরত")}</option>
+                <option value="bought">{tr("Bought", "ক্রয়কৃত")}</option>
               </select>
             </label>
             <label className="text-[12px] font-medium text-ink sm:col-span-2">
-              <span className="block mb-1">Notes</span>
-              <textarea name="notes" rows={2} className={ui.textarea} />
+              <span className="block mb-1">{tr("Notes")}</span>
+              <textarea
+                rows={2}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                className={ui.textarea}
+              />
             </label>
           </div>
           <div className="flex flex-wrap gap-2 pt-1">
             <button disabled={saving} className={btn("primary", "md")}>
-              {saving ? "Saving…" : "Save evaluation"}
+              {saving ? tr("Saving…") : tr("Save evaluation")}
             </button>
           </div>
         </form>
@@ -482,31 +516,31 @@ export function PurchasesWorkspace() {
         {/* Calculation Preview Card */}
         <div className="rounded-[8px] border border-line bg-surface p-4 flex flex-col justify-between">
           <div>
-            <h2 className="text-[15px] font-semibold text-ink">Calculation preview</h2>
+            <h2 className="text-[15px] font-semibold text-ink">{tr("Calculation preview")}</h2>
             <p className="mt-0.5 text-[12px] text-muted">
-              Updates as you change the weight or prices.
+              {tr("Updates as you change the weight or prices.", "ওজন বা দাম পরিবর্তন করলে সাথে সাথে হিসাব আপডেট হয়।")}
             </p>
             {preview ? (
               <div className="mt-4 space-y-2.5">
                 <div className="rounded-[6px] border border-line bg-subtle p-3 text-[12px] text-muted">
-                  <p>Net weight = live weight × growth potential</p>
+                  <p>{tr("Net meat weight = live weight × dressing (%)", "নিট মাংস = জীবন্ত ওজন × ড্রেসিং (%)")}</p>
                   <p className="mt-1 font-medium text-ink tabular-nums">
-                    {Number(liveWeight).toFixed(2)} kg × {Number(growthPercent).toFixed(2)}% = {Number(preview.est_net_weight_kg).toFixed(2)} kg
+                    {num(liveWeight)} kg × {num(dressingPercent)}% = {num(preview.est_net_weight_kg)} kg
                   </p>
-                  <p className="mt-2">Cow price per kg = cow price ÷ cow total weight</p>
+                  <p className="mt-2">{tr("Cow price per kg = cow price ÷ live weight", "জীবন্ত কেজি প্রতি দাম = গরুর দাম ÷ জীবন্ত ওজন")}</p>
                   <p className="mt-1 font-medium text-ink tabular-nums">
-                    {money(offered)} ÷ {Number(liveWeight).toFixed(2)} kg = {money(Number(offered) / Number(liveWeight))}/kg
+                    {money(offered)} ÷ {num(liveWeight)} kg = {money(Number(offered) / Number(liveWeight))}/kg
                   </p>
-                  <p className="mt-2">Meat price = cow price ÷ net weight</p>
+                  <p className="mt-2">{tr("Dressed meat price = cow price ÷ net meat weight", "মাংস প্রতি দাম = গরুর দাম ÷ নিট মাংস")}</p>
                   <p className="mt-1 font-medium text-ink tabular-nums">
-                    {money(offered)} ÷ {Number(preview.est_net_weight_kg).toFixed(2)} kg = {money(preview.net_price_per_kg)}/kg
+                    {money(offered)} ÷ {num(preview.est_net_weight_kg)} kg = {money(preview.net_price_per_kg)}/kg
                   </p>
                 </div>
                 {[
-                  ["Estimated net weight", `${Number(preview.est_net_weight_kg).toFixed(2)} kg`],
-                  ["Cow meat price", `${money(preview.net_price_per_kg)}/kg`],
-                  ["Market price per kg", money(preview.market_price_per_kg)],
-                  ["Projected margin", money(preview.total_projected_margin)],
+                  [tr("Estimated meat weight", "আনুমানিক মাংস"), `${num(preview.est_net_weight_kg)} kg`],
+                  [tr("Cow meat price", "গরুর মাংসের দাম"), `${money(preview.net_price_per_kg)}/kg`],
+                  [tr("Market price per kg", "বাজার দর/কেজি"), money(preview.market_price_per_kg)],
+                  [tr("Projected margin", "সম্ভাব্য লাভ"), money(preview.total_projected_margin)],
                 ].map(([label, value]) => (
                   <div
                     key={label}
@@ -517,7 +551,7 @@ export function PurchasesWorkspace() {
                   </div>
                 ))}
 
-                {/* Verdict Banner (not color alone: includes icon and label) */}
+                {/* Verdict Banner */}
                 <div
                   className={`mt-4 flex items-center gap-2.5 rounded-[6px] border p-3 ${
                     preview.is_profitable
@@ -531,21 +565,28 @@ export function PurchasesWorkspace() {
                   />
                   <div>
                     <p className="text-[13px] font-semibold leading-tight">
-                      {preview.is_profitable ? "Meat price is below market" : Number(preview.price_difference_per_kg) === 0 ? "Meat price matches market" : "Meat price is above market"}
+                      {preview.is_profitable
+                        ? tr("Meat price is below market", "মাংসের দাম বাজার দরের চেয়ে কম")
+                        : Number(preview.price_difference_per_kg) === 0
+                          ? tr("Meat price matches market", "মাংসের দাম বাজার দরের সমান")
+                          : tr("Meat price is above market", "মাংসের দাম বাজার দরের চেয়ে বেশি")}
                     </p>
                     <p className="text-[12px] opacity-90">
                       {preview.is_profitable
-                        ? `${money(Math.abs(Number(preview.price_difference_per_kg)))} per kg below market.`
+                        ? `${money(Math.abs(Number(preview.price_difference_per_kg)))} ${tr("per kg below market.", "প্রতি কেজিতে কম।")}`
                         : Number(preview.price_difference_per_kg) === 0
-                          ? "The estimated price per kg equals the market rate."
-                          : `${money(Math.abs(Number(preview.price_difference_per_kg)))} per kg above market.`}
+                          ? tr("The estimated price per kg equals the market rate.")
+                          : `${money(Math.abs(Number(preview.price_difference_per_kg)))} ${tr("per kg above market.", "প্রতি কেজিতে বেশি।")}`}
                     </p>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="mt-8 rounded-[6px] border border-line bg-subtle p-6 text-center text-[13px] text-muted">
-                Enter a live weight, growth potential, cow price, and market rate to see the comparison.
+                {tr(
+                  "Enter a live weight, meat yield (%), cow price, and market rate to see the comparison.",
+                  "তুলনা দেখতে জীবন্ত ওজন, মাংস প্রাপ্তি (%), গরুর দাম এবং বাজার দর লিখুন।"
+                )}
               </div>
             )}
           </div>
@@ -564,19 +605,22 @@ export function PurchasesWorkspace() {
           <form
             role="dialog"
             aria-modal="true"
-            aria-label="Register purchased cow"
+            aria-label={tr("Register purchased cow", "ক্রয়কৃত গরু নিবন্ধন")}
             onSubmit={convertToCow}
-            className="w-full max-w-xl rounded-[8px] border border-line bg-surface p-5 shadow-overlay space-y-4"
+            className="w-full max-w-xl rounded-[8px] border border-line bg-surface p-5 text-ink shadow-overlay space-y-4"
           >
             <div>
-              <h2 className="text-[16px] font-semibold text-ink">Register purchased cow</h2>
+              <h2 className="text-[16px] font-semibold text-ink">{tr("Register purchased cow", "ক্রয়কৃত গরু নিবন্ধন")}</h2>
               <p className="mt-0.5 text-[12px] text-muted">
-                The cow and its initial tag and warehouse history will be created from this evaluation.
+                {tr(
+                  "The cow and its initial tag and shed history will be created from this evaluation.",
+                  "এই মূল্যায়ন থেকে গরুর প্রাথমিক ট্যাগ ও শেডের ইতিহাস তৈরি হবে।"
+                )}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-[12px] font-medium text-ink">
-                <span className="block mb-1">Tag number</span>
+                <span className="block mb-1">{tr("Tag number")}</span>
                 <input
                   required
                   value={convertValues.tag_number}
@@ -587,7 +631,7 @@ export function PurchasesWorkspace() {
                 />
               </label>
               <label className="text-[12px] font-medium text-ink">
-                <span className="block mb-1">Sex</span>
+                <span className="block mb-1">{tr("Sex")}</span>
                 <select
                   value={convertValues.sex}
                   onChange={(event) =>
@@ -595,12 +639,12 @@ export function PurchasesWorkspace() {
                   }
                   className={ui.select}
                 >
-                  <option value="female">Female</option>
-                  <option value="male">Male</option>
+                  <option value="female">{tr("Female", "গাভী/বকনা")}</option>
+                  <option value="male">{tr("Male", "ষাঁড়/বাছুর")}</option>
                 </select>
               </label>
               <label className="text-[12px] font-medium text-ink">
-                <span className="block mb-1">Category</span>
+                <span className="block mb-1">{tr("Category")}</span>
                 <select
                   required
                   value={convertValues.category}
@@ -609,13 +653,13 @@ export function PurchasesWorkspace() {
                   }
                   className={ui.select}
                 >
-                  <option value="dairy">Dairy</option>
-                  <option value="beef">Beef</option>
-                  <option value="duel-purpose">Duel-purpose</option>
+                  <option value="dairy">{tr("Dairy", "দুগ্ধবতী")}</option>
+                  <option value="beef">{tr("Beef", "মাংস উৎপাদন")}</option>
+                  <option value="duel-purpose">{tr("Dual-purpose")}</option>
                 </select>
               </label>
               <label className="text-[12px] font-medium text-ink">
-                <span className="block mb-1">Warehouse</span>
+                <span className="block mb-1">{tr("Shed")}</span>
                 <select
                   required
                   value={convertValues.warehouse_id}
@@ -624,7 +668,7 @@ export function PurchasesWorkspace() {
                   }
                   className={ui.select}
                 >
-                  <option value="">Choose warehouse</option>
+                  <option value="">{tr("Choose shed", "শেড নির্বাচন করুন")}</option>
                   <RemoteOptions
                     path={apiRoutes.herd.warehouses}
                     valueKey="warehouse_id"
@@ -633,18 +677,16 @@ export function PurchasesWorkspace() {
                 </select>
               </label>
               <label className="text-[12px] font-medium text-ink">
-                <span className="block mb-1">Birth date</span>
-                <input
-                  type="date"
+                <span className="block mb-1">{tr("Birth date")}</span>
+                <DateInput
                   value={convertValues.birth_date}
-                  onChange={(event) =>
-                    setConvertValues((v) => ({ ...v, birth_date: event.target.value }))
+                  onChange={(nextIso) =>
+                    setConvertValues((v) => ({ ...v, birth_date: nextIso }))
                   }
-                  className={ui.input}
                 />
               </label>
               <label className="text-[12px] font-medium text-ink sm:col-span-2">
-                <span className="block mb-1">Notes</span>
+                <span className="block mb-1">{tr("Notes")}</span>
                 <textarea
                   rows={2}
                   value={convertValues.notes}
@@ -661,10 +703,10 @@ export function PurchasesWorkspace() {
                 onClick={() => setConvertRow(null)}
                 className={btn("secondary", "md")}
               >
-                Cancel
+                {tr("Cancel")}
               </button>
               <button disabled={convertBusy} className={btn("primary", "md")}>
-                {convertBusy ? "Registering…" : "Register cow"}
+                {convertBusy ? tr("Registering…", "নিবন্ধন হচ্ছে…") : tr("Register cow")}
               </button>
             </div>
           </form>
@@ -672,8 +714,8 @@ export function PurchasesWorkspace() {
       )}
 
       <DataWorkbench
-        key={revision}
         title="Purchase evaluations"
+        singularLabel="Purchase evaluation"
         description="Review saved buy and return decisions. Register a bought animal to add it to the herd."
         path={apiRoutes.evaluations.root}
         updatePath={(row) => apiRoutes.evaluations.update(String(row.evaluation_id))}
@@ -687,7 +729,6 @@ export function PurchasesWorkspace() {
         }}
         deleteLabel="Archive"
         onDelete={async (row) => {
-          if (!window.confirm("Archive this purchase evaluation?")) return;
           await apiRequest(apiRoutes.evaluations.update(String(row.evaluation_id)), {
             method: "PATCH",
             body: { is_archived: true },
@@ -703,13 +744,49 @@ export function PurchasesWorkspace() {
           { key: "is_profitable", label: "Profitable" },
           { key: "decision", label: "Decision" },
         ]}
-        fields={[]}
+        fields={[
+          { name: "evaluation_date", label: "Evaluation date", type: "date", required: true },
+          {
+            name: "supplier_id",
+            label: "Supplier",
+            type: "select",
+            sourcePath: apiRoutes.herd.suppliers,
+            sourceValue: "supplier_id",
+          },
+          { name: "live_weight_kg", label: "Live weight (kg)", type: "number", min: "1", required: true },
+          { name: "net_weight_percent", label: "Meat yield / Dressing (%)", type: "number", min: "40", max: "80", required: true },
+          { name: "offered_price", label: "Cow price (৳)", type: "number", min: "0.01", required: true },
+          { name: "market_price_per_kg", label: "Market price (৳/kg)", type: "number", min: "0.01", required: true },
+          {
+            name: "decision",
+            label: "Decision",
+            type: "select",
+            required: true,
+            options: [
+              { value: "pending", label: "Pending" },
+              { value: "bought", label: "Bought" },
+              { value: "returned", label: "Returned" },
+            ],
+          },
+          { name: "notes", label: "Notes", type: "textarea" },
+        ]}
+        buildBody={(vals) => ({
+          evaluation_date: vals.evaluation_date,
+          supplier_id: vals.supplier_id || null,
+          live_weight_kg: Number(vals.live_weight_kg),
+          growth_potential: Number(vals.net_weight_percent) >= 58 ? "good" : "poor",
+          custom_net_weight_percent: Number(vals.net_weight_percent),
+          offered_price: Number(vals.offered_price),
+          market_price_per_kg: Number(vals.market_price_per_kg),
+          decision: vals.decision,
+          notes: vals.notes?.trim() || null,
+        })}
         showCreate={false}
         rowActions={(row) =>
           row.cow_id ? (
-            <span className="text-[12px] font-medium text-accent">Registered</span>
+            <span className="text-[12px] font-medium text-accent">{tr("Registered")}</span>
           ) : row.decision === "returned" ? (
-            <span className="text-[12px] text-muted">Closed</span>
+            <span className="text-[12px] text-muted">{tr("Closed")}</span>
           ) : (
             <div className="flex items-center gap-2">
               <button
@@ -717,14 +794,14 @@ export function PurchasesWorkspace() {
                 onClick={() => setConvertRow(row)}
                 className="text-[12px] font-medium text-accent hover:underline cursor-pointer"
               >
-                Register cow
+                {tr("Register cow")}
               </button>
               <button
                 type="button"
                 onClick={() => void returnEvaluation(row)}
                 className="text-[12px] font-medium text-muted hover:underline cursor-pointer"
               >
-                Return
+                {tr("Return")}
               </button>
             </div>
           )
@@ -735,10 +812,12 @@ export function PurchasesWorkspace() {
 }
 
 export function BreedingWorkspace() {
+  const { tr } = useI18n();
   return (
     <div className="space-y-6">
       <DataWorkbench
         title="Breeding records"
+        singularLabel="Breeding record"
         description="Record heat, insemination, sire or semen details, and outcome."
         path={apiRoutes.health.breeding}
         updatePath={(row) => apiRoutes.health.breedingRecord(String(row.breeding_id))}
@@ -752,7 +831,6 @@ export function BreedingWorkspace() {
         }}
         deleteLabel="Archive"
         onDelete={async (row) => {
-          if (!window.confirm("Archive this breeding record?")) return;
           await apiRequest(apiRoutes.health.breedingRecord(String(row.breeding_id)), {
             method: "PATCH",
             body: { is_archived: true },
@@ -763,17 +841,17 @@ export function BreedingWorkspace() {
           { key: "heat_date", label: "Heat date" },
           { key: "seed_date", label: "Insemination" },
           { key: "method", label: "Method" },
+          { key: "sire_tag_number", label: "Sire" },
           { key: "semen_code", label: "Semen code" },
           { key: "doctor_name", label: "Doctor" },
           { key: "outcome", label: "Outcome" },
-          { key: "is_archived", label: "Archived" },
         ]}
         fields={[
           {
             name: "cow_id",
             label: "Cow",
             type: "select",
-            sourcePath: apiRoutes.herd.cows,
+            sourcePath: `${apiRoutes.herd.cows}?sex=female`,
             sourceValue: "cow_id",
             sourceLabel: "current_tag_number",
             required: true,
@@ -785,39 +863,112 @@ export function BreedingWorkspace() {
             label: "Method",
             type: "select",
             required: true,
+            defaultValue: "artificial_insemination",
             options: [
-              { value: "artificial_insemination", label: "Artificial insemination" },
+              { value: "artificial_insemination", label: "Artificial Insemination" },
               { value: "natural", label: "Natural" },
             ],
           },
-          { name: "semen_code", label: "Semen code" },
-          { name: "semen_provider", label: "Semen provider" },
+          {
+            name: "source_mode",
+            label: "Breeding source",
+            type: "select",
+            required: true,
+            defaultValue: "semen",
+            options: [
+              { value: "semen", label: "Purchased semen" },
+              { value: "sire", label: "On-farm sire" },
+            ],
+          },
+          {
+            name: "sire_id",
+            label: "On-farm sire",
+            type: "select",
+            required: true,
+            sourcePath: `${apiRoutes.herd.cows}?sex=male&status=active`,
+            sourceValue: "cow_id",
+            sourceLabel: "current_tag_number",
+            showWhen: { field: "source_mode", equals: ["sire"] },
+          },
+          {
+            name: "semen_code",
+            label: "Semen code",
+            required: true,
+            showWhen: { field: "source_mode", equals: ["semen"] },
+          },
+          {
+            name: "semen_provider",
+            label: "Semen provider",
+            showWhen: { field: "source_mode", equals: ["semen"] },
+          },
           { name: "doctor_name", label: "Doctor" },
           { name: "cost", label: "Cost ৳", type: "number" },
           {
             name: "outcome",
             label: "Outcome",
             type: "select",
+            defaultValue: "pending",
             options: [
               { value: "pending", label: "Pending" },
               { value: "successful", label: "Successful" },
               { value: "failed", label: "Failed" },
             ],
           },
-          {
-            name: "is_archived",
-            label: "Archived",
-            type: "select",
-            options: [
-              { value: "true", label: "Yes" },
-              { value: "false", label: "No" },
-            ],
-          },
           { name: "notes", label: "Notes", type: "textarea" },
         ]}
+        hydrateEditValues={(row) => ({
+          source_mode: row.sire_id ? "sire" : "semen",
+        })}
+        validateForm={(vals): { message?: string; fieldErrors?: Record<string, string> } | null => {
+          const heat = vals.heat_date?.trim();
+          const seed = vals.seed_date?.trim();
+          if (heat && seed && seed < heat) {
+            return {
+              message: tr(
+                "Insemination date cannot be earlier than heat date.",
+                "প্রজনন তারিখ হিট তারিখের আগে হতে পারবে না।"
+              ),
+              fieldErrors: {
+                seed_date: tr("Must be on or after heat date.", "হিট তারিখের সমান বা পরের তারিখ দিন।"),
+              },
+            };
+          }
+          const mode = vals.source_mode || "semen";
+          if (mode === "sire" && !vals.sire_id) {
+            return {
+              message: tr("Please select an on-farm sire.", "খামারের ষাঁড় নির্বাচন করুন।"),
+              fieldErrors: { sire_id: tr("On-farm sire is required.") },
+            };
+          }
+          if (mode === "semen" && !vals.semen_code?.trim()) {
+            return {
+              message: tr("Please enter a purchased semen code.", "কেনা সিমেন কোড লিখুন।"),
+              fieldErrors: { semen_code: tr("Semen code is required.") },
+            };
+          }
+          return null;
+        }}
+        buildBody={(vals) => {
+          const mode = vals.source_mode || "semen";
+          return {
+            cow_id: vals.cow_id,
+            heat_date: vals.heat_date || null,
+            seed_date: vals.seed_date,
+            method: vals.method || "artificial_insemination",
+            sire_id: mode === "sire" ? vals.sire_id || null : null,
+            semen_code: mode === "semen" ? vals.semen_code?.trim() || null : null,
+            semen_provider: mode === "semen" ? vals.semen_provider?.trim() || null : null,
+            doctor_name: vals.doctor_name?.trim() || null,
+            cost: vals.cost ? Number(vals.cost) : 0,
+            outcome: vals.outcome || "pending",
+            notes: vals.notes?.trim() || null,
+          };
+        }}
       />
+
       <DataWorkbench
         title="Pregnancy checks"
+        singularLabel="Pregnancy check"
         description="Log pregnancy results and expected calving dates."
         path={apiRoutes.health.pregnancy}
         updatePath={(row) => apiRoutes.health.pregnancyReport(String(row.pregnancy_id))}
@@ -831,7 +982,6 @@ export function BreedingWorkspace() {
         }}
         deleteLabel="Archive"
         onDelete={async (row) => {
-          if (!window.confirm("Archive this pregnancy report?")) return;
           await apiRequest(apiRoutes.health.pregnancyReport(String(row.pregnancy_id)), {
             method: "PATCH",
             body: { is_archived: true },
@@ -844,14 +994,13 @@ export function BreedingWorkspace() {
           { key: "expected_calving_date", label: "Expected calving" },
           { key: "actual_calving_date", label: "Actual calving" },
           { key: "notes", label: "Notes" },
-          { key: "is_archived", label: "Archived" },
         ]}
         fields={[
           {
             name: "cow_id",
             label: "Cow",
             type: "select",
-            sourcePath: apiRoutes.herd.cows,
+            sourcePath: `${apiRoutes.herd.cows}?sex=female`,
             sourceValue: "cow_id",
             sourceLabel: "current_tag_number",
             required: true,
@@ -861,6 +1010,7 @@ export function BreedingWorkspace() {
             name: "status",
             label: "Status",
             type: "select",
+            defaultValue: "confirmed",
             options: [
               { value: "confirmed", label: "Confirmed" },
               { value: "suspected", label: "Suspected" },
@@ -871,23 +1021,39 @@ export function BreedingWorkspace() {
           },
           { name: "expected_calving_date", label: "Expected calving", type: "date" },
           { name: "actual_calving_date", label: "Actual calving", type: "date" },
-          {
-            name: "is_archived",
-            label: "Archived",
-            type: "select",
-            options: [
-              { value: "true", label: "Yes" },
-              { value: "false", label: "No" },
-            ],
-          },
           { name: "notes", label: "Notes", type: "textarea" },
         ]}
+        validateForm={(vals) => {
+          const checkDate = vals.report_date?.trim();
+          const expectedDate = vals.expected_calving_date?.trim();
+          const actualDate = vals.actual_calving_date?.trim();
+          const st = vals.status || "confirmed";
+          if (
+            checkDate &&
+            expectedDate &&
+            !actualDate &&
+            (st === "confirmed" || st === "suspected") &&
+            expectedDate < checkDate
+          ) {
+            return {
+              message: tr(
+                "Expected calving date cannot be earlier than check date.",
+                "সম্ভাব্য প্রসব তারিখ পরীক্ষার তারিখের আগে হতে পারবে না।"
+              ),
+              fieldErrors: {
+                expected_calving_date: tr("Must be on or after check date."),
+              },
+            };
+          }
+          return null;
+        }}
       />
     </div>
   );
 }
 
 export function HealthWorkspace() {
+  const { tr, date: fmtDate, enumLabel } = useI18n();
   const [records, setRecords] = useState<Record<string, unknown>[]>([]);
   const dueThrough = dateAfter(today(), 14);
   const upcoming = useMemo(
@@ -900,11 +1066,14 @@ export function HealthWorkspace() {
 
   return (
     <div className="space-y-5">
-      {/* Neutral Care Panel */}
+      {/* Care Alert Panel */}
       <section className="rounded-[8px] border border-line bg-surface p-4">
-        <h2 className="text-[15px] font-semibold text-ink">Due and overdue care</h2>
+        <h2 className="text-[15px] font-semibold text-ink">{tr("Due and overdue care")}</h2>
         <p className="mt-0.5 text-[12px] text-muted">
-          Upcoming vaccinations, deworming, and health checks due within 14 days.
+          {tr(
+            "Upcoming vaccinations, deworming, and health checks due within 14 days.",
+            "আগামী ১৪ দিনের মধ্যে নির্ধারিত টিকা, কৃমিনাশক ও স্বাস্থ্য পরীক্ষা।"
+          )}
         </p>
         {upcoming.length ? (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -916,19 +1085,21 @@ export function HealthWorkspace() {
                   tone={overdue ? "bad" : "warn"}
                   className="px-2.5 py-1 text-[12px]"
                 >
-                  {String(row.record_type)} · Cow {String(row.cow_tag_number ?? "—")} ·{" "}
-                  {overdue ? "overdue" : "due"} {String(row.next_due_date)}
+                  {enumLabel(row.record_type)} · {tr("Cow")} {String(row.cow_tag_number ?? "—")} ·{" "}
+                  {overdue ? tr("overdue", "মেয়াদোত্তীর্ণ") : tr("due", "নির্ধারিত")}{" "}
+                  {fmtDate(String(row.next_due_date))}
                 </Badge>
               );
             })}
           </div>
         ) : (
-          <p className="mt-3 text-[13px] text-muted">No care due in the next 14 days.</p>
+          <p className="mt-3 text-[13px] text-muted">{tr("No care due in the next 14 days.")}</p>
         )}
       </section>
 
       <DataWorkbench
         title="Health records"
+        singularLabel="Health record"
         description="Vaccinations, deworming, treatment, and checkups."
         path={apiRoutes.health.records}
         updatePath={(row) => apiRoutes.health.record(String(row.health_id))}
@@ -942,7 +1113,6 @@ export function HealthWorkspace() {
         }}
         deleteLabel="Archive"
         onDelete={async (row) => {
-          if (!window.confirm("Archive this health record?")) return;
           await apiRequest(apiRoutes.health.record(String(row.health_id)), {
             method: "PATCH",
             body: { is_archived: true },
@@ -956,7 +1126,6 @@ export function HealthWorkspace() {
           { key: "cost", label: "Cost ৳" },
           { key: "next_due_date", label: "Next due" },
           { key: "details", label: "Details" },
-          { key: "is_archived", label: "Archived" },
         ]}
         onRows={setRecords}
         fields={[
@@ -985,15 +1154,6 @@ export function HealthWorkspace() {
           { name: "vet_name", label: "Vet" },
           { name: "cost", label: "Cost ৳", type: "number" },
           { name: "next_due_date", label: "Next due", type: "date" },
-          {
-            name: "is_archived",
-            label: "Archived",
-            type: "select",
-            options: [
-              { value: "true", label: "Yes" },
-              { value: "false", label: "No" },
-            ],
-          },
           { name: "details", label: "Details", type: "textarea" },
         ]}
       />
@@ -1001,14 +1161,67 @@ export function HealthWorkspace() {
   );
 }
 
+type FeedTypeRow = {
+  feed_type_id: string;
+  name: string;
+  name_bn: string;
+  unit: string;
+  unit_cost: string | number;
+  stock_quantity: string | number;
+  reorder_level: string | number;
+  category_name?: string | null;
+};
+
 export function ExpensesWorkspace() {
+  const { tr, money, num, lang } = useI18n();
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState("expenses");
   const [category, setCategory] = useState("");
   const [warehouse, setWarehouse] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [expenses, setExpenses] = useState<Record<string, unknown>[]>([]);
+  const [feedingRows, setFeedingRows] = useState<Record<string, unknown>[]>([]);
+
+  // Restock modal state
+  const [restockTarget, setRestockTarget] = useState<FeedTypeRow | null>(null);
+  const [restockQty, setRestockQty] = useState("");
+  const [restockCost, setRestockCost] = useState("");
+  const [restockDate, setRestockDate] = useState(today);
+  const [restockNotes, setRestockNotes] = useState("");
+  const [restockBusy, setRestockBusy] = useState(false);
+  const [restockError, setRestockError] = useState("");
+  const [restockNotice, setRestockNotice] = useState("");
 
   const total = expenses.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+  const feedTotalCost = feedingRows.reduce((sum, item) => sum + Number(item.cost ?? 0), 0);
+
+  const milkStatsQuery = useQuery({
+    queryKey: ["expenses-feed-milk-ratio", start, end],
+    queryFn: () =>
+      apiRequest<{ liters: number }[]>(
+        apiQuery(apiRoutes.sales.milk, {
+          start_date: start || undefined,
+          end_date: end || undefined,
+        })
+      ),
+    enabled: tab === "feeding",
+    staleTime: 30_000,
+  });
+
+  const totalMilkLiters = (milkStatsQuery.data ?? []).reduce(
+    (sum, item) => sum + Number(item.liters ?? 0),
+    0
+  );
+  const feedCostPerLiter = totalMilkLiters > 0 ? feedTotalCost / totalMilkLiters : null;
+
+  const feedTypesQuery = useQuery({
+    queryKey: ["feed-inventory-types"],
+    queryFn: () => apiRequest<FeedTypeRow[]>(apiRoutes.feeding.feedTypes),
+    enabled: tab === "inventory",
+    staleTime: 30_000,
+  });
+
   const query = new URLSearchParams(
     Object.entries({
       category_id: category,
@@ -1018,155 +1231,476 @@ export function ExpensesWorkspace() {
     }).filter(([, value]) => value)
   ).toString();
 
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-        <FilterSelect
-          path={apiRoutes.feeding.categories}
-          valueKey="category_id"
-          value={category}
-          onChange={setCategory}
-          placeholder="All categories"
-        />
-        <FilterSelect
-          path={apiRoutes.herd.warehouses}
-          valueKey="warehouse_id"
-          value={warehouse}
-          onChange={setWarehouse}
-          placeholder="All warehouses"
-        />
-        <label className="text-[12px] font-medium text-ink">
-          <span className="block mb-1">From</span>
-          <input
-            type="date"
-            value={start}
-            onChange={(event) => setStart(event.target.value)}
-            className={ui.input}
-          />
-        </label>
-        <label className="text-[12px] font-medium text-ink">
-          <span className="block mb-1">To</span>
-          <input
-            type="date"
-            value={end}
-            onChange={(event) => setEnd(event.target.value)}
-            className={ui.input}
-          />
-        </label>
-      </div>
+  const feedingQuery = new URLSearchParams(
+    Object.entries({
+      start_date: start,
+      end_date: end,
+    }).filter(([, value]) => value)
+  ).toString();
 
-      <div className="flex items-center justify-between rounded-[8px] border border-line bg-surface px-4 py-3">
-        <span className="text-[12px] font-medium text-muted">Total in filtered results</span>
-        <strong className="text-[15px] font-semibold text-ink tabular-nums">
-          ৳{" "}
-          {new Intl.NumberFormat("en-BD", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          }).format(total)}
-        </strong>
-      </div>
+  async function submitRestock(event: React.FormEvent) {
+    event.preventDefault();
+    if (!restockTarget) return;
+    const qty = Number(restockQty);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setRestockError(tr("Enter a positive quantity.", "০-এর বেশি পরিমাণ লিখুন।"));
+      return;
+    }
+    setRestockBusy(true);
+    setRestockError("");
+    setRestockNotice("");
+    try {
+      await apiRequest(apiRoutes.feeding.stockEntries, {
+        method: "POST",
+        body: {
+          feed_type_id: restockTarget.feed_type_id,
+          entry_date: restockDate,
+          quantity_added: qty,
+          unit_cost: restockCost ? Number(restockCost) : undefined,
+          notes: restockNotes.trim() || null,
+        },
+      });
+      setRestockNotice(tr("Feed stock updated.", "খাদ্য মজুদ আপডেট হয়েছে।"));
+      setRestockTarget(null);
+      setRestockQty("");
+      setRestockCost("");
+      setRestockNotes("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["feed-inventory-types"] }),
+        queryClient.invalidateQueries({ queryKey: ["data-workbench", apiRoutes.feeding.stockEntries] }),
+      ]);
+    } catch (cause) {
+      setRestockError(messageFor(cause));
+    } finally {
+      setRestockBusy(false);
+    }
+  }
 
-      <DataWorkbench
-        title="Expenses"
-        description="Filter and record farm and animal expenses."
-        path={apiRoutes.feeding.expenses}
-        updatePath={(row) => apiRoutes.feeding.expense(String(row.expense_id))}
-        lifecycle={{
-          includeQuery: "include_archived=true&include_void=true",
-          entityType: "expenses",
-          idKey: "expense_id",
-          isInactive: (row) => row.is_archived === true || row.is_void === true,
-          restoreBody: (row) => row.is_archived === true ? { is_archived: false } : { is_void: false },
-          restoreLabel: (row) => row.is_archived === true ? "Unarchive" : "Unvoid",
-        }}
-        deleteLabel="Void"
-        onDelete={async (row) => {
-          const reason = window.prompt("Reason for voiding this expense:");
-          if (reason === null) return;
-          if (!reason.trim()) {
-            window.alert("A reason is required to void an expense.");
-            return;
-          }
-          await apiRequest(apiRoutes.feeding.expense(String(row.expense_id)), {
-            method: "PATCH",
-            body: { is_void: true, void_reason: reason.trim() },
-          });
-        }}
-        query={query}
-        onRows={setExpenses}
-        columns={[
-          { key: "expense_date", label: "Date" },
-          { key: "category_name", label: "Category" },
-          { key: "warehouse_name", label: "Warehouse" },
-          { key: "cow_tag_number", label: "Cow" },
-          { key: "amount", label: "Amount ৳" },
-          { key: "description", label: "Description" },
-          { key: "is_archived", label: "Archived" },
-          { key: "is_void", label: "Voided" },
-          { key: "void_reason", label: "Void reason" },
-        ]}
-        fields={[
-          {
-            name: "category_id",
-            label: "Category",
-            type: "select",
-            sourcePath: apiRoutes.feeding.categories,
-            sourceValue: "category_id",
-            sourceLabel: "name",
-            required: true,
-          },
-          {
-            name: "warehouse_id",
-            label: "Warehouse",
-            type: "select",
-            sourcePath: apiRoutes.herd.warehouses,
-            sourceValue: "warehouse_id",
-          },
-          {
-            name: "cow_id",
-            label: "Cow",
-            type: "select",
-            sourcePath: apiRoutes.herd.cows,
-            sourceValue: "cow_id",
-            sourceLabel: "current_tag_number",
-          },
-          { name: "expense_date", label: "Date", type: "date", required: true },
-          { name: "amount", label: "Amount ৳", type: "number", required: true },
-          {
-            name: "is_archived",
-            label: "Archived",
-            type: "select",
-            options: [
-              { value: "true", label: "Yes" },
-              { value: "false", label: "No" },
-            ],
-          },
-          { name: "description", label: "Description", type: "textarea" },
-        ]}
-      />
-    </div>
-  );
-}
-
-export function MilkSalesWorkspace() {
-  const [tab, setTab] = useState("milk");
   const tabs = [
-    { key: "milk", label: "Milk records" },
-    { key: "invoices", label: "Sales invoices" },
-    { key: "customers", label: "Customers" },
+    { key: "expenses", label: tr("Expenses") },
+    { key: "feeding", label: tr("Daily Feeding Log") },
+    { key: "inventory", label: tr("Feed Inventory") },
   ] as const;
 
   return (
     <div className="space-y-4">
       <Tabs items={tabs} active={tab} onChange={setTab} />
 
-      {tab === "milk" && (
-        <MilkRecordsWorkspace />
+      {tab === "expenses" && (
+        <>
+          <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+            <FilterSelect
+              path={apiRoutes.feeding.categories}
+              valueKey="category_id"
+              value={category}
+              onChange={setCategory}
+              placeholder={tr("All categories")}
+            />
+            <FilterSelect
+              path={apiRoutes.herd.warehouses}
+              valueKey="warehouse_id"
+              value={warehouse}
+              onChange={setWarehouse}
+              placeholder={tr("All sheds")}
+            />
+            <label className="text-[12px] font-medium text-ink">
+              <span className="block mb-1">{tr("From")}</span>
+              <DateInput value={start} onChange={setStart} />
+            </label>
+            <label className="text-[12px] font-medium text-ink">
+              <span className="block mb-1">{tr("To")}</span>
+              <DateInput value={end} onChange={setEnd} />
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between rounded-[8px] border border-line bg-surface px-4 py-3">
+            <span className="text-[12px] font-medium text-muted">{tr("Total in filtered results")}</span>
+            <strong className="text-[15px] font-semibold text-ink tabular-nums">
+              {money(total)}
+            </strong>
+          </div>
+
+          <DataWorkbench
+            title="Expenses"
+            singularLabel="Expense"
+            description="Filter and record farm and animal expenses."
+            path={apiRoutes.feeding.expenses}
+            updatePath={(row) => apiRoutes.feeding.expense(String(row.expense_id))}
+            lifecycle={{
+              includeQuery: "include_archived=true&include_void=true",
+              entityType: "expenses",
+              idKey: "expense_id",
+              isInactive: (row) => row.is_archived === true || row.is_void === true,
+              restoreBody: (row) => (row.is_archived === true ? { is_archived: false } : { is_void: false }),
+              restoreLabel: (row) => (row.is_archived === true ? "Unarchive" : "Unvoid"),
+            }}
+            deleteLabel="Void"
+            deleteConfirmMode="reason"
+            onDelete={async (row, reason) => {
+              await apiRequest(apiRoutes.feeding.expense(String(row.expense_id)), {
+                method: "PATCH",
+                body: { is_void: true, void_reason: reason },
+              });
+            }}
+            query={query}
+            onRows={setExpenses}
+            columns={[
+              { key: "expense_date", label: "Date" },
+              { key: "category_name", label: "Category" },
+              { key: "warehouse_name", label: "Shed" },
+              { key: "cow_tag_number", label: "Cow" },
+              { key: "amount", label: "Amount ৳" },
+              { key: "description", label: "Description" },
+              { key: "is_void", label: "Voided" },
+              { key: "void_reason", label: "Void reason" },
+            ]}
+            fields={[
+              {
+                name: "category_id",
+                label: "Category",
+                type: "select",
+                sourcePath: apiRoutes.feeding.categories,
+                sourceValue: "category_id",
+                sourceLabel: "name",
+                required: true,
+              },
+              {
+                name: "warehouse_id",
+                label: "Shed",
+                type: "select",
+                sourcePath: apiRoutes.herd.warehouses,
+                sourceValue: "warehouse_id",
+              },
+              {
+                name: "cow_id",
+                label: "Cow",
+                type: "select",
+                sourcePath: apiRoutes.herd.cows,
+                sourceValue: "cow_id",
+                sourceLabel: "current_tag_number",
+              },
+              { name: "expense_date", label: "Date", type: "date", required: true },
+              { name: "amount", label: "Amount ৳", type: "number", required: true },
+              { name: "description", label: "Description", type: "textarea" },
+            ]}
+          />
+        </>
       )}
+
+      {tab === "feeding" && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="text-[12px] font-medium text-ink">
+              <span className="block mb-1">{tr("From")}</span>
+              <DateInput value={start} onChange={setStart} />
+            </label>
+            <label className="text-[12px] font-medium text-ink">
+              <span className="block mb-1">{tr("To")}</span>
+              <DateInput value={end} onChange={setEnd} />
+            </label>
+            <StatTile
+              label={tr("Total feed cost", "মোট খাদ্য খরচ")}
+              value={money(feedTotalCost)}
+            />
+            <StatTile
+              label={tr("Feed cost per liter")}
+              value={feedCostPerLiter !== null ? `${money(feedCostPerLiter)}/L` : "—"}
+              subtext={`${num(totalMilkLiters)} L ${tr("milk produced", "দুধ উৎপাদন")}`}
+            />
+          </div>
+
+          <DataWorkbench
+            title="Daily Feeding Log"
+            singularLabel="Feeding record"
+            description="Record daily herd or per-cow feed rations. Cost and feed stock update automatically."
+            path={apiRoutes.feeding.records}
+            updatePath={(row) => apiRoutes.feeding.record(String(row.feeding_id))}
+            query={feedingQuery}
+            onRows={setFeedingRows}
+            invalidateKeys={[["feed-inventory-types"]]}
+            lifecycle={{
+              includeQuery: "include_archived=true",
+              entityType: "feeding_records",
+              idKey: "feeding_id",
+              isInactive: (row) => row.is_archived === true,
+              restoreBody: () => ({ is_archived: false }),
+              restoreLabel: () => "Unarchive",
+            }}
+            deleteLabel="Archive"
+            onDelete={async (row) => {
+              await apiRequest(apiRoutes.feeding.record(String(row.feeding_id)), {
+                method: "PATCH",
+                body: { is_archived: true },
+              });
+            }}
+            columns={[
+              { key: "feeding_date", label: "Date" },
+              { key: "feed_name", label: "Feed type", },
+              { key: "cow_tag_number", label: "Cow" },
+              { key: "quantity", label: "Quantity" },
+              { key: "unit", label: "Unit" },
+              { key: "cost", label: "Cost ৳" },
+              { key: "notes", label: "Notes" },
+            ]}
+            fields={[
+              {
+                name: "feed_type_id",
+                label: "Feed type",
+                type: "select",
+                sourcePath: apiRoutes.feeding.feedTypes,
+                sourceValue: "feed_type_id",
+                sourceLabel: "name",
+                required: true,
+              },
+              {
+                name: "cow_id",
+                label: "Cow (optional — leave blank for whole herd)",
+                type: "select",
+                sourcePath: `${apiRoutes.herd.cows}?status=active`,
+                sourceValue: "cow_id",
+                sourceLabel: "current_tag_number",
+              },
+              { name: "feeding_date", label: "Date", type: "date", required: true, defaultValue: today() },
+              { name: "quantity", label: "Quantity", type: "number", min: "0.01", required: true },
+              { name: "custom_unit_cost", label: "Unit cost override ৳ (optional)", type: "number" },
+              { name: "notes", label: "Notes", type: "textarea" },
+            ]}
+          />
+        </>
+      )}
+
+      {tab === "inventory" && (
+        <div className="space-y-4">
+          {restockNotice ? <Notice tone="success">{restockNotice}</Notice> : null}
+
+          <section className="rounded-[8px] border border-line bg-surface p-4 space-y-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-[15px] font-semibold text-ink">{tr("Feed Inventory")}</h2>
+                <p className="mt-0.5 text-[12px] text-muted">
+                  {tr(
+                    "Track on-hand feed stock (silage, straw, concentrate, bran) and restock purchases.",
+                    "খাদ্যের বর্তমান মজুদ দেখুন এবং নতুন ক্রয় যোগ করুন।"
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {feedTypesQuery.isLoading ? (
+              <p className="py-6 text-center text-[13px] text-muted">{tr("Loading…", "লোড হচ্ছে…")}</p>
+            ) : (
+              <div className="overflow-x-auto rounded-[6px] border border-line">
+                <table className="w-full text-left border-collapse text-[13.5px]">
+                  <thead>
+                    <tr className="border-b border-line bg-subtle text-[12px] text-muted">
+                      <th className="px-3.5 py-2.5 font-medium">{tr("Feed type")}</th>
+                      <th className="px-3.5 py-2.5 font-medium text-right">{tr("Current stock")}</th>
+                      <th className="px-3.5 py-2.5 font-medium text-right">{tr("Reorder level")}</th>
+                      <th className="px-3.5 py-2.5 font-medium text-right">{tr("Cost per unit ৳")}</th>
+                      <th className="px-3.5 py-2.5 font-medium min-w-[105px]">{tr("Status")}</th>
+                      <th className="px-3.5 py-2.5 font-medium text-right">{tr("Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {(feedTypesQuery.data ?? []).map((ft) => {
+                      const stock = Number(ft.stock_quantity ?? 0);
+                      const reorder = Number(ft.reorder_level ?? 0);
+                      const isLow = stock <= reorder;
+                      return (
+                        <tr key={ft.feed_type_id} className="hover:bg-wash transition-colors">
+                          <td className="px-3.5 py-2.5 font-medium text-ink">
+                            {lang === "bn" ? ft.name_bn : ft.name}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right tabular-nums text-ink">
+                            {num(stock)} {ft.unit}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right tabular-nums text-muted">
+                            {num(reorder)} {ft.unit}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right tabular-nums text-ink">
+                            {money(ft.unit_cost)}
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            <Badge tone={isLow ? "warn" : "good"}>
+                              {isLow ? tr("Low stock") : tr("In stock")}
+                            </Badge>
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRestockTarget(ft);
+                                setRestockCost(String(ft.unit_cost));
+                                setRestockQty("");
+                                setRestockDate(today());
+                                setRestockError("");
+                              }}
+                              className={btn("secondary", "sm")}
+                            >
+                              {tr("Restock feed")}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {restockTarget && (
+            <div
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !restockBusy) setRestockTarget(null);
+              }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
+            >
+              <form
+                role="dialog"
+                aria-modal="true"
+                aria-label={tr("Restock feed")}
+                onSubmit={(e) => void submitRestock(e)}
+                className="w-full max-w-md rounded-[8px] border border-line bg-surface p-5 text-ink shadow-overlay space-y-4"
+              >
+                <div>
+                  <h3 className="text-[16px] font-semibold text-ink">
+                    {tr("Restock feed")} — {lang === "bn" ? restockTarget.name_bn : restockTarget.name}
+                  </h3>
+                  <p className="mt-0.5 text-[12px] text-muted">
+                    {tr("Current stock")}: {num(restockTarget.stock_quantity)} {restockTarget.unit}
+                  </p>
+                </div>
+                {restockError ? <Notice>{restockError}</Notice> : null}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-[12px] font-medium text-ink">
+                    <span className="block mb-1">{tr("Date")} *</span>
+                    <DateInput value={restockDate} onChange={setRestockDate} required />
+                  </label>
+                  <label className="text-[12px] font-medium text-ink">
+                    <span className="block mb-1">{tr("Quantity")} ({restockTarget.unit}) *</span>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      required
+                      autoFocus
+                      value={restockQty}
+                      onChange={(e) => setRestockQty(e.target.value)}
+                      className={ui.input}
+                    />
+                  </label>
+                  <label className="text-[12px] font-medium text-ink sm:col-span-2">
+                    <span className="block mb-1">{tr("Cost per unit ৳")}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={restockCost}
+                      onChange={(e) => setRestockCost(e.target.value)}
+                      className={ui.input}
+                    />
+                  </label>
+                  <label className="text-[12px] font-medium text-ink sm:col-span-2">
+                    <span className="block mb-1">{tr("Notes")}</span>
+                    <textarea
+                      rows={2}
+                      value={restockNotes}
+                      onChange={(e) => setRestockNotes(e.target.value)}
+                      className={ui.textarea}
+                    />
+                  </label>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={restockBusy}
+                    onClick={() => setRestockTarget(null)}
+                    className={btn("secondary", "md")}
+                  >
+                    {tr("Cancel")}
+                  </button>
+                  <button type="submit" disabled={restockBusy} className={btn("primary", "md")}>
+                    {restockBusy ? tr("Saving…") : tr("Save record")}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          <DataWorkbench
+            title="Feed stock purchases"
+            singularLabel="Stock entry"
+            description="History of feed restocking entries."
+            path={apiRoutes.feeding.stockEntries}
+            updatePath={(row) => apiRoutes.feeding.stockEntry(String(row.stock_entry_id))}
+            invalidateKeys={[["feed-inventory-types"]]}
+            lifecycle={{
+              includeQuery: "include_archived=true",
+              entityType: "feed_stock_entries",
+              idKey: "stock_entry_id",
+              isInactive: (row) => row.is_archived === true,
+              restoreBody: () => ({ is_archived: false }),
+              restoreLabel: () => "Unarchive",
+            }}
+            deleteLabel="Archive"
+            onDelete={async (row) => {
+              await apiRequest(apiRoutes.feeding.stockEntry(String(row.stock_entry_id)), {
+                method: "PATCH",
+                body: { is_archived: true },
+              });
+            }}
+            columns={[
+              { key: "entry_date", label: "Date" },
+              { key: "feed_name", label: "Feed type" },
+              { key: "quantity_added", label: "Quantity" },
+              { key: "unit", label: "Unit" },
+              { key: "unit_cost", label: "Unit cost ৳" },
+              { key: "total_cost", label: "Total cost ৳" },
+              { key: "notes", label: "Notes" },
+            ]}
+            fields={[
+              {
+                name: "feed_type_id",
+                label: "Feed type",
+                type: "select",
+                sourcePath: apiRoutes.feeding.feedTypes,
+                sourceValue: "feed_type_id",
+                sourceLabel: "name",
+                required: true,
+              },
+              { name: "entry_date", label: "Date", type: "date", required: true, defaultValue: today() },
+              { name: "quantity_added", label: "Quantity", type: "number", min: "0.01", required: true },
+              { name: "unit_cost", label: "Cost per unit ৳", type: "number" },
+              { name: "notes", label: "Notes", type: "textarea" },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function MilkSalesWorkspace() {
+  const { tr } = useI18n();
+  const [tab, setTab] = useState("milk");
+  const tabs = [
+    { key: "milk", label: tr("Milk records") },
+    { key: "invoices", label: tr("Sales invoices") },
+    { key: "customers", label: tr("Customers") },
+  ] as const;
+
+  return (
+    <div className="space-y-4">
+      <Tabs items={tabs} active={tab} onChange={setTab} />
+
+      {tab === "milk" && <MilkRecordsWorkspace />}
 
       {tab === "customers" && (
         <DataWorkbench
           title="Customers"
+          singularLabel="Customer"
           description="Maintain customers and review their outstanding balance."
           path={apiRoutes.sales.customers}
           updatePath={(row) => apiRoutes.sales.customer(String(row.customer_id))}
@@ -1175,9 +1709,12 @@ export function MilkSalesWorkspace() {
             entityType: "customers",
             idKey: "customer_id",
             isInactive: (row) => row.is_archived === true,
+            archiveBody: () => ({ is_archived: true }),
+            archiveLabel: "Archive",
             restoreBody: () => ({ is_archived: false }),
             restoreLabel: () => "Unarchive",
           }}
+          invalidateKeys={[["sales-customers-options"], ["sales-invoices"]]}
           columns={[
             { key: "name", label: "Customer" },
             { key: "phone", label: "Phone" },
@@ -1193,103 +1730,31 @@ export function MilkSalesWorkspace() {
               name: "customer_type",
               label: "Customer type",
               type: "select",
+              required: true,
+              defaultValue: "individual",
               options: [
                 { value: "individual", label: "Individual" },
-                { value: "dairy_shop", label: "Dairy shop" },
+                { value: "dairy_shop", label: "Dairy Shop" },
                 { value: "wholesaler", label: "Wholesaler" },
-                { value: "meat_buyer", label: "Meat buyer" },
+                { value: "meat_buyer", label: "Meat Buyer" },
               ],
             },
           ]}
         />
       )}
 
-      {tab === "invoices" && (
-        <DataWorkbench
-          title="Sales invoices"
-          description="Create an invoice with one line item. Select an invoice to record payments or update its status."
-          path={apiRoutes.sales.invoices}
-          updatePath={(row) => apiRoutes.sales.invoiceStatus(String(row.invoice_id))}
-          lifecycle={{
-            includeQuery: "include_void=true",
-            entityType: "sales_invoices",
-            idKey: "invoice_id",
-            isInactive: (row) => row.status === "void",
-            restoreBody: () => ({ status: "issued" }),
-            restoreLabel: () => "Reissue",
-          }}
-          deleteLabel="Void"
-          onDelete={async (row) => {
-            const reason = window.prompt("Reason for voiding this invoice:");
-            if (reason === null) return;
-            if (!reason.trim()) {
-              window.alert("A reason is required to void an invoice.");
-              return;
-            }
-            await apiRequest(apiRoutes.sales.invoiceStatus(String(row.invoice_id)), {
-              method: "PATCH",
-              body: { status: "void", void_reason: reason.trim() },
-            });
-          }}
-          columns={[
-            { key: "invoice_number", label: "Invoice" },
-            { key: "customer_name", label: "Customer" },
-            { key: "invoice_date", label: "Date" },
-            { key: "status", label: "Status" },
-            { key: "total_amount", label: "Total ৳" },
-            { key: "paid_amount", label: "Paid ৳" },
-            { key: "outstanding_balance", label: "Balance ৳" },
-          ]}
-          rowHref={(row) => `/milk-sales/invoices/${String(row.invoice_id)}`}
-          fields={[
-            {
-              name: "customer_id",
-              label: "Customer",
-              type: "select",
-              sourcePath: apiRoutes.sales.customers,
-              sourceValue: "customer_id",
-              sourceLabel: "name",
-              required: true,
-            },
-            { name: "invoice_date", label: "Invoice date", type: "date", required: true },
-            { name: "due_date", label: "Due date", type: "date" },
-            {
-              name: "item_type",
-              label: "Item",
-              type: "select",
-              required: true,
-              options: [
-                { value: "milk", label: "Milk" },
-                { value: "animal", label: "Animal" },
-                { value: "other", label: "Other" },
-              ],
-            },
-            { name: "description", label: "Description", required: true },
-            { name: "quantity", label: "Quantity", type: "number", required: true },
-            { name: "unit_price", label: "Unit price ৳", type: "number", required: true },
-            { name: "discount", label: "Discount ৳", type: "number" },
-          ]}
-          buildBody={(values) => ({
-            customer_id: values.customer_id,
-            invoice_date: values.invoice_date,
-            due_date: values.due_date || null,
-            discount: Number(values.discount || 0),
-            lines: [
-              {
-                item_type: values.item_type,
-                description: values.description,
-                quantity: Number(values.quantity),
-                unit_price: Number(values.unit_price),
-              },
-            ],
-          })}
-        />
-      )}
+      {tab === "invoices" && <SalesInvoicesManager defaultDate={today()} />}
     </div>
   );
 }
 
-type PayrollWorker = { worker_id: string; name: string; monthly_salary: number | string; weekly_holidays?: number[] };
+type PayrollWorker = {
+  worker_id: string;
+  name: string;
+  monthly_salary: number | string;
+  weekly_holidays?: number[];
+  outstanding_advance?: number | string;
+};
 type PayrollAttendance = { is_present: boolean; is_archived: boolean };
 const WEEKDAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -1303,8 +1768,8 @@ function workerHasHoliday(worker: Record<string, unknown>, date: string) {
 }
 
 function localDateString() {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayDate = new Date();
+  return `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, "0")}-${String(todayDate.getDate()).padStart(2, "0")}`;
 }
 
 function monthString(date: string) {
@@ -1312,71 +1777,68 @@ function monthString(date: string) {
 }
 
 function SalaryPaymentEntry({ onSaved }: { onSaved: () => void }) {
-  const [workers, setWorkers] = useState<PayrollWorker[]>([]);
+  const { tr, money, num } = useI18n();
   const [workerId, setWorkerId] = useState("");
   const [payMonth, setPayMonth] = useState(monthString(localDateString()));
   const [paidDate, setPaidDate] = useState(localDateString());
+  const [dayBasis, setDayBasis] = useState<"calendar" | "fixed_30">("calendar");
+  const [advanceDeduction, setAdvanceDeduction] = useState("");
+  const [overtimePay, setOvertimePay] = useState("");
   const [bonus, setBonus] = useState("");
   const [status, setStatus] = useState("paid");
-  const [absentDays, setAbsentDays] = useState(0);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
-  const [attendanceError, setAttendanceError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-    apiRequest<PayrollWorker[]>(apiRoutes.labor.workers)
-      .then((rows) => { if (!cancelled) setWorkers(rows); })
-      .catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Could not load workers."); });
-    return () => { cancelled = true; };
-  }, []);
+  const workersQuery = useQuery({
+    queryKey: ["payroll-workers-options"],
+    queryFn: () => apiRequest<PayrollWorker[]>(apiRoutes.labor.workers),
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    if (!workerId || !payMonth) {
-      setAbsentDays(0);
-      setAttendanceLoading(false);
-      setAttendanceError(false);
-      return;
-    }
-    let cancelled = false;
-    setAttendanceLoading(true);
-    setAttendanceError(false);
-    setAbsentDays(0);
-    apiRequest<PayrollAttendance[]>(`${apiRoutes.labor.attendance}?month=${payMonth}-01&worker_id=${workerId}`)
-      .then((rows) => {
-        if (!cancelled) setAbsentDays(rows.filter((row) => !row.is_present && !row.is_archived).length);
-      })
-      .catch((cause) => {
-        if (!cancelled) {
-          setAttendanceError(true);
-          setError(cause instanceof Error ? cause.message : "Could not load monthly attendance.");
-        }
-      })
-      .finally(() => { if (!cancelled) setAttendanceLoading(false); });
-    return () => { cancelled = true; };
-  }, [workerId, payMonth]);
+  const attendanceQuery = useQuery({
+    queryKey: ["payroll-worker-attendance", workerId, payMonth],
+    queryFn: () =>
+      apiRequest<PayrollAttendance[]>(`${apiRoutes.labor.attendance}?month=${payMonth}-01&worker_id=${workerId}`),
+    enabled: Boolean(workerId && payMonth),
+    staleTime: 15_000,
+  });
+
+  const workers = workersQuery.data ?? [];
+  const absentDays = useMemo(
+    () => (attendanceQuery.data ?? []).filter((row) => !row.is_present && !row.is_archived).length,
+    [attendanceQuery.data]
+  );
 
   const worker = workers.find((row) => row.worker_id === workerId);
   const baseSalary = Number(worker?.monthly_salary ?? 0);
+  const outstandingAdvance = Number(worker?.outstanding_advance ?? 0);
   const [year, monthNumber] = payMonth.split("-").map(Number);
   const daysInMonth = year && monthNumber ? new Date(year, monthNumber, 0).getDate() : 0;
+  const divisorDays = dayBasis === "fixed_30" ? 30 : daysInMonth;
   const weeklyHolidayDays = worker?.weekly_holidays ?? [];
   const holidayDatesInMonth = daysInMonth
     ? Array.from({ length: daysInMonth }, (_, index) => {
-      const date = `${payMonth}-${String(index + 1).padStart(2, "0")}`;
-      return weeklyHolidayDays.includes(weekdayIndex(date));
-    }).filter(Boolean).length
+        const d = `${payMonth}-${String(index + 1).padStart(2, "0")}`;
+        return weeklyHolidayDays.includes(weekdayIndex(d));
+      }).filter(Boolean).length
     : 0;
-  const absenceDeduction = daysInMonth > 0
-    ? Math.round((baseSalary / daysInMonth * absentDays + Number.EPSILON) * 100) / 100
-    : 0;
-  const netAmount = Math.max(0, baseSalary - absenceDeduction + Number(bonus || 0));
+  const absenceDeduction =
+    divisorDays > 0
+      ? Math.round((baseSalary / divisorDays * absentDays + Number.EPSILON) * 100) / 100
+      : 0;
+  const advDedNum = Number(advanceDeduction || 0);
+  const overtimeNum = Number(overtimePay || 0);
+  const bonusNum = Number(bonus || 0);
+  const netAmount = Math.max(0, baseSalary - absenceDeduction - advDedNum + bonusNum + overtimeNum);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workerId || !worker || !payMonth) return;
+    if (baseSalary - absenceDeduction - advDedNum + bonusNum + overtimeNum < 0) {
+      setError(tr("Net salary cannot be negative.", "নিট বেতন ঋণাত্মক হতে পারবে না।"));
+      return;
+    }
     setSaving(true);
     setError("");
     setNotice("");
@@ -1388,17 +1850,22 @@ function SalaryPaymentEntry({ onSaved }: { onSaved: () => void }) {
           pay_month: `${payMonth}-01`,
           base_salary: baseSalary,
           absence_deduction: absenceDeduction,
-          bonus: Number(bonus || 0),
+          advance_deduction: advDedNum,
+          bonus: bonusNum,
+          overtime_pay: overtimeNum,
+          payroll_day_basis: dayBasis,
           paid_date: paidDate,
           status,
         },
       });
-      setNotice("Salary payment saved.");
+      setNotice(tr("Salary payment saved.", "বেতন পরিশোধ সংরক্ষিত হয়েছে।"));
       setBonus("");
+      setAdvanceDeduction("");
+      setOvertimePay("");
       setWorkerId("");
       onSaved();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save salary payment.");
+      setError(cause instanceof Error ? cause.message : tr("Could not save salary payment."));
     } finally {
       setSaving(false);
     }
@@ -1406,79 +1873,205 @@ function SalaryPaymentEntry({ onSaved }: { onSaved: () => void }) {
 
   return (
     <section className="rounded-[8px] border border-line bg-surface p-4 space-y-3.5">
-      <div>
-        <h2 className="text-[15px] font-semibold text-ink">Add salary payment</h2>
-        <p className="mt-0.5 text-[12px] text-muted">Base salary and absence deduction are calculated from the worker record and selected month’s attendance.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-semibold text-ink">{tr("Add salary payment")}</h2>
+          <p className="mt-0.5 text-[12px] text-muted">
+            {tr(
+              "Base salary, absence deduction, advances (ogrim), overtime, and bonuses are settled here.",
+              "মূল বেতন, অনুপস্থিতি কর্তন, অগ্রিম (অগ্রিম/বাকি), ওভারটাইম ও বোনাস হিসাব করুন।"
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-[12px]">
+          <span className="text-muted">{tr("Day divisor", "দিন হিসাব")}:</span>
+          <Segmented<"calendar" | "fixed_30">
+            name="payroll_day_basis"
+            size="sm"
+            value={dayBasis}
+            onChange={setDayBasis}
+            options={[
+              { value: "calendar", label: tr("Calendar days", "মাসের দিন") },
+              { value: "fixed_30", label: tr("30-day basis", "৩০ দিন") },
+            ]}
+          />
+        </div>
       </div>
       {error && <Notice>{error}</Notice>}
       {notice && <Notice tone="success">{notice}</Notice>}
       <form onSubmit={(event) => void submit(event)} className="rounded-[6px] border border-line bg-subtle p-4 space-y-3.5">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Worker<span className="ml-1 text-warn">*</span></span>
-            <select required value={workerId} onChange={(event) => {
-              const nextWorkerId = event.target.value;
-              setWorkerId(nextWorkerId);
-              setAbsentDays(0);
-              setAttendanceLoading(Boolean(nextWorkerId && payMonth));
-              setAttendanceError(false);
-              setError("");
-            }} className={ui.select}>
-              <option value="">Choose worker</option>
-              {workers.map((row) => <option key={row.worker_id} value={row.worker_id}>{row.name}</option>)}
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Worker")}<span className="ml-1 text-warn">*</span></span>
+            <select
+              required
+              value={workerId}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                setWorkerId(nextId);
+                const selectedW = workers.find((w) => w.worker_id === nextId);
+                setAdvanceDeduction(
+                  selectedW && Number(selectedW.outstanding_advance ?? 0) > 0
+                    ? String(selectedW.outstanding_advance)
+                    : ""
+                );
+                setError("");
+              }}
+              className={ui.select}
+            >
+              <option value="">{tr("Choose worker", "কর্মী নির্বাচন করুন")}</option>
+              {workers.map((row) => (
+                <option key={row.worker_id} value={row.worker_id}>
+                  {row.name}
+                </option>
+              ))}
             </select>
+            {worker && outstandingAdvance > 0 ? (
+              <span className="mt-1 block text-[11px] text-caution">
+                {tr("Outstanding advance")}: {money(outstandingAdvance)}
+              </span>
+            ) : null}
           </label>
-          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Pay month<span className="ml-1 text-warn">*</span></span>
-            <input required type="month" value={payMonth} onChange={(event) => {
-              const nextMonth = event.target.value;
-              setPayMonth(nextMonth);
-              setAbsentDays(0);
-              setAttendanceLoading(Boolean(workerId && nextMonth));
-              setAttendanceError(false);
-              setError("");
-            }} className={ui.input} />
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Pay month")}<span className="ml-1 text-warn">*</span></span>
+            <input
+              required
+              type="month"
+              value={payMonth}
+              onChange={(event) => {
+                setPayMonth(event.target.value);
+                setError("");
+              }}
+              className={ui.input}
+            />
           </label>
-          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Base salary ৳</span>
-            <input readOnly value={worker ? baseSalary.toFixed(2) : ""} placeholder="Select a worker" className={`${ui.input} bg-stone-100`} />
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Base salary ৳")}</span>
+            <input
+              readOnly
+              value={worker ? baseSalary.toFixed(2) : ""}
+              placeholder={tr("Select a worker", "কর্মী নির্বাচন করুন")}
+              className={ui.input}
+            />
           </label>
-          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Absent days</span>
-            <input readOnly value={attendanceLoading ? "Loading attendance…" : absentDays} className={`${ui.input} bg-stone-100`} />
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Absent days")}</span>
+            <input
+              readOnly
+              value={attendanceQuery.isLoading ? tr("Loading…", "লোড হচ্ছে…") : String(absentDays)}
+              className={ui.input}
+            />
           </label>
-          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Absence deduction ৳</span>
-            <input readOnly value={worker ? absenceDeduction.toFixed(2) : ""} placeholder="Calculated from attendance" className={`${ui.input} bg-stone-100`} />
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Absence deduction ৳")}</span>
+            <input
+              readOnly
+              value={worker ? absenceDeduction.toFixed(2) : ""}
+              placeholder={tr("Calculated from attendance", "উপস্থিতি থেকে হিসাব")}
+              className={ui.input}
+            />
           </label>
-          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Bonus ৳ <span className="font-normal text-muted">(optional)</span></span>
-            <input type="number" min="0" step="0.01" value={bonus} onChange={(event) => setBonus(event.target.value)} placeholder="Leave blank if none" className={ui.input} />
-            <span className="mt-1 block font-normal text-muted">Usually paid twice a year at 50% of monthly salary; enter an amount when applicable.</span>
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Advance deduction ৳")}</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={advanceDeduction}
+              onChange={(event) => setAdvanceDeduction(event.target.value)}
+              placeholder="0.00"
+              className={ui.input}
+            />
           </label>
-          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Net salary ৳</span>
-            <input readOnly value={worker ? netAmount.toFixed(2) : ""} className={`${ui.input} bg-stone-100`} />
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Overtime pay ৳")}</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={overtimePay}
+              onChange={(event) => setOvertimePay(event.target.value)}
+              placeholder="0.00"
+              className={ui.input}
+            />
           </label>
-          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Paid date<span className="ml-1 text-warn">*</span></span>
-            <input required type="date" value={paidDate} onChange={(event) => setPaidDate(event.target.value)} className={ui.input} />
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Bonus ৳")}</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={bonus}
+              onChange={(event) => setBonus(event.target.value)}
+              placeholder="0.00"
+              className={ui.input}
+            />
           </label>
-          <label className="text-[12px] font-medium text-ink"><span className="mb-1 block">Status</span>
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Net salary ৳")}</span>
+            <input
+              readOnly
+              value={worker ? netAmount.toFixed(2) : ""}
+              className={`${ui.input} font-semibold`}
+            />
+          </label>
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Paid date")}<span className="ml-1 text-warn">*</span></span>
+            <DateInput required value={paidDate} onChange={setPaidDate} />
+          </label>
+          <label className="text-[12px] font-medium text-ink">
+            <span className="mb-1 block">{tr("Status")}</span>
             <select value={status} onChange={(event) => setStatus(event.target.value)} className={ui.select}>
-              <option value="paid">Paid</option><option value="pending">Pending</option><option value="cancelled">Cancelled</option>
+              <option value="paid">{tr("Paid", "পরিশোধিত")}</option>
+              <option value="pending">{tr("Pending", "অপেক্ষমাণ")}</option>
+              <option value="cancelled">{tr("Cancelled", "বাতিল")}</option>
             </select>
           </label>
         </div>
-        <p className="text-[11px] text-muted">Daily salary: monthly salary ÷ {daysInMonth || "number of"} days in the selected month. Deduction: daily salary × recorded absent days. Unrecorded days are not treated as absences.</p>
-        {worker && <p className="text-[11px] text-muted">{weeklyHolidayDays.length ? `${weeklyHolidayDays.map((day) => WEEKDAY_LABELS[day]).join(", ")} (${holidayDatesInMonth} date${holidayDatesInMonth === 1 ? "" : "s"} this month)` : "No weekly holidays set"}; holidays are excluded from attendance and deductions.</p>}
-        {attendanceError && <p role="alert" className="text-xs text-warn">Attendance could not be loaded. Retry by changing the worker or month before saving.</p>}
-        <div className="flex justify-end"><button type="submit" disabled={saving || attendanceLoading || attendanceError || !workerId || !daysInMonth} className={btn("primary", "sm")}>{saving ? "Saving…" : "Save salary payment"}</button></div>
+        <p className="text-[11px] text-muted">
+          {tr(
+            `Daily salary: monthly salary ÷ ${divisorDays || "days"} days (${dayBasis === "fixed_30" ? "fixed 30-day" : "actual calendar days"}). Net = base − absence − advance + overtime + bonus.`,
+            `দৈনিক বেতন: মাসিক বেতন ÷ ${num(divisorDays || 0, 0)} দিন। নিট = মূল − অনুপস্থিতি − অগ্রিম + ওভারটাইম + বোনাস।`
+          )}
+        </p>
+        {worker && (
+          <p className="text-[11px] text-muted">
+            {weeklyHolidayDays.length
+              ? `${weeklyHolidayDays.map((day) => WEEKDAY_LABELS[day]).join(", ")} (${holidayDatesInMonth} day${holidayDatesInMonth === 1 ? "" : "s"} this month)`
+              : tr("No weekly holidays set", "কোনো সাপ্তাহিক ছুটি নেই")}
+            ; {tr("holidays are excluded from attendance and deductions.", "ছুটির দিন উপস্থিতি ও কর্তন থেকে বাদ।")}
+          </p>
+        )}
+        {attendanceQuery.isError && (
+          <p role="alert" className="text-xs text-warn">
+            {tr("Attendance could not be loaded. Retry by changing the worker or month before saving.")}
+          </p>
+        )}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={saving || attendanceQuery.isLoading || attendanceQuery.isError || !workerId || !daysInMonth}
+            className={btn("primary", "sm")}
+          >
+            {saving ? tr("Saving…") : tr("Save salary payment")}
+          </button>
+        </div>
       </form>
     </section>
   );
 }
 
 export function PayrollWorkspace() {
+  const { tr } = useI18n();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState("workers");
   const [salaryRefreshKey, setSalaryRefreshKey] = useState(0);
   const tabs = [
-    { key: "workers", label: "Workers" },
-    { key: "attendance", label: "Attendance" },
-    { key: "salary", label: "Salary payments" },
-    { key: "substitutes", label: "Substitutes" },
+    { key: "workers", label: tr("Workers") },
+    { key: "attendance", label: tr("Attendance") },
+    { key: "advances", label: tr("Advances (Ogrim)") },
+    { key: "salary", label: tr("Salary payments") },
+    { key: "substitutes", label: tr("Substitutes") },
   ] as const;
 
   return (
@@ -1488,12 +2081,14 @@ export function PayrollWorkspace() {
       {tab === "workers" && (
         <DataWorkbench
           title="Workers"
+          singularLabel="Worker"
           description="Add staff and keep their employment details current."
           path={apiRoutes.labor.workers}
           rowHref={(row) => `/payroll/workers/${String(row.worker_id)}`}
           updatePath={(row) => apiRoutes.labor.worker(String(row.worker_id))}
           deletePath={(row) => apiRoutes.labor.worker(String(row.worker_id))}
           deleteLabel="Remove"
+          invalidateKeys={[["payroll-workers-options"]]}
           lifecycle={{
             includeQuery: "include_archived=true",
             entityType: "workers",
@@ -1510,9 +2105,9 @@ export function PayrollWorkspace() {
             { key: "phone", label: "Phone" },
             { key: "join_date", label: "Joined" },
             { key: "monthly_salary", label: "Monthly salary ৳" },
+            { key: "outstanding_advance", label: "Outstanding advance" },
             { key: "weekly_holidays", label: "Weekly holidays" },
             { key: "status", label: "Status" },
-            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             { name: "name", label: "Name", required: true },
@@ -1525,6 +2120,7 @@ export function PayrollWorkspace() {
               name: "status",
               label: "Status",
               type: "select",
+              defaultValue: "active",
               options: [
                 { value: "active", label: "Active" },
                 { value: "inactive", label: "Inactive" },
@@ -1536,15 +2132,71 @@ export function PayrollWorkspace() {
 
       {tab === "attendance" && <AttendanceWorkspace />}
 
+      {tab === "advances" && (
+        <DataWorkbench
+          title="Advances (Ogrim)"
+          singularLabel="Worker advance"
+          description="Record mid-month cash advances (ogrim) and track balances deducted at month-end salary settlement."
+          path={apiRoutes.labor.advances}
+          updatePath={(row) => apiRoutes.labor.advance(String(row.advance_id))}
+          invalidateKeys={[["payroll-workers-options"], ["data-workbench", apiRoutes.labor.workers]]}
+          lifecycle={{
+            includeQuery: "include_void=true",
+            entityType: "worker_advances",
+            idKey: "advance_id",
+            isInactive: (row) => row.is_void === true,
+            restoreBody: () => ({ is_void: false }),
+            restoreLabel: () => "Unvoid",
+          }}
+          deleteLabel="Void"
+          deleteConfirmMode="reason"
+          onDelete={async (row, reason) => {
+            await apiRequest(apiRoutes.labor.advance(String(row.advance_id)), {
+              method: "PATCH",
+              body: { is_void: true, void_reason: reason },
+            });
+          }}
+          columns={[
+            { key: "advance_date", label: "Date" },
+            { key: "worker_name", label: "Worker" },
+            { key: "amount", label: "Amount ৳" },
+            { key: "notes", label: "Notes" },
+            { key: "is_void", label: "Voided" },
+            { key: "void_reason", label: "Void reason" },
+          ]}
+          fields={[
+            {
+              name: "worker_id",
+              label: "Worker",
+              type: "select",
+              sourcePath: apiRoutes.labor.workers,
+              sourceValue: "worker_id",
+              sourceLabel: "name",
+              required: true,
+            },
+            { name: "advance_date", label: "Date", type: "date", required: true, defaultValue: today() },
+            { name: "amount", label: "Amount ৳", type: "number", min: "0.01", required: true },
+            { name: "notes", label: "Notes", type: "textarea" },
+          ]}
+        />
+      )}
+
       {tab === "salary" && (
         <div className="space-y-4">
-          <SalaryPaymentEntry onSaved={() => setSalaryRefreshKey((key) => key + 1)} />
+          <SalaryPaymentEntry
+            onSaved={() => {
+              setSalaryRefreshKey((key) => key + 1);
+              void queryClient.invalidateQueries({ queryKey: ["payroll-workers-options"] });
+            }}
+          />
           <DataWorkbench
             title="Salary payments"
-            description="Salary settlements, including their recorded attendance deduction and bonus."
+            singularLabel="Salary payment"
+            description="Salary settlements, including attendance deduction, advance deduction, overtime, and bonus."
             path={apiRoutes.labor.salaries}
             refreshKey={salaryRefreshKey}
             updatePath={(row) => apiRoutes.labor.salary(String(row.payment_id))}
+            invalidateKeys={[["payroll-workers-options"], ["data-workbench", apiRoutes.labor.workers]]}
             lifecycle={{
               includeQuery: "include_void=true",
               entityType: "salary_payments",
@@ -1554,16 +2206,11 @@ export function PayrollWorkspace() {
               restoreLabel: () => "Unvoid",
             }}
             deleteLabel="Void"
-            onDelete={async (row) => {
-              const reason = window.prompt("Reason for voiding this salary payment:");
-              if (reason === null) return;
-              if (!reason.trim()) {
-                window.alert("A reason is required to void a salary payment.");
-                return;
-              }
+            deleteConfirmMode="reason"
+            onDelete={async (row, reason) => {
               await apiRequest(apiRoutes.labor.salary(String(row.payment_id)), {
                 method: "PATCH",
-                body: { is_void: true, void_reason: reason.trim() },
+                body: { is_void: true, void_reason: reason },
               });
             }}
             columns={[
@@ -1571,6 +2218,8 @@ export function PayrollWorkspace() {
               { key: "pay_month", label: "Pay month" },
               { key: "base_salary", label: "Base ৳" },
               { key: "absence_deduction", label: "Deduction ৳" },
+              { key: "advance_deduction", label: "Advance deduction ৳" },
+              { key: "overtime_pay", label: "Overtime pay ৳" },
               { key: "bonus", label: "Bonus ৳" },
               { key: "net_paid", label: "Net ৳" },
               { key: "paid_date", label: "Paid date" },
@@ -1582,13 +2231,20 @@ export function PayrollWorkspace() {
               { name: "pay_month", label: "Pay month", type: "date", required: true },
               { name: "base_salary", label: "Base salary ৳", type: "number", required: true },
               { name: "absence_deduction", label: "Absence deduction ৳", type: "number" },
+              { name: "advance_deduction", label: "Advance deduction ৳", type: "number" },
+              { name: "overtime_pay", label: "Overtime pay ৳", type: "number" },
               { name: "bonus", label: "Bonus ৳", type: "number" },
               { name: "paid_date", label: "Paid date", type: "date", required: true },
-              { name: "status", label: "Status", type: "select", options: [
-                { value: "paid", label: "Paid" },
-                { value: "pending", label: "Pending" },
-                { value: "cancelled", label: "Cancelled" },
-              ] },
+              {
+                name: "status",
+                label: "Status",
+                type: "select",
+                options: [
+                  { value: "paid", label: "Paid" },
+                  { value: "pending", label: "Pending" },
+                  { value: "cancelled", label: "Cancelled" },
+                ],
+              },
             ]}
           />
         </div>
@@ -1597,6 +2253,7 @@ export function PayrollWorkspace() {
       {tab === "substitutes" && (
         <DataWorkbench
           title="Substitute and mill charges"
+          singularLabel="Substitute or mill charge"
           description="Record one-day substitute costs and other mill charges."
           addLabel="Add charge"
           path={apiRoutes.labor.substitutes}
@@ -1606,20 +2263,15 @@ export function PayrollWorkspace() {
             entityType: "mill_charges",
             idKey: "mill_charge_id",
             isInactive: (row) => row.is_archived === true || row.is_void === true,
-            restoreBody: (row) => row.is_archived === true ? { is_archived: false } : { is_void: false },
-            restoreLabel: (row) => row.is_archived === true ? "Unarchive" : "Unvoid",
+            restoreBody: (row) => (row.is_archived === true ? { is_archived: false } : { is_void: false }),
+            restoreLabel: (row) => (row.is_archived === true ? "Unarchive" : "Unvoid"),
           }}
           deleteLabel="Void"
-          onDelete={async (row) => {
-            const reason = window.prompt("Reason for voiding this charge:");
-            if (reason === null) return;
-            if (!reason.trim()) {
-              window.alert("A reason is required to void a charge.");
-              return;
-            }
+          deleteConfirmMode="reason"
+          onDelete={async (row, reason) => {
             await apiRequest(apiRoutes.labor.substitute(String(row.mill_charge_id)), {
               method: "PATCH",
-              body: { is_void: true, void_reason: reason.trim() },
+              body: { is_void: true, void_reason: reason },
             });
           }}
           columns={[
@@ -1628,7 +2280,6 @@ export function PayrollWorkspace() {
             { key: "substitute_name", label: "Substitute" },
             { key: "amount", label: "Amount ৳" },
             { key: "description", label: "Description" },
-            { key: "is_archived", label: "Archived" },
             { key: "is_void", label: "Voided" },
             { key: "void_reason", label: "Void reason" },
           ]}
@@ -1640,8 +2291,8 @@ export function PayrollWorkspace() {
               type: "select",
               required: true,
               options: [
-                { value: "substitute_worker", label: "Substitute worker" },
-                { value: "worker_food", label: "Worker food" },
+                { value: "substitute_worker", label: "Substitute Worker" },
+                { value: "worker_food", label: "Worker Food" },
                 { value: "other", label: "Other" },
               ],
             },
@@ -1662,7 +2313,9 @@ export function AttendanceWorkspace({
   initialDate?: string;
   embedded?: boolean;
 } = {}) {
-  const [date, setDate] = useState(initialDate ?? today());
+  const { tr, date: fmtDate } = useI18n();
+  const [selectedDate, setSelectedDate] = useState(initialDate ?? today());
+  const date = initialDate ?? selectedDate;
   const [workers, setWorkers] = useState<Record<string, unknown>[]>([]);
   const [attendance, setAttendance] = useState<
     Record<string, { present: boolean; note: string; attendanceId?: string; isArchived?: boolean; isSaved?: boolean }>
@@ -1672,12 +2325,6 @@ export function AttendanceWorkspace({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    if (initialDate && initialDate !== date) {
-      setDate(initialDate);
-    }
-  }, [initialDate, date]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1736,14 +2383,17 @@ export function AttendanceWorkspace({
         method: "POST",
         body: {
           attendance_date: date,
-          records: workers.filter((worker) => !workerHasHoliday(worker, date)).map((worker) => ({
-            worker_id: worker.worker_id,
-            is_present: attendance[String(worker.worker_id)]?.present ?? true,
-            note: attendance[String(worker.worker_id)]?.note || null,
-          })),
+          records: workers
+            .filter((worker) => !workerHasHoliday(worker, date))
+            .map((worker) => ({
+              worker_id: worker.worker_id,
+              is_present: attendance[String(worker.worker_id)]?.present ?? true,
+              note: attendance[String(worker.worker_id)]?.note || null,
+            })),
         },
       });
-      setNotice("Attendance saved.");
+      setNotice(tr("Attendance saved.", "উপস্থিতি সংরক্ষিত হয়েছে।"));
+      await load();
     } catch (cause) {
       setError(messageFor(cause));
     } finally {
@@ -1760,7 +2410,7 @@ export function AttendanceWorkspace({
         method: "PATCH",
         body: { is_archived: archived },
       });
-      setNotice(archived ? "Attendance archived." : "Attendance restored.");
+      setNotice(archived ? tr("Record archived.") : tr("Record restored."));
       await load();
     } catch (cause) {
       setError(messageFor(cause));
@@ -1772,21 +2422,21 @@ export function AttendanceWorkspace({
       {error && <Notice>{error}</Notice>}
       {notice && <Notice tone="success">{notice}</Notice>}
 
-      <label className="flex items-center gap-2 text-xs text-muted">
+      <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
         <input
           type="checkbox"
           checked={showArchivedAttendance}
           onChange={(event) => setShowArchivedAttendance(event.target.checked)}
         />
-        Show archived attendance
+        {tr("Show archived attendance", "আর্কাইভকৃত উপস্থিতি দেখুন")}
       </label>
 
       <div className="rounded-[6px] border border-line bg-surface overflow-hidden">
         {loading ? (
-          <p className="p-8 text-center text-[13px] text-muted">Loading attendance…</p>
+          <p className="p-8 text-center text-[13px] text-muted">{tr("Loading attendance…", "উপস্থিতি লোড হচ্ছে…")}</p>
         ) : workers.length === 0 ? (
           <p className="p-8 text-center text-[13px] text-muted">
-            No active workers found. Add a worker first.
+            {tr("No active workers found. Add a worker first.", "কোনো সক্রিয় কর্মী নেই। আগে কর্মী যোগ করুন।")}
           </p>
         ) : (
           <div className="divide-y divide-line">
@@ -1811,52 +2461,53 @@ export function AttendanceWorkspace({
                     </div>
                   </div>
 
-                  <div className="flex flex-1 items-center justify-end gap-2.5 max-sm:w-full">
+                  <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5 max-sm:w-full">
                     {workerHasHoliday(worker, date) ? (
-                      <span className="rounded-full bg-amber-50 px-3 py-1.5 text-[12px] font-medium text-amber-800">Holiday · attendance excluded</span>
-                    ) : <>
-                      <Segmented
-                        name={`att-${id}`}
-                        size="sm"
-                        value={value.present ? "present" : "absent"}
-                        onChange={(next) =>
-                          setAttendance((current) => ({
-                            ...current,
-                            [id]: { ...value, present: next === "present" },
-                          }))
-                        }
-                        disabled={value.isArchived}
-                        options={[
-                          { value: "present", label: "Present", tone: "accent" },
-                          { value: "absent", label: "Absent", tone: "warn" },
-                        ]}
-                      />
-                      {!value.present && (
-                        <input
-                          value={value.note}
-                          onChange={(event) =>
+                      <span className="rounded-full bg-caution-soft px-3 py-1.5 text-[12px] font-medium text-caution">
+                        {tr("Holiday · attendance excluded", "সাপ্তাহিক ছুটি · উপস্থিতি প্রযোজ্য নয়")}
+                      </span>
+                    ) : (
+                      <>
+                        <Segmented
+                          name={`att-${id}`}
+                          size="sm"
+                          value={value.present ? "present" : "absent"}
+                          onChange={(next) =>
                             setAttendance((current) => ({
                               ...current,
-                              [id]: { ...value, note: event.target.value },
+                              [id]: { ...value, present: next === "present" },
                             }))
                           }
-                          placeholder="Reason for absence"
-                          className={`${ui.input} !h-8 w-44 sm:w-56 text-[12px]`}
+                          disabled={value.isArchived}
+                          options={[
+                            { value: "present", label: tr("Present"), tone: "accent" },
+                            { value: "absent", label: tr("Absent"), tone: "warn" },
+                          ]}
                         />
-                      )}
-                      {value.isSaved && value.attendanceId ? (
-                        <>
+                        {!value.present && (
+                          <input
+                            value={value.note}
+                            onChange={(event) =>
+                              setAttendance((current) => ({
+                                ...current,
+                                [id]: { ...value, note: event.target.value },
+                              }))
+                            }
+                            placeholder={tr("Reason for absence", "অনুপস্থিতির কারণ")}
+                            className={`${ui.input} !h-8 w-44 sm:w-56 text-[12px]`}
+                          />
+                        )}
+                        {value.isSaved && value.attendanceId ? (
                           <button
                             type="button"
                             onClick={() => void setArchived(value, !value.isArchived)}
-                            className="text-[11px] font-medium text-accent hover:underline"
+                            className="text-[11px] font-medium text-accent hover:underline cursor-pointer"
                           >
-                            {value.isArchived ? "Restore" : "Archive"}
+                            {value.isArchived ? tr("Restore") : tr("Archive")}
                           </button>
-                          <SafeDataHistory entityType="worker_attendances" entityId={value.attendanceId} />
-                        </>
-                      ) : null}
-                    </>}
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 </div>
               );
@@ -1865,39 +2516,37 @@ export function AttendanceWorkspace({
         )}
         <div className="flex justify-end border-t border-line bg-subtle px-3.5 py-2.5">
           <button
+            type="button"
             onClick={() => void save()}
             disabled={saving || workers.length === 0 || workers.every((worker) => workerHasHoliday(worker, date))}
             className={btn("primary", "sm")}
           >
-            {saving ? "Saving…" : workers.length > 0 && workers.every((worker) => workerHasHoliday(worker, date)) ? "All workers on holiday" : "Save attendance"}
+            {saving
+              ? tr("Saving…")
+              : workers.length > 0 && workers.every((worker) => workerHasHoliday(worker, date))
+                ? tr("All workers on holiday", "সব কর্মীর ছুটি")
+                : tr("Save attendance")}
           </button>
         </div>
       </div>
     </div>
   );
 
-  if (embedded) {
-    return content;
-  }
+  if (embedded) return content;
 
   return (
     <section className="rounded-[8px] border border-line bg-surface p-4 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-semibold text-ink">Daily attendance</h2>
+          <h2 className="text-[15px] font-semibold text-ink">{tr("Daily attendance")}</h2>
           <p className="mt-0.5 text-[12px] text-muted">
-            Mark active workers present or absent for {date}.
+            {tr(`Mark active workers present or absent for ${fmtDate(date)}.`, `${fmtDate(date)} তারিখের উপস্থিতি চিহ্নিত করুন।`)}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className={`${ui.input} !h-8 w-auto`}
-          />
-          <button onClick={() => void load()} className={btn("secondary", "sm")}>
-            Load day
+          <DateInput value={date} onChange={(next) => { if (next) setSelectedDate(next); }} className="!h-8 w-36" />
+          <button type="button" onClick={() => void load()} className={btn("secondary", "sm")}>
+            {tr("Load day")}
           </button>
         </div>
       </div>
@@ -1915,6 +2564,7 @@ function CategoryFilterSelect({
   onChange: (value: string) => void;
   placeholder: string;
 }) {
+  const { tr, enumLabel } = useI18n();
   const [categories, setCategories] = useState<string[]>([
     "dairy",
     "beef",
@@ -1927,8 +2577,7 @@ function CategoryFilterSelect({
         const fromDb = cows
           .map((c) => String(c.category ?? "").trim())
           .filter(Boolean);
-        const merged = Array.from(new Set([...defaults, ...fromDb]));
-        setCategories(merged);
+        setCategories(Array.from(new Set([...defaults, ...fromDb])));
       })
       .catch(() => {});
   }, []);
@@ -1937,13 +2586,9 @@ function CategoryFilterSelect({
       <option value="">{placeholder}</option>
       {categories.map((cat) => (
         <option key={cat} value={cat}>
-          {cat === "dairy"
-            ? "Dairy"
-            : cat === "beef"
-            ? "Beef"
-            : cat === "duel-purpose"
-            ? "Duel-purpose"
-            : cat.charAt(0).toUpperCase() + cat.slice(1)}
+          {cat === "dairy" || cat === "beef" || cat === "duel-purpose"
+            ? enumLabel(cat)
+            : tr(cat.charAt(0).toUpperCase() + cat.slice(1))}
         </option>
       ))}
     </select>
@@ -2005,12 +2650,6 @@ function dateAfter(dateValue: string, days: number) {
   const date = new Date(`${dateValue}T12:00:00+06:00`);
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
-}
-
-function money(value: unknown) {
-  return value == null
-    ? "—"
-    : `৳ ${new Intl.NumberFormat("en-BD", { maximumFractionDigits: 2 }).format(Number(value))}`;
 }
 
 function messageFor(cause: unknown) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ConfirmActionModal, type ConfirmModalConfig } from "@/components/confirm-modal";
 import { ModulePage } from "@/components/module-page";
 import { Notice } from "@/components/data-workbench";
 import { SafeDataHistory } from "@/components/safe-data-history";
@@ -14,12 +15,6 @@ import { EditProfilePanel } from "@/components/cow-profile/edit-profile-panel";
 import { ProfileOverviewTab } from "@/components/cow-profile/profile-overview-tab";
 import { BreedingTab, HealthCareTab, MilkCostsTab } from "@/components/cow-profile/profile-domain-tabs";
 import {
-  breedLabel,
-  daysBetween,
-  formatDisplayDate,
-  formatMoney,
-  formatNumber,
-  sessionLabel,
   type BreedingRecord,
   type CowDetail,
   type CowExpense,
@@ -31,15 +26,19 @@ import {
   type SupplierOption,
   type WarehouseOption,
 } from "@/components/cow-profile/types";
+import { daysBetween } from "@/components/cow-profile/types";
+import { useI18n } from "@/lib/i18n";
 
 export default function CowProfilePage() {
   const { cowId } = useParams<{ cowId: string }>();
+  const { tr, money, num, date: fmtDate, enumLabel, daysOnFarm } = useI18n();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [statusBusy, setStatusBusy] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalConfig | null>(null);
 
   const cowQuery = useQuery({
     queryKey: ["cow-profile", cowId],
@@ -103,6 +102,11 @@ export default function CowProfilePage() {
       queryClient.invalidateQueries({ queryKey: ["cow-milk", cowId] }),
       queryClient.invalidateQueries({ queryKey: ["cow-expenses", cowId] }),
       queryClient.invalidateQueries({ queryKey: ["cow-feeding", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["data-workbench", apiRoutes.herd.cows] }),
+      queryClient.invalidateQueries({ queryKey: ["herd-cows"] }),
+      queryClient.invalidateQueries({ queryKey: ["global-cow-search"] }),
+      queryClient.invalidateQueries({ queryKey: ["milk-workspace-cows"] }),
+      queryClient.invalidateQueries({ queryKey: ["cows-options"] }),
       queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
     ]);
   }, [queryClient, cowId]);
@@ -120,7 +124,6 @@ export default function CowProfilePage() {
 
   const today = todayInDhaka();
 
-  // Compute KPI strip metrics
   const kpis = useMemo(() => {
     if (!cow) return null;
 
@@ -137,10 +140,10 @@ export default function CowProfilePage() {
 
     const currentStay = (cow.warehouse_history ?? []).find((m) => !m.moved_out_date);
     const stayDays = currentStay ? daysBetween(currentStay.moved_in_date, today) : null;
-    const daysOnFarm = cow.acquisition_date ? daysBetween(cow.acquisition_date, today) : null;
+    const daysFarm = cow.acquisition_date ? daysBetween(cow.acquisition_date, today) : null;
 
     const activePregnancy = pregnancyReports.find(
-      (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected")
+      (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected") && !p.actual_calving_date
     );
     const dueCare = healthRecords
       .filter((h) => !h.is_archived && h.next_due_date)
@@ -164,7 +167,7 @@ export default function CowProfilePage() {
       weightDelta,
       currentStay,
       stayDays,
-      daysOnFarm,
+      daysOnFarm: daysFarm,
       activePregnancy,
       dueCare,
       milkDaysCount,
@@ -183,7 +186,7 @@ export default function CowProfilePage() {
         method: "PATCH",
         body: { status },
       });
-      setNotice("Cow status updated.");
+      setNotice(tr("Cow status updated.", "গরুর অবস্থা আপডেট হয়েছে।"));
       await reloadAll();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not update status.");
@@ -192,25 +195,38 @@ export default function CowProfilePage() {
     }
   }
 
-  async function toggleArchive() {
+  function requestToggleArchive() {
     if (!cow) return;
     const archive = !cow.is_archived;
-    if (!window.confirm(`${archive ? "Archive" : "Restore"} cow ${cow.current_tag_number}?`)) return;
-    setStatusBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      await apiRequest(apiRoutes.herd.cow(cowId), {
-        method: "PATCH",
-        body: { is_archived: archive },
-      });
-      setNotice(archive ? "Cow archived." : "Cow restored.");
-      await reloadAll();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not update archive status.");
-    } finally {
-      setStatusBusy(false);
-    }
+    setConfirmModal({
+      title: archive
+        ? tr(`Archive cow ${cow.current_tag_number}?`, `গরু ${cow.current_tag_number} আর্কাইভ করবেন?`)
+        : tr(`Restore cow ${cow.current_tag_number}?`, `গরু ${cow.current_tag_number} পুনরুদ্ধার করবেন?`),
+      description: archive
+        ? tr(
+            "Archiving removes this cow from active herd lists while preserving all history.",
+            "আর্কাইভ করলে গরু সক্রিয় তালিকা থেকে সরে যাবে তবে সকল ইতিহাস সংরক্ষিত থাকবে।"
+          )
+        : undefined,
+      mode: "confirm",
+      confirmLabel: archive ? tr("Archive") : tr("Restore"),
+      tone: archive ? "danger" : "primary",
+      onConfirm: async () => {
+        setStatusBusy(true);
+        setError("");
+        setNotice("");
+        try {
+          await apiRequest(apiRoutes.herd.cow(cowId), {
+            method: "PATCH",
+            body: { is_archived: archive },
+          });
+          setNotice(archive ? tr("Cow archived.", "গরু আর্কাইভ করা হয়েছে।") : tr("Cow restored.", "গরু পুনরুদ্ধার করা হয়েছে।"));
+          await reloadAll();
+        } finally {
+          setStatusBusy(false);
+        }
+      },
+    });
   }
 
   const loadError = cowQuery.error instanceof Error ? cowQuery.error.message : "";
@@ -223,21 +239,24 @@ export default function CowProfilePage() {
     feedingRecords.filter((f) => !f.is_archived).length;
 
   const tabItems = [
-    { key: "overview", label: "Overview & logs" },
-    { key: "health", label: `Health (${activeHealthCount})` },
-    { key: "breeding", label: `Breeding (${activeBreedingCount}) · Pregnancy (${activePregnancyCount})` },
-    { key: "milk_costs", label: `Milk & costs (${activeMilkAndCostCount})` },
+    { key: "overview", label: tr("Overview & logs", "সারসংক্ষেপ ও লগ") },
+    { key: "health", label: `${tr("Health")} (${activeHealthCount})` },
+    { key: "breeding", label: `${tr("Breeding")} (${activeBreedingCount}) · ${tr("Pregnancy", "গর্ভধারণ")} (${activePregnancyCount})` },
+    { key: "milk_costs", label: `${tr("Milk & costs", "দুধ ও খরচ")} (${activeMilkAndCostCount})` },
   ] as const;
 
   return (
-    <ModulePage title="Cow profile" subtitle="Detailed animal record, weights, housing, tags, health, and lineage.">
+    <ModulePage
+      title={tr("Cow profile")}
+      subtitle={tr("Detailed animal record, weights, shed housing, tags, health, and lineage.", "গরুর বিস্তারিত তথ্য, ওজন, শেড, ট্যাগ ও স্বাস্থ্য।")}
+    >
       <div className="mb-4">
         <Link href="/herd" className={ui.link}>
-          ← Back to herd
+          ← {tr("Back to herd")}
         </Link>
       </div>
 
-      {cowQuery.isLoading ? <p className="text-[13px] text-muted">Loading cow profile…</p> : null}
+      {cowQuery.isLoading ? <p className="text-[13px] text-muted">{tr("Loading cow profile…", "লোড হচ্ছে…")}</p> : null}
       {loadError ? <Notice>{loadError}</Notice> : null}
       {error ? <div className="mb-4"><Notice>{error}</Notice></div> : null}
       {notice ? <div className="mb-4"><Notice tone="success">{notice}</Notice></div> : null}
@@ -250,42 +269,40 @@ export default function CowProfilePage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-[20px] font-semibold tracking-tight text-ink">
-                    Cow {cow.current_tag_number}
+                    {tr("Cow")} {cow.current_tag_number}
                   </h2>
-                  <Badge tone={statusTone(cow.status)}>
-                    <span className="capitalize">{cow.status}</span>
-                  </Badge>
-                  {cow.is_archived ? <Badge tone="warn">Archived</Badge> : null}
+                  <Badge tone={statusTone(cow.status)}>{enumLabel(cow.status)}</Badge>
+                  {cow.is_archived ? <Badge tone="warn">{enumLabel("archived")}</Badge> : null}
                   {cow.gives_milk ? (
                     <Badge tone="good">
-                      Milking
+                      {tr("Milking")}
                       {cow.milking_sessions?.length
-                        ? ` · ${cow.milking_sessions.map(sessionLabel).join(", ")}`
+                        ? ` · ${cow.milking_sessions.map((s) => enumLabel(s)).join(", ")}`
                         : ""}
                     </Badge>
                   ) : null}
                 </div>
-                <p className="mt-1 text-[13px] text-muted capitalize">
-                  {cow.category}
-                  {cow.cow_type ? ` · ${cow.cow_type}` : ""} · {cow.sex}
-                  {cow.breed ? ` · ${breedLabel(cow.breed)}` : ""} ·{" "}
-                  {cow.warehouse_name ?? "No warehouse"}
+                <p className="mt-1 text-[13px] text-muted">
+                  {enumLabel(cow.category)}
+                  {cow.cow_type ? ` · ${cow.cow_type}` : ""} · {enumLabel(cow.sex)}
+                  {cow.breed ? ` · ${enumLabel(cow.breed)}` : ""} ·{" "}
+                  {cow.warehouse_name ?? tr("No shed", "কোনো শেড নেই")}
                 </p>
               </div>
 
               <div className="flex flex-wrap items-end gap-2">
                 <label className="text-[12px] font-medium text-muted">
-                  <span className="mb-1 block">Status</span>
+                  <span className="mb-1 block">{tr("Status")}</span>
                   <select
                     disabled={statusBusy}
                     value={cow.status}
                     onChange={(event) => void updateStatus(event.target.value)}
                     className={`${ui.select} w-32`}
                   >
-                    <option value="active">Active</option>
-                    <option value="sold">Sold</option>
-                    <option value="deceased">Deceased</option>
-                    <option value="archived">Archived</option>
+                    <option value="active">{tr("Active")}</option>
+                    <option value="sold">{tr("Sold")}</option>
+                    <option value="deceased">{tr("Deceased")}</option>
+                    <option value="archived">{enumLabel("archived")}</option>
                   </select>
                 </label>
                 <button
@@ -293,15 +310,15 @@ export default function CowProfilePage() {
                   onClick={() => setEditOpen((open) => !open)}
                   className={btn("secondary", "md")}
                 >
-                  {editOpen ? "Close edit" : "Edit profile"}
+                  {editOpen ? tr("Close edit") : tr("Edit profile")}
                 </button>
                 <button
                   type="button"
                   disabled={statusBusy}
-                  onClick={() => void toggleArchive()}
-                  className={btn("secondary", "md")}
+                  onClick={requestToggleArchive}
+                  className={btn(cow.is_archived ? "secondary" : "danger", "md")}
                 >
-                  {cow.is_archived ? "Restore" : "Archive"}
+                  {cow.is_archived ? tr("Restore") : tr("Archive")}
                 </button>
                 <div className="inline-flex h-9 items-center rounded-[6px] border border-line-strong bg-surface px-3 text-[12.5px]">
                   <SafeDataHistory entityType="cows" entityId={cow.cow_id} entityLabel={`Cow #${cow.current_tag_number}`} />
@@ -326,67 +343,63 @@ export default function CowProfilePage() {
           {/* Summary Stat Strip */}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatTile
-              label="Latest weight"
-              value={cow.latest_weight_kg != null ? `${formatNumber(cow.latest_weight_kg)} kg` : "—"}
+              label={tr("Latest weight", "সর্বশেষ ওজন")}
+              value={cow.latest_weight_kg != null ? `${num(cow.latest_weight_kg)} kg` : "—"}
               subtext={
                 kpis.latestWeight
-                  ? `${formatDisplayDate(kpis.latestWeight.weigh_date)}${
+                  ? `${fmtDate(kpis.latestWeight.weigh_date)}${
                       kpis.weightDelta !== null
-                        ? ` · ${kpis.weightDelta >= 0 ? "+" : ""}${formatNumber(kpis.weightDelta)} kg vs prev`
+                        ? ` · ${kpis.weightDelta >= 0 ? "+" : ""}${num(kpis.weightDelta)} kg`
                         : ""
                     }`
-                  : "No active weight recorded"
+                  : tr("No active weight recorded", "কোনো ওজন রেকর্ড নেই")
               }
             />
             <StatTile
-              label="Current housing"
+              label={tr("Current shed", "বর্তমান শেড")}
               value={<span className="text-[18px]">{cow.warehouse_name ?? "—"}</span>}
               subtext={
                 kpis.daysOnFarm !== null && kpis.daysOnFarm >= 0
-                  ? `${kpis.daysOnFarm} day${kpis.daysOnFarm === 1 ? "" : "s"} on farm${kpis.stayDays !== null && kpis.stayDays >= 0 ? ` · ${kpis.stayDays}d in shed` : ""}`
+                  ? `${daysOnFarm(kpis.daysOnFarm)} ${tr("on farm", "খামারে")}${kpis.stayDays !== null && kpis.stayDays >= 0 ? ` · ${kpis.stayDays}d ${tr("in shed", "শেডে")}` : ""}`
                   : kpis.currentStay
-                  ? `Since ${formatDisplayDate(kpis.currentStay.moved_in_date)}${
-                      kpis.stayDays !== null && kpis.stayDays >= 0 ? ` (${kpis.stayDays} days)` : ""
-                    }`
-                  : "No active stay record"
+                    ? `${fmtDate(kpis.currentStay.moved_in_date)}`
+                    : tr("No active stay record")
               }
             />
             <StatTile
-              label={kpis.activePregnancy ? "Pregnancy status" : "Next care due"}
+              label={kpis.activePregnancy ? tr("Pregnancy status", "গর্ভধারণ অবস্থা") : tr("Next care due", "পরবর্তী চিকিৎসা")}
               value={
                 <span className="text-[18px]">
                   {kpis.activePregnancy
                     ? kpis.activePregnancy.expected_calving_date
-                      ? formatDisplayDate(kpis.activePregnancy.expected_calving_date)
-                      : "Confirmed"
+                      ? fmtDate(kpis.activePregnancy.expected_calving_date)
+                      : tr("Confirmed", "নিশ্চিত")
                     : kpis.dueCare?.next_due_date
-                      ? formatDisplayDate(kpis.dueCare.next_due_date)
-                      : "Up to date"}
+                      ? fmtDate(kpis.dueCare.next_due_date)
+                      : tr("Up to date", "হালনাগাদ")}
                 </span>
               }
               subtext={
                 kpis.activePregnancy
-                  ? `Expected calving (${kpis.activePregnancy.status})`
+                  ? `${tr("Expected calving")} (${enumLabel(kpis.activePregnancy.status)})`
                   : kpis.dueCare?.next_due_date
-                    ? `${kpis.dueCare.record_type}${
-                        kpis.dueCare.next_due_date < today ? " · Overdue" : ""
-                      }`
-                    : "No pending care dates"
+                    ? `${enumLabel(kpis.dueCare.record_type)}${kpis.dueCare.next_due_date < today ? ` · ${tr("Overdue", "বিলম্বিত")}` : ""}`
+                    : tr("No pending care dates")
               }
             />
             <StatTile
-              label={cow.gives_milk || milkRecords.length > 0 ? "30-day milk" : "Direct cow costs"}
+              label={cow.gives_milk || milkRecords.length > 0 ? tr("30-day milk", "৩০ দিনের দুধ") : tr("Direct cow costs", "সরাসরি খরচ")}
               value={
                 cow.gives_milk || milkRecords.length > 0
                   ? kpis.milkDaysCount > 0
-                    ? `${formatNumber(kpis.milk30Liters / kpis.milkDaysCount)} L/day`
+                    ? `${num(kpis.milk30Liters / kpis.milkDaysCount)} L/day`
                     : "0 L/day"
-                  : formatMoney(kpis.totalDirectCost)
+                  : money(kpis.totalDirectCost)
               }
               subtext={
                 cow.gives_milk || milkRecords.length > 0
-                  ? `${formatNumber(kpis.milk30Liters)} L total over ${kpis.milkDaysCount} day${kpis.milkDaysCount !== 1 ? "s" : ""} · Direct cost: ${formatMoney(kpis.totalDirectCost)}`
-                  : "Health, breeding, expenses & feeding"
+                  ? `${num(kpis.milk30Liters)} L (${num(kpis.milkDaysCount, 0)}d) · ${money(kpis.totalDirectCost)}`
+                  : tr("Health, breeding, expenses & feeding")
               }
             />
           </div>
@@ -441,6 +454,8 @@ export default function CowProfilePage() {
           ) : null}
         </div>
       ) : null}
+
+      <ConfirmActionModal config={confirmModal} onClose={() => setConfirmModal(null)} />
     </ModulePage>
   );
 }

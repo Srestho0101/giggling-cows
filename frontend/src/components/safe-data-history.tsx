@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiRequest, apiRoutes } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 type OperationEvent = {
   event_id: string;
@@ -12,6 +13,7 @@ type OperationEvent = {
 };
 
 export function SafeDataHistory({ entityType, entityId, entityLabel }: { entityType: string; entityId: string; entityLabel?: string }) {
+  const { tr, locale } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -32,38 +34,38 @@ export function SafeDataHistory({ entityType, entityId, entityLabel }: { entityT
 
   return (
     <>
-      <button type="button" onClick={() => void showHistory()} className="font-medium text-muted hover:underline">
-        History
+      <button type="button" onClick={() => void showHistory()} className="font-medium text-muted hover:underline cursor-pointer">
+        {tr("History")}
       </button>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="presentation" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" role="presentation" onClick={() => setOpen(false)}>
           <section
             role="dialog"
             aria-modal="true"
-            aria-label="Archive and void history"
-            className="max-h-[80vh] w-full max-w-xl overflow-y-auto rounded-lg border border-line bg-surface p-5 shadow-xl"
+            aria-label={tr("Archive and void history", "আর্কাইভ ও বাতিল ইতিহাস")}
+            className="max-h-[80vh] w-full max-w-xl overflow-y-auto rounded-lg border border-line bg-surface p-5 text-ink shadow-overlay"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-base font-semibold text-ink">Archive and void history</h2>
+                <h2 className="text-base font-semibold text-ink">{tr("Archive and void history", "আর্কাইভ ও বাতিল ইতিহাস")}</h2>
                 <p className="mt-1 text-xs text-muted">
                   {entityLabel ? `${entityType.replaceAll("_", " ")} · ${entityLabel}` : entityType.replaceAll("_", " ")}
                 </p>
               </div>
-              <button type="button" onClick={() => setOpen(false)} className="text-sm text-muted hover:text-ink">Close</button>
+              <button type="button" onClick={() => setOpen(false)} className="text-sm text-muted hover:text-ink cursor-pointer">{tr("Close")}</button>
             </div>
-            {loading ? <p className="mt-5 text-sm text-muted">Loading history…</p> : null}
+            {loading ? <p className="mt-5 text-sm text-muted">{tr("Loading history…", "ইতিহাস লোড হচ্ছে…")}</p> : null}
             {error ? <p role="alert" className="mt-5 text-sm text-warn">{error}</p> : null}
             {!loading && !error && events.length === 0 ? (
-              <p className="mt-5 text-sm text-muted">No lifecycle actions have been recorded for this row yet.</p>
+              <p className="mt-5 text-sm text-muted">{tr("No lifecycle actions have been recorded for this row yet.", "এই রেকর্ডের কোনো ইতিহাস এখনও নেই।")}</p>
             ) : null}
             <ol className="mt-4 space-y-3">
               {events.map((item) => (
                 <li key={item.event_id} className="rounded-md border border-line p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <strong className="text-sm capitalize text-ink">{item.operation.replaceAll("_", " ")}</strong>
-                    <time className="text-xs text-muted" dateTime={item.occurred_at}>{new Date(item.occurred_at).toLocaleString()}</time>
+                    <time className="text-xs text-muted" dateTime={item.occurred_at}>{new Date(item.occurred_at).toLocaleString(locale)}</time>
                   </div>
                   <p className="mt-1 text-xs text-muted">By {item.actor_email ?? "Unknown user"}</p>
                   {item.reason ? <p className="mt-2 text-sm text-ink">Reason: {item.reason}</p> : null}

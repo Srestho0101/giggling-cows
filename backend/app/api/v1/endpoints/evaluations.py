@@ -56,6 +56,7 @@ async def create_market_price(
     mp = MarketPrice(
         price_date=data.price_date,
         price_per_kg_net=data.price_per_kg_net,
+        price_basis=data.price_basis,
         source=data.source,
         created_by=current_user.id,
         updated_by=current_user.id,
@@ -207,7 +208,15 @@ async def update_evaluation_decision(
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
 ):
-    ev = await db.get(PurchaseEvaluation, evaluation_id)
+    stmt = (
+        select(PurchaseEvaluation)
+        .options(
+            selectinload(PurchaseEvaluation.supplier),
+            selectinload(PurchaseEvaluation.cow),
+        )
+        .where(PurchaseEvaluation.evaluation_id == evaluation_id)
+    )
+    ev = (await db.execute(stmt)).scalar_one_or_none()
     if not ev:
         raise HTTPException(status_code=404, detail="Purchase evaluation not found")
 
@@ -218,22 +227,71 @@ async def update_evaluation_decision(
             detail="Cannot modify a returned purchase evaluation. Returned records are final.",
         )
 
-    if data.decision:
+    update_dict = data.model_dump(exclude_unset=True)
+    if "evaluation_date" in update_dict and data.evaluation_date is not None:
+        ev.evaluation_date = data.evaluation_date
+    if "supplier_id" in update_dict:
+        ev.supplier_id = data.supplier_id
+    if "decision" in update_dict and data.decision is not None:
         ev.decision = data.decision
-    if data.notes is not None:
+    if "notes" in update_dict:
         ev.notes = data.notes
-    if data.is_archived is not None:
+    if "is_archived" in update_dict and data.is_archived is not None:
         ev.is_archived = data.is_archived
+
+    recalc_keys = {
+        "live_weight_kg",
+        "growth_potential",
+        "custom_net_weight_percent",
+        "offered_price",
+        "market_price_id",
+        "market_price_per_kg",
+    }
+    if recalc_keys & set(update_dict.keys()):
+        live_weight_kg = data.live_weight_kg if data.live_weight_kg is not None else ev.live_weight_kg
+        growth_potential = data.growth_potential if data.growth_potential is not None else ev.growth_potential
+        offered_price = data.offered_price if data.offered_price is not None else ev.offered_price
+        market_price_per_kg = data.market_price_per_kg if data.market_price_per_kg is not None else ev.market_price_per_kg
+        if "market_price_id" in update_dict and data.market_price_id is not None and data.market_price_per_kg is None:
+            mp = await db.get(MarketPrice, data.market_price_id)
+            if not mp:
+                raise HTTPException(status_code=404, detail="Specified market price not found")
+            ev.market_price_id = mp.market_price_id
+            market_price_per_kg = mp.price_per_kg_net
+        elif "market_price_id" in update_dict:
+            ev.market_price_id = data.market_price_id
+
+        custom_pct = (
+            data.custom_net_weight_percent
+            if "custom_net_weight_percent" in update_dict
+            else ev.net_weight_percent
+        )
+        calc = calculate_evaluation_metrics(
+            live_weight_kg=live_weight_kg,
+            growth_potential=growth_potential,
+            offered_price=offered_price,
+            market_price_per_kg=market_price_per_kg,
+            custom_net_weight_percent=custom_pct,
+        )
+        ev.live_weight_kg = calc.live_weight_kg
+        ev.growth_potential = calc.growth_potential
+        ev.net_weight_percent = calc.net_weight_percent
+        ev.est_net_weight_kg = calc.est_net_weight_kg
+        ev.offered_price = calc.offered_price
+        ev.net_price_per_kg = calc.net_price_per_kg
+        ev.market_price_per_kg = calc.market_price_per_kg
+        ev.is_profitable = calc.is_profitable
+
     record_lifecycle_changes(db, ev, lifecycle_before, current_user.id, current_user.email)
     ev.updated_by = current_user.id
 
     await db.commit()
-    await db.refresh(ev)
+    ev = (await db.execute(stmt)).scalar_one()
     return PurchaseEvaluationRead(
         evaluation_id=ev.evaluation_id,
         evaluation_date=ev.evaluation_date,
         supplier_id=ev.supplier_id,
-        supplier_name=None,
+        supplier_name=ev.supplier.name if ev.supplier else None,
         live_weight_kg=ev.live_weight_kg,
         growth_potential=ev.growth_potential,
         net_weight_percent=ev.net_weight_percent,
@@ -245,7 +303,7 @@ async def update_evaluation_decision(
         is_profitable=ev.is_profitable,
         decision=ev.decision,
         cow_id=ev.cow_id,
-        cow_tag_number=None,
+        cow_tag_number=ev.cow.current_tag_number if ev.cow else None,
         notes=ev.notes,
         is_archived=ev.is_archived,
         created_at=ev.created_at,

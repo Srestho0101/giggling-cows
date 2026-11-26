@@ -4,14 +4,14 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import AuthUser, UserRole, get_current_user, require_roles
-from app.models.labor import MillCharge, SalaryPayment, Worker, WorkerAttendance
+from app.models.labor import MillCharge, SalaryPayment, Worker, WorkerAdvance, WorkerAttendance
 from app.schemas.labor import (
     BatchAttendanceCreate,
     MillChargeCreate,
@@ -20,6 +20,9 @@ from app.schemas.labor import (
     SalaryPaymentCreate,
     SalaryPaymentRead,
     SalaryPaymentUpdate,
+    WorkerAdvanceCreate,
+    WorkerAdvanceRead,
+    WorkerAdvanceUpdate,
     WorkerAttendanceRead,
     WorkerAttendanceUpdate,
     WorkerCreate,
@@ -29,6 +32,35 @@ from app.schemas.labor import (
 from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 router = APIRouter()
+
+
+async def _worker_outstanding_advances(db: AsyncSession, worker_ids: list[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
+    if not worker_ids:
+        return {}
+    adv_rows = (
+        await db.execute(
+            select(WorkerAdvance.worker_id, func.coalesce(func.sum(WorkerAdvance.amount), 0))
+            .where(WorkerAdvance.worker_id.in_(worker_ids), WorkerAdvance.is_void == False)
+            .group_by(WorkerAdvance.worker_id)
+        )
+    ).all()
+    ded_rows = (
+        await db.execute(
+            select(SalaryPayment.worker_id, func.coalesce(func.sum(SalaryPayment.advance_deduction), 0))
+            .where(
+                SalaryPayment.worker_id.in_(worker_ids),
+                SalaryPayment.is_void == False,
+                SalaryPayment.status != "cancelled",
+            )
+            .group_by(SalaryPayment.worker_id)
+        )
+    ).all()
+    adv_map = {wid: Decimal(str(total)) for wid, total in adv_rows}
+    ded_map = {wid: Decimal(str(total)) for wid, total in ded_rows}
+    return {
+        wid: max(Decimal("0.00"), adv_map.get(wid, Decimal("0.00")) - ded_map.get(wid, Decimal("0.00")))
+        for wid in worker_ids
+    }
 
 
 # ---------------------- WORKERS ----------------------
@@ -47,7 +79,14 @@ async def list_workers(
         stmt = stmt.where(Worker.is_archived == True)
     elif not include_archived:
         stmt = stmt.where(Worker.is_archived == False)
-    return (await db.execute(stmt)).scalars().all()
+    workers = (await db.execute(stmt)).scalars().all()
+    adv_balances = await _worker_outstanding_advances(db, [w.worker_id for w in workers])
+    results = []
+    for w in workers:
+        item = WorkerRead.model_validate(w)
+        item.outstanding_advance = adv_balances.get(w.worker_id, Decimal("0.00"))
+        results.append(item)
+    return results
 
 
 @router.get("/workers/{worker_id}", response_model=WorkerRead)
@@ -59,7 +98,10 @@ async def get_worker(
     worker = await db.get(Worker, worker_id)
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-    return worker
+    adv_balances = await _worker_outstanding_advances(db, [worker_id])
+    item = WorkerRead.model_validate(worker)
+    item.outstanding_advance = adv_balances.get(worker_id, Decimal("0.00"))
+    return item
 
 
 @router.post("/workers", response_model=WorkerRead, status_code=status.HTTP_201_CREATED)
@@ -384,7 +426,9 @@ async def list_salary_payments(
                 pay_month=p.pay_month,
                 base_salary=p.base_salary,
                 absence_deduction=p.absence_deduction,
+                advance_deduction=p.advance_deduction,
                 bonus=p.bonus,
+                overtime_pay=p.overtime_pay,
                 net_paid=p.net_paid,
                 is_void=p.is_void,
                 paid_date=p.paid_date,
@@ -413,6 +457,7 @@ async def create_salary_payment(
 
     month_start = data.pay_month.replace(day=1)
     days_in_month = calendar.monthrange(data.pay_month.year, data.pay_month.month)[1]
+    divisor_days = 30 if data.payroll_day_basis == "fixed_30" else days_in_month
     month_end = data.pay_month.replace(day=days_in_month)
     attendance_stmt = select(WorkerAttendance).where(
         WorkerAttendance.worker_id == worker.worker_id,
@@ -427,11 +472,11 @@ async def create_salary_payment(
         if record.attendance_date.weekday() not in (worker.weekly_holidays or [])
     )
     absence_deduction = (
-        worker.monthly_salary * absent_days / days_in_month
+        worker.monthly_salary * absent_days / divisor_days
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     base_salary = worker.monthly_salary
     pay_month = month_start
-    net_paid = base_salary - absence_deduction + data.bonus
+    net_paid = base_salary - absence_deduction - data.advance_deduction + data.bonus + data.overtime_pay
     if net_paid < Decimal("0.00"):
         raise HTTPException(status_code=400, detail="Net paid salary cannot be negative.")
 
@@ -440,7 +485,9 @@ async def create_salary_payment(
         pay_month=pay_month,
         base_salary=base_salary,
         absence_deduction=absence_deduction,
+        advance_deduction=data.advance_deduction,
         bonus=data.bonus,
+        overtime_pay=data.overtime_pay,
         net_paid=net_paid,
         paid_date=data.paid_date,
         status=data.status,
@@ -458,7 +505,9 @@ async def create_salary_payment(
         pay_month=payment.pay_month,
         base_salary=payment.base_salary,
         absence_deduction=payment.absence_deduction,
+        advance_deduction=payment.advance_deduction,
         bonus=payment.bonus,
+        overtime_pay=payment.overtime_pay,
         net_paid=payment.net_paid,
         is_void=payment.is_void,
         paid_date=payment.paid_date,
@@ -487,8 +536,12 @@ async def update_salary_payment(
         payment.base_salary = data.base_salary
     if data.absence_deduction is not None:
         payment.absence_deduction = data.absence_deduction
+    if data.advance_deduction is not None:
+        payment.advance_deduction = data.advance_deduction
     if data.bonus is not None:
         payment.bonus = data.bonus
+    if data.overtime_pay is not None:
+        payment.overtime_pay = data.overtime_pay
     if data.paid_date is not None:
         payment.paid_date = data.paid_date
     if data.status is not None:
@@ -499,7 +552,13 @@ async def update_salary_payment(
         payment.void_reason = data.void_reason
     record_lifecycle_changes(db, payment, lifecycle_before, current_user.id, current_user.email)
 
-    net_paid = payment.base_salary - payment.absence_deduction + payment.bonus
+    net_paid = (
+        payment.base_salary
+        - payment.absence_deduction
+        - payment.advance_deduction
+        + payment.bonus
+        + payment.overtime_pay
+    )
     if net_paid < Decimal("0.00"):
         raise HTTPException(status_code=400, detail="Net paid salary cannot be negative.")
     payment.net_paid = net_paid
@@ -516,7 +575,9 @@ async def update_salary_payment(
         pay_month=payment.pay_month,
         base_salary=payment.base_salary,
         absence_deduction=payment.absence_deduction,
+        advance_deduction=payment.advance_deduction,
         bonus=payment.bonus,
+        overtime_pay=payment.overtime_pay,
         net_paid=payment.net_paid,
         is_void=payment.is_void,
         paid_date=payment.paid_date,
@@ -526,6 +587,120 @@ async def update_salary_payment(
         updated_at=payment.updated_at,
         created_by=payment.created_by,
         updated_by=payment.updated_by,
+    )
+
+
+# ---------------------- WORKER ADVANCES (OGRIM) ----------------------
+@router.get("/advances", response_model=List[WorkerAdvanceRead])
+async def list_worker_advances(
+    worker_id: Optional[uuid.UUID] = None,
+    include_void: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    stmt = (
+        select(WorkerAdvance)
+        .options(selectinload(WorkerAdvance.worker))
+        .order_by(WorkerAdvance.advance_date.desc())
+    )
+    if worker_id:
+        stmt = stmt.where(WorkerAdvance.worker_id == worker_id)
+    if not include_void:
+        stmt = stmt.where(WorkerAdvance.is_void == False)
+
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        WorkerAdvanceRead(
+            advance_id=row.advance_id,
+            worker_id=row.worker_id,
+            worker_name=row.worker.name if row.worker else None,
+            advance_date=row.advance_date,
+            amount=row.amount,
+            notes=row.notes,
+            is_void=row.is_void,
+            void_reason=row.void_reason,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            created_by=row.created_by,
+            updated_by=row.updated_by,
+        )
+        for row in rows
+    ]
+
+
+@router.post("/advances", response_model=WorkerAdvanceRead, status_code=status.HTTP_201_CREATED)
+async def create_worker_advance(
+    data: WorkerAdvanceCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    worker = await db.get(Worker, data.worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    if worker.is_archived:
+        raise HTTPException(status_code=409, detail="Archived workers cannot receive new advances.")
+
+    adv = WorkerAdvance(
+        worker_id=data.worker_id,
+        advance_date=data.advance_date,
+        amount=data.amount,
+        notes=data.notes,
+        created_by=current_user.id,
+        updated_by=current_user.id,
+    )
+    db.add(adv)
+    await db.commit()
+    await db.refresh(adv)
+    return WorkerAdvanceRead(
+        advance_id=adv.advance_id,
+        worker_id=adv.worker_id,
+        worker_name=worker.name,
+        advance_date=adv.advance_date,
+        amount=adv.amount,
+        notes=adv.notes,
+        is_void=adv.is_void,
+        void_reason=adv.void_reason,
+        created_at=adv.created_at,
+        updated_at=adv.updated_at,
+        created_by=adv.created_by,
+        updated_by=adv.updated_by,
+    )
+
+
+@router.patch("/advances/{advance_id}", response_model=WorkerAdvanceRead)
+async def update_worker_advance(
+    advance_id: uuid.UUID,
+    data: WorkerAdvanceUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    adv = await db.get(WorkerAdvance, advance_id)
+    if not adv:
+        raise HTTPException(status_code=404, detail="Advance record not found")
+
+    lifecycle_before = capture_lifecycle_state(adv)
+    update_dict = data.model_dump(exclude_unset=True)
+    for field, val in update_dict.items():
+        setattr(adv, field, val)
+    record_lifecycle_changes(db, adv, lifecycle_before, current_user.id, current_user.email)
+    adv.updated_by = current_user.id
+
+    await db.commit()
+    await db.refresh(adv)
+    worker = await db.get(Worker, adv.worker_id)
+    return WorkerAdvanceRead(
+        advance_id=adv.advance_id,
+        worker_id=adv.worker_id,
+        worker_name=worker.name if worker else None,
+        advance_date=adv.advance_date,
+        amount=adv.amount,
+        notes=adv.notes,
+        is_void=adv.is_void,
+        void_reason=adv.void_reason,
+        created_at=adv.created_at,
+        updated_at=adv.updated_at,
+        created_by=adv.created_by,
+        updated_by=adv.updated_by,
     )
 
 

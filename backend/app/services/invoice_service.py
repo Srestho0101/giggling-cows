@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 
 from app.models.herd import Cow
 from app.models.sales import Customer, SalePayment, SalesInvoice, SalesInvoiceLine
-from app.schemas.sales import SalePaymentCreate, SalesInvoiceCreate
+from app.schemas.sales import SalePaymentCreate, SalesInvoiceCreate, SalesInvoiceUpdate
 from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 
@@ -106,6 +106,128 @@ async def create_sales_invoice(
         updated_by=user_id,
     )
     session.add(invoice)
+    await session.flush()
+    return invoice
+
+
+async def update_sales_invoice(
+    session: AsyncSession,
+    invoice_id: uuid.UUID,
+    data: SalesInvoiceUpdate,
+    user_id: Optional[uuid.UUID] = None,
+) -> SalesInvoice:
+    stmt = (
+        select(SalesInvoice)
+        .options(selectinload(SalesInvoice.lines))
+        .where(SalesInvoice.invoice_id == invoice_id)
+        .execution_options(populate_existing=True)
+    )
+    invoice = (await session.execute(stmt)).scalar_one_or_none()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.status == "void":
+        raise HTTPException(status_code=400, detail="Voided invoices cannot be edited. Reissue first.")
+
+    update_dict = data.model_dump(exclude_unset=True)
+    if "customer_id" in update_dict and data.customer_id is not None:
+        customer = await session.get(Customer, data.customer_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        invoice.customer_id = data.customer_id
+    if "invoice_date" in update_dict and data.invoice_date is not None:
+        invoice.invoice_date = data.invoice_date
+    if "due_date" in update_dict:
+        invoice.due_date = data.due_date
+    if "notes" in update_dict:
+        invoice.notes = data.notes
+
+    subtotal = invoice.subtotal
+    if data.lines is not None:
+        old_animal_cow_ids = {
+            line.cow_id for line in invoice.lines if line.item_type == "animal" and line.cow_id
+        }
+        new_animal_cow_ids = {
+            item.cow_id for item in data.lines if item.item_type == "animal" and item.cow_id
+        }
+        if invoice.status != "draft":
+            for removed_cow_id in old_animal_cow_ids - new_animal_cow_ids:
+                cow = await session.get(Cow, removed_cow_id)
+                if cow and cow.status == "sold":
+                    cow.status = "active"
+                    cow.updated_by = user_id
+
+        subtotal = Decimal("0.00")
+        new_lines = []
+        for item in data.lines:
+            line_total = (item.quantity * item.unit_price).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            subtotal += line_total
+            if item.item_type == "animal":
+                if not item.cow_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Animal sale line must specify a valid cow_id.",
+                    )
+                cow = await session.get(Cow, item.cow_id)
+                if not cow:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Cow with ID {item.cow_id} not found.",
+                    )
+                if cow.status != "active" and item.cow_id not in old_animal_cow_ids:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cow {cow.current_tag_number} is not active (current status: {cow.status}) and cannot be sold.",
+                    )
+                if invoice.status != "draft" and cow.status == "active":
+                    cow.status = "sold"
+                    cow.updated_by = user_id
+            new_lines.append(
+                SalesInvoiceLine(
+                    invoice_id=invoice.invoice_id,
+                    item_type=item.item_type,
+                    cow_id=item.cow_id,
+                    description=item.description,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    line_total=line_total,
+                    created_by=user_id,
+                    updated_by=user_id,
+                )
+            )
+
+        for old_line in list(invoice.lines):
+            await session.delete(old_line)
+        await session.flush()
+        for nl in new_lines:
+            session.add(nl)
+        invoice.subtotal = subtotal
+
+    discount = (
+        data.discount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if data.discount is not None
+        else invoice.discount
+    )
+    if discount > subtotal:
+        raise HTTPException(status_code=400, detail="Discount cannot exceed invoice subtotal.")
+    total_amount = subtotal - discount
+    if total_amount < invoice.paid_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invoice total ({total_amount}) cannot be less than already paid amount ({invoice.paid_amount}).",
+        )
+
+    invoice.discount = discount
+    invoice.total_amount = total_amount
+    if invoice.status != "draft":
+        if invoice.paid_amount <= Decimal("0.00"):
+            invoice.status = "issued"
+        elif invoice.paid_amount < invoice.total_amount:
+            invoice.status = "partially_paid"
+        else:
+            invoice.status = "paid"
+    invoice.updated_by = user_id
     await session.flush()
     return invoice
 

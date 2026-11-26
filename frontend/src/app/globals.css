@@ -27,7 +27,7 @@
   --color-nav-line: var(--nav-line);
   --color-overlay: var(--overlay);
   --shadow-overlay: var(--shadow-overlay);
-  --font-sans: var(--font-hind), "Noto Sans Bengali", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Hind Siliguri", "Noto Sans Bengali", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 :root {

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, btn, Segmented, ui } from "@/components/ui";
 import { usePreference } from "@/lib/preferences";
 import { apiRequest, apiRoutes, apiQuery } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 type MilkSession = "morning" | "noon" | "evening";
 
@@ -52,6 +53,7 @@ function defaultSessionInDhaka(): MilkSession {
 const subscribeNever = () => () => {};
 
 export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean }) {
+  const { tr, num, date: fmtDate, enumLabel } = useI18n();
   const [tags, setTags] = useState<string[]>([]);
   const [pendingTag, setPendingTag] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -283,16 +285,38 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
     }
   }
 
-  // Live preview line calculation
-  const totalLitersNum = parseFloat(litersInput) || 0;
+  // Live preview line calculation & inline validation
+  const trimmedLiters = litersInput.trim();
+  const parsedLiters = trimmedLiters === "" ? NaN : Number(trimmedLiters);
+  const totalLitersNum = Number.isFinite(parsedLiters) ? parsedLiters : 0;
+  const litersInvalidMessage = useMemo(() => {
+    if (!trimmedLiters) return "";
+    if (!Number.isFinite(parsedLiters) || parsedLiters <= 0) {
+      return tr(
+        "Enter a positive number of liters greater than 0.",
+        "০-এর বেশি সঠিক লিটার সংখ্যা লিখুন।"
+      );
+    }
+    if (parsedLiters > 999999.99) {
+      return tr(
+        "Maximum allowed is 999,999.99 liters.",
+        "সর্বোচ্চ ৯৯৯,৯৯৯.৯৯ লিটার পর্যন্ত লেখা যাবে।"
+      );
+    }
+    return "";
+  }, [trimmedLiters, parsedLiters, tr]);
+
   const livePreview = useMemo(() => {
     if (tags.length === 0) {
-      return "Add at least one cow tag";
+      return tr("Add at least one cow tag");
+    }
+    if (totalLitersNum <= 0) {
+      return tr("Enter a positive number of liters (> 0)");
     }
     const count = tags.length;
-    const avg = totalLitersNum > 0 ? (totalLitersNum / count).toFixed(2) : "0.00";
-    return `${count} cow${count > 1 ? "s" : ""} · ${totalLitersNum.toFixed(2)} L · about ${avg} L each`;
-  }, [tags.length, totalLitersNum]);
+    const avg = num(totalLitersNum / count);
+    return `${num(count, 0)} ${tr(count > 1 ? "cows" : "cow", "টি গরু")} · ${num(totalLitersNum)} L · ${tr("about", "প্রায়")} ${avg} L ${tr("each", "প্রতিটি")}`;
+  }, [tags.length, totalLitersNum, num, tr]);
 
   // Saving group (with unscheduled session guard)
   async function saveGroup({ allowUnscheduled = false }: { allowUnscheduled?: boolean } = {}) {
@@ -513,9 +537,12 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
         <div>
-          <h2 className="text-[15px] font-semibold text-ink">Record milk</h2>
+          <h2 className="text-[15px] font-semibold text-ink">{tr("Record milk")}</h2>
           <p className="text-[12px] text-muted">
-            Allocate a group yield across multiple cows for {date || "today"}.
+            {tr(
+              `Allocate a group yield across multiple cows for ${date ? fmtDate(date) : "today"}.`,
+              `${date ? fmtDate(date) : "আজকের"} জন্য একাধিক গরুর দুধ বণ্টন করুন।`
+            )}
           </p>
         </div>
 
@@ -529,9 +556,9 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
             setUnscheduledConfirm(null);
           }}
           options={[
-            { value: "morning", label: "Morning" },
-            { value: "noon", label: "Noon" },
-            { value: "evening", label: "Evening" },
+            { value: "morning", label: tr("Morning") },
+            { value: "noon", label: tr("Noon") },
+            { value: "evening", label: tr("Evening") },
           ]}
         />
       </div>
@@ -657,7 +684,7 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
 
           <div>
             <label htmlFor="total-liters" className="block mb-1 text-[12px] font-medium text-ink">
-              Total liters
+              {tr("Total liters")}
             </label>
             <input
               id="total-liters"
@@ -666,10 +693,16 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
               min="0.01"
               max="999999.99"
               placeholder="e.g. 42.60"
+              aria-invalid={Boolean(litersInvalidMessage)}
               value={litersInput}
               onChange={(e) => setLitersInput(e.target.value)}
-              className={ui.input}
+              className={`${ui.input} ${litersInvalidMessage ? "border-warn" : ""}`}
             />
+            {litersInvalidMessage ? (
+              <p role="alert" className="mt-1 text-[11.5px] font-medium text-warn">
+                {litersInvalidMessage}
+              </p>
+            ) : null}
           </div>
 
           {/* Live preview banner */}
@@ -688,12 +721,12 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                   .map((c) => {
                     const schedText =
                       c.scheduled.length > 0
-                        ? `only scheduled for ${c.scheduled.map((s) => SESSION_LABELS[s]).join(", ")}`
+                        ? `only scheduled for ${c.scheduled.map((s) => enumLabel(s)).join(", ")}`
                         : "not on the milking roster";
-                    return `Cow ${c.tag} isn't scheduled for ${SESSION_LABELS[session]} (${schedText})`;
+                    return `Cow ${c.tag} isn't scheduled for ${enumLabel(session)} (${schedText})`;
                   })
                   .join("; ")}{" "}
-                — log anyway?
+                — {tr("log anyway?", "তবুও সংরক্ষণ করবেন?")}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -702,7 +735,7 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                   onClick={() => void saveGroup({ allowUnscheduled: true })}
                   className={btn("primary", "sm")}
                 >
-                  {saving ? "Saving…" : "Log anyway"}
+                  {saving ? tr("Saving…") : tr("Log anyway", "তবুও সংরক্ষণ করুন")}
                 </button>
                 <button
                   type="button"
@@ -710,7 +743,7 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                   onClick={() => setUnscheduledConfirm(null)}
                   className={btn("secondary", "sm")}
                 >
-                  Cancel
+                  {tr("Cancel")}
                 </button>
               </div>
             </div>
@@ -718,10 +751,10 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
 
           <button
             type="submit"
-            disabled={saving || tags.length === 0 || totalLitersNum <= 0}
+            disabled={saving || tags.length === 0 || Boolean(litersInvalidMessage) || totalLitersNum <= 0}
             className={btn("primary", "md")}
           >
-            {saving ? "Saving…" : "Save group"}
+            {saving ? tr("Saving…") : tr("Save group")}
           </button>
         </form>
 
@@ -801,22 +834,24 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
 
       {/* Day List Table */}
       <div className="space-y-2 pt-2">
-        <h3 className="text-[13px] font-semibold text-ink">Recorded today ({date})</h3>
+        <h3 className="text-[13px] font-semibold text-ink">
+          {tr("Recorded today")} ({fmtDate(date)})
+        </h3>
         <div className="overflow-x-auto rounded-[6px] border border-line">
           <table className="w-full text-left border-collapse text-[13px]">
             <thead>
               <tr className="border-b border-line bg-subtle text-[12px] text-muted">
-                <th className="px-3 py-2 font-medium">Cow</th>
-                <th className="px-3 py-2 font-medium">Session</th>
-                <th className="px-3 py-2 font-medium text-right">Liters</th>
-                <th className="px-3 py-2 font-medium text-right">Actions</th>
+                <th className="px-3 py-2 font-medium">{tr("Cow")}</th>
+                <th className="px-3 py-2 font-medium">{tr("Session")}</th>
+                <th className="px-3 py-2 font-medium text-right">{tr("Liters")}</th>
+                <th className="px-3 py-2 font-medium text-right">{tr("Actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {dayRecords.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-3 py-6 text-center text-muted">
-                    No milk recorded for this date yet. Use the form above to add records.
+                    {tr("No milk recorded for this date yet. Use the form above to add records.")}
                   </td>
                 </tr>
               ) : (
@@ -828,11 +863,11 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                       </td>
                       <td className="px-3 py-2">
                         <Badge tone={r.session === "morning" ? "good" : "neutral"}>
-                          {SESSION_LABELS[r.session]}
+                          {enumLabel(r.session)}
                         </Badge>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-ink">
-                        {Number(r.liters).toFixed(2)}
+                        {num(r.liters)}
                       </td>
                       <td className="px-3 py-2 text-right">
                         {r.milk_id && (
@@ -842,14 +877,14 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                               onClick={() => openEditModal(r)}
                               className="font-medium text-accent hover:underline cursor-pointer"
                             >
-                              Edit
+                              {tr("Edit")}
                             </button>
                             <button
                               type="button"
                               onClick={() => openVoidModal(r)}
                               className="font-medium text-warn hover:underline cursor-pointer"
                             >
-                              Void
+                              {tr("Void")}
                             </button>
                           </div>
                         )}
@@ -858,10 +893,10 @@ export function MilkRecorder({ date, isReady }: { date: string; isReady: boolean
                   ))}
                   <tr className="bg-subtle font-semibold border-t border-line">
                     <td colSpan={2} className="px-3 py-2 text-ink">
-                      Total
+                      {tr("Total")}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-ink">
-                      {totalDayLiters.toFixed(2)} L
+                      {num(totalDayLiters)} L
                     </td>
                     <td />
                   </tr>

@@ -4,10 +4,11 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MilkRecorder } from "@/components/milk-recorder";
 import { DataWorkbench, Notice } from "@/components/data-workbench";
-import { Badge, btn, StatTile, Tabs, ui } from "@/components/ui";
+import { SalesInvoicesManager } from "@/components/sales-invoices-manager";
+import { Badge, btn, DateInput, StatTile, Tabs } from "@/components/ui";
 import { useWorkspaceDate } from "@/components/workspace-date";
-import { usePreference } from "@/lib/preferences";
 import { apiQuery, apiRequest, apiRoutes, apiUrl } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 type Row = Record<string, unknown>;
 
@@ -57,17 +58,12 @@ type Profitability = {
 };
 
 export function TodaySubtitle() {
-  const [language] = usePreference<"en" | "bn">("cf-language", "en");
-  return (
-    <>
-      {language === "bn"
-        ? "আজকের খামারের কাজ এবং দৈনিক এন্ট্রি"
-        : "Daily farm tasks and entries"}
-    </>
-  );
+  const { tr } = useI18n();
+  return <>{tr("Daily farm tasks and entries")}</>;
 }
 
 export function TodayWorkspace() {
+  const { tr, money, num, date: fmtDate } = useI18n();
   const { date, isReady } = useWorkspaceDate();
   const queryClient = useQueryClient();
 
@@ -103,10 +99,11 @@ export function TodayWorkspace() {
         <Notice>
           {error}{" "}
           <button
+            type="button"
             onClick={() => void queryClient.invalidateQueries({ queryKey: ["dashboard"] })}
             className="ml-2 underline cursor-pointer"
           >
-            Retry
+            {tr("Retry")}
           </button>
         </Notice>
       )}
@@ -115,29 +112,29 @@ export function TodayWorkspace() {
       <section>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatTile
-            label={date ? `Milk (${date})` : "Milk for date"}
-            value={milkDayQuery.isLoading ? "…" : `${fmt(todayMilkLiters)} L`}
-            subtext={`${fmt(dashboard?.milk_this_week_liters)} L this week`}
+            label={date ? `${tr("Milk", "দুধ")} (${fmtDate(date)})` : tr("Milk for date", "আজকের দুধ")}
+            value={milkDayQuery.isLoading ? "…" : `${num(todayMilkLiters)} L`}
+            subtext={`${num(dashboard?.milk_this_week_liters ?? 0)} L ${tr("this week", "এই সপ্তাহে")}`}
           />
           <StatTile
-            label="Sales this month"
+            label={tr("Sales this month")}
             value={loading ? "…" : money(dashboard?.month_invoiced_revenue)}
-            subtext={`${money(dashboard?.month_cash_collected)} collected`}
+            subtext={`${money(dashboard?.month_cash_collected)} ${tr("collected", "সংগৃহীত")}`}
           />
           <StatTile
-            label="Expenses this month"
+            label={tr("Expenses this month")}
             value={loading ? "…" : money(dashboard?.month_total_expenses)}
-            subtext="Total recorded expenses"
+            subtext={tr("Total recorded expenses")}
           />
           <StatTile
-            label="Receivables"
+            label={tr("Receivables")}
             value={loading ? "…" : money(dashboard?.total_unpaid_receivables)}
-            subtext="Uncollected balance"
+            subtext={tr("Uncollected balance")}
           />
         </div>
       </section>
 
-      {/* Two Columns on xl (1.4fr / 1fr) */}
+      {/* Two Columns on xl */}
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr] items-start">
         {/* Left Column: Record Milk + Expenses */}
         <div className="space-y-4">
@@ -145,7 +142,8 @@ export function TodayWorkspace() {
 
           <DataWorkbench
             title="Expenses"
-            description={`Record farm expenses for ${date}.`}
+            singularLabel="Expense"
+            description={`Record farm expenses for ${fmtDate(date)}.`}
             path={apiRoutes.feeding.expenses}
             query={dateQuery}
             columns={[
@@ -164,7 +162,7 @@ export function TodayWorkspace() {
               },
               {
                 name: "warehouse_id",
-                label: "Warehouse",
+                label: "Shed",
                 type: "select",
                 sourcePath: apiRoutes.herd.warehouses,
                 sourceValue: "warehouse_id",
@@ -188,17 +186,18 @@ export function TodayWorkspace() {
           <section className="rounded-[8px] border border-line bg-surface p-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div>
-                <h2 className="text-[15px] font-semibold text-ink">Herd alerts</h2>
+                <h2 className="text-[15px] font-semibold text-ink">{tr("Herd alerts")}</h2>
                 <p className="text-[12px] text-muted">
-                  {dashboard?.active_cows ?? "—"} active of {dashboard?.total_cows ?? "—"} cows
+                  {num(dashboard?.active_cows ?? 0, 0)} {tr("active of", "সক্রিয় / মোট")}{" "}
+                  {num(dashboard?.total_cows ?? 0, 0)} {tr("cows", "টি গরু")}
                 </p>
               </div>
               <Badge tone={dashboard?.alerts?.length ? "warn" : "neutral"}>
-                {dashboard?.alerts?.length ?? 0}
+                {num(dashboard?.alerts?.length ?? 0, 0)}
               </Badge>
             </div>
             {loading ? (
-              <p className="mt-3 text-[13px] text-muted">Loading alerts…</p>
+              <p className="mt-3 text-[13px] text-muted">{tr("Loading alerts…")}</p>
             ) : dashboard?.alerts?.length ? (
               <div className="mt-3 space-y-2">
                 {dashboard.alerts.map((alert) => (
@@ -209,88 +208,24 @@ export function TodayWorkspace() {
                     <div>
                       <p className="text-[13px] font-semibold text-ink">{alert.description}</p>
                       <p className="mt-0.5 text-[12px] text-muted">
-                        Cow {alert.cow_tag} · {alert.item_type.replaceAll("_", " ")}
+                        {tr("Cow")} {alert.cow_tag} · {alert.item_type.replaceAll("_", " ")}
                       </p>
                     </div>
                     <Badge tone={alert.days_overdue > 0 ? "bad" : "warn"}>
-                      {alert.days_overdue > 0 ? `${alert.days_overdue}d overdue` : alert.due_date}
+                      {alert.days_overdue > 0
+                        ? `${num(alert.days_overdue, 0)}d ${tr("overdue", "বিলম্বিত")}`
+                        : fmtDate(alert.due_date)}
                     </Badge>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="mt-3 text-[13px] text-muted">No care alerts right now.</p>
+              <p className="mt-3 text-[13px] text-muted">{tr("No care alerts right now.")}</p>
             )}
           </section>
 
           {/* Sales Invoices */}
-          <DataWorkbench
-            title="Sales invoices"
-            description={`Create and review invoices dated ${date}.`}
-            path={apiRoutes.sales.invoices}
-            query={dateQuery}
-            columns={[
-              { key: "invoice_number", label: "Invoice" },
-              { key: "customer_name", label: "Customer" },
-              { key: "total_amount", label: "Total ৳" },
-              { key: "paid_amount", label: "Paid ৳" },
-              { key: "status", label: "Status" },
-            ]}
-            fields={[
-              {
-                name: "customer_id",
-                label: "Customer",
-                type: "select",
-                sourcePath: apiRoutes.sales.customers,
-                sourceValue: "customer_id",
-                required: true,
-              },
-              {
-                name: "invoice_date",
-                label: "Invoice date",
-                type: "date",
-                required: true,
-                defaultValue: date,
-              },
-              {
-                name: "item_type",
-                label: "Item type",
-                type: "select",
-                required: true,
-                options: [
-                  { value: "milk", label: "Milk" },
-                  { value: "animal", label: "Animal" },
-                  { value: "other", label: "Other" },
-                ],
-              },
-              {
-                name: "cow_id",
-                label: "Cow (required for animal sales)",
-                type: "select",
-                sourcePath: apiRoutes.herd.cows,
-                sourceValue: "cow_id",
-                sourceLabel: "current_tag_number",
-              },
-              { name: "description", label: "Line description", required: true },
-              { name: "quantity", label: "Quantity", type: "number", required: true },
-              { name: "unit_price", label: "Unit price ৳", type: "number", required: true },
-              { name: "discount", label: "Invoice discount ৳", type: "number" },
-            ]}
-            buildBody={(values) => ({
-              customer_id: values.customer_id,
-              invoice_date: values.invoice_date || date,
-              discount: Number(values.discount || 0),
-              lines: [
-                {
-                  item_type: values.item_type,
-                  cow_id: values.cow_id || undefined,
-                  description: values.description,
-                  quantity: Number(values.quantity),
-                  unit_price: Number(values.unit_price),
-                },
-              ],
-            })}
-          />
+          <SalesInvoicesManager defaultDate={date} filterDate={date} compact />
         </div>
       </div>
     </div>
@@ -298,6 +233,7 @@ export function TodayWorkspace() {
 }
 
 export function ReportsWorkspace() {
+  const { tr, money, num, enumLabel } = useI18n();
   const [tab, setTab] = useState("profitability");
   const [start, setStart] = useState(monthStart());
   const [end, setEnd] = useState(today());
@@ -309,9 +245,9 @@ export function ReportsWorkspace() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const tabs = [
-    { key: "profitability", label: "Profitability" },
-    { key: "herd", label: "Herd summary" },
-    { key: "milk", label: "Milk summary" },
+    { key: "profitability", label: tr("Profitability") },
+    { key: "herd", label: tr("Herd summary") },
+    { key: "milk", label: tr("Milk summary") },
   ] as const;
 
   const loadReport = useCallback(async () => {
@@ -367,18 +303,16 @@ export function ReportsWorkspace() {
     };
   }, [tab, dashboard, start, end, refreshKey]);
 
-  async function downloadCsv() {
+  async function downloadCsvFile(endpoint: string, filename: string) {
     setError("");
     try {
-      const response = await fetch(
-        apiUrl(apiQuery(apiRoutes.reports.profitabilityCsv, { start_date: start, end_date: end }))
-      );
+      const response = await fetch(apiUrl(endpoint));
       if (!response.ok) throw new Error(`CSV export failed (${response.status}).`);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `profitability_${start}_${end}.csv`;
+      link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
     } catch (cause) {
@@ -400,38 +334,31 @@ export function ReportsWorkspace() {
       {/* Tab bar and Date filter row */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-line bg-surface p-3.5">
         <Tabs items={tabs} active={tab} onChange={setTab} />
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="text-[12px] font-medium text-ink">
-            <span className="block mb-1">From</span>
-            <input
-              type="date"
-              value={start}
-              max={end}
-              onChange={(event) => setStart(event.target.value)}
-              className={ui.input}
-            />
-          </label>
-          <label className="text-[12px] font-medium text-ink">
-            <span className="block mb-1">To</span>
-            <input
-              type="date"
-              value={end}
-              min={start}
-              onChange={(event) => setEnd(event.target.value)}
-              className={ui.input}
-            />
-          </label>
-        </div>
+        {tab === "herd" ? (
+          <Badge tone="neutral">{tr("Current snapshot")}</Badge>
+        ) : (
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-[12px] font-medium text-ink">
+              <span className="block mb-1">{tr("From")}</span>
+              <DateInput value={start} max={end} onChange={(next) => { if (next) setStart(next); }} />
+            </label>
+            <label className="text-[12px] font-medium text-ink">
+              <span className="block mb-1">{tr("To")}</span>
+              <DateInput value={end} min={start} onChange={(next) => { if (next) setEnd(next); }} />
+            </label>
+          </div>
+        )}
       </div>
 
       {error && (
         <Notice>
           {error}{" "}
           <button
+            type="button"
             onClick={() => setRefreshKey((value) => value + 1)}
             className="ml-2 underline cursor-pointer"
           >
-            Retry
+            {tr("Retry")}
           </button>
         </Notice>
       )}
@@ -440,107 +367,151 @@ export function ReportsWorkspace() {
         <section className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-[16px] font-semibold text-ink">Profitability report</h2>
+              <h2 className="text-[16px] font-semibold text-ink">{tr("Profitability report")}</h2>
               <p className="mt-0.5 text-[12px] text-muted">
-                Accrual revenue and costs for the selected period.
+                {tr("Accrual revenue and costs for the selected period.", "নির্বাচিত সময়ের আয় ও খরচের বিবরণ।")}
               </p>
             </div>
-            <button onClick={() => void downloadCsv()} className={btn("secondary", "sm")}>
-              Export CSV
+            <button
+              type="button"
+              onClick={() =>
+                void downloadCsvFile(
+                  apiQuery(apiRoutes.reports.profitabilityCsv, { start_date: start, end_date: end }),
+                  `profitability_${start}_${end}.csv`
+                )
+              }
+              className={btn("secondary", "sm")}
+            >
+              {tr("Export CSV")}
             </button>
           </div>
 
           {loading ? (
-            <Panel>Loading report…</Panel>
+            <Panel>{tr("Loading report…", "রিপোর্ট লোড হচ্ছে…")}</Panel>
           ) : report ? (
             <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <StatTile label="Invoiced revenue" value={money(report.total_invoiced_revenue)} />
-                <StatTile label="Total costs" value={money(report.total_costs)} />
-                <StatTile label="Accrual net profit" value={money(report.accrual_net_profit)} />
-                <StatTile label="Profit margin" value={`${fmt(report.profit_margin_percent)}%`} />
+                <StatTile label={tr("Invoiced revenue")} value={money(report.total_invoiced_revenue)} />
+                <StatTile label={tr("Total costs")} value={money(report.total_costs)} />
+                <StatTile label={tr("Accrual net profit")} value={money(report.accrual_net_profit)} />
+                <StatTile label={tr("Profit margin")} value={`${num(report.profit_margin_percent)}%`} />
               </div>
               <div className="grid gap-4 xl:grid-cols-2">
                 <Breakdown
-                  title="Revenue"
+                  title={tr("Revenue", "আয়")}
                   rows={[
-                    ["Milk sales", report.milk_revenue],
-                    ["Animal sales", report.cow_sales_revenue],
-                    ["Other sales", report.other_sales_revenue],
-                    ["Total invoiced", report.total_invoiced_revenue],
-                    ["Cash collected", report.cash_collected],
-                    ["Uncollected receivables", report.receivables_uncollected],
+                    [tr("Milk sales", "দুধ বিক্রয়"), report.milk_revenue],
+                    [tr("Animal sales", "গরু বিক্রয়"), report.cow_sales_revenue],
+                    [tr("Other sales", "অন্যান্য বিক্রয়"), report.other_sales_revenue],
+                    [tr("Total invoiced", "মোট চালান"), report.total_invoiced_revenue],
+                    [tr("Cash collected", "নগদ আদায়"), report.cash_collected],
+                    [tr("Uncollected receivables", "অনাদায়ী বকেয়া"), report.receivables_uncollected],
                   ]}
                 />
                 <Breakdown
-                  title="Costs and net"
+                  title={tr("Costs and net", "খরচ ও নিট")}
                   rows={[
-                    ["Cow acquisition", report.cow_acquisition_cost],
-                    ["Feed consumption", report.feed_consumption_cost],
-                    ["General expenses", report.general_expenses],
-                    ["Health and breeding", report.health_and_breeding_cost],
-                    ["Labor salaries paid", report.labor_salary_paid],
-                    ["Mill charges", report.mill_charges],
-                    ["Total costs", report.total_costs],
-                    ["Cash net margin", report.cash_net_margin],
+                    [tr("Cow acquisition", "গরু ক্রয়"), report.cow_acquisition_cost],
+                    [tr("Feed consumption", "খাদ্য খরচ"), report.feed_consumption_cost],
+                    [tr("General expenses", "সাধারণ খরচ"), report.general_expenses],
+                    [tr("Health and breeding", "স্বাস্থ্য ও প্রজনন"), report.health_and_breeding_cost],
+                    [tr("Labor salaries paid", "কর্মীদের বেতন"), report.labor_salary_paid],
+                    [tr("Mill charges", "বদলি ও মিল খরচ"), report.mill_charges],
+                    [tr("Total costs"), report.total_costs],
+                    [tr("Cash net margin", "নগদ নিট লাভ"), report.cash_net_margin],
                   ]}
                 />
               </div>
             </>
           ) : (
-            <Panel>Choose a date range to load the report.</Panel>
+            <Panel>{tr("Choose a date range to load the report.")}</Panel>
           )}
         </section>
       )}
 
       {tab === "herd" && (
         <section className="space-y-4">
-          <div>
-            <h2 className="text-[16px] font-semibold text-ink">Herd summary</h2>
-            <p className="mt-0.5 text-[12px] text-muted">Current herd counts from the dashboard.</p>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-[16px] font-semibold text-ink">{tr("Herd summary")}</h2>
+              <p className="mt-0.5 text-[12px] text-muted">
+                {tr("Current herd snapshot counts across categories and sheds.", "বর্তমান পালের ধরন ও শেড অনুযায়ী সংখ্যা।")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                void downloadCsvFile(
+                  apiRoutes.reports.herdSummaryCsv,
+                  `herd_summary_${today()}.csv`
+                )
+              }
+              className={btn("secondary", "sm")}
+            >
+              {tr("Export CSV")}
+            </button>
           </div>
           {dashboard ? (
             <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <StatTile label="Total cows" value={String(dashboard.total_cows)} />
-                <StatTile label="Active" value={String(dashboard.active_cows)} />
-                <StatTile label="Sold" value={String(dashboard.sold_cows)} />
-                <StatTile label="Deceased" value={String(dashboard.deceased_cows)} />
+                <StatTile label={tr("Total cows")} value={num(dashboard.total_cows, 0)} />
+                <StatTile label={tr("Active")} value={num(dashboard.active_cows, 0)} />
+                <StatTile label={tr("Sold")} value={num(dashboard.sold_cows, 0)} />
+                <StatTile label={tr("Deceased")} value={num(dashboard.deceased_cows, 0)} />
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <CountBreakdown title="By category" rows={dashboard.cows_by_category} />
-                <CountBreakdown title="By warehouse" rows={dashboard.cows_by_warehouse} />
+                <CountBreakdown
+                  title={tr("By category")}
+                  rows={Object.fromEntries(
+                    Object.entries(dashboard.cows_by_category).map(([k, v]) => [enumLabel(k), v])
+                  )}
+                />
+                <CountBreakdown title={tr("By shed")} rows={dashboard.cows_by_warehouse} />
               </div>
             </>
           ) : (
-            <Panel>{loading ? "Loading herd summary…" : "No summary available."}</Panel>
+            <Panel>{loading ? tr("Loading herd summary…") : tr("No summary available.")}</Panel>
           )}
         </section>
       )}
 
       {tab === "milk" && (
         <section className="space-y-4">
-          <div>
-            <h2 className="text-[16px] font-semibold text-ink">Milk production summary</h2>
-            <p className="mt-0.5 text-[12px] text-muted">
-              Summed from individual cow session records in this period.
-            </p>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-[16px] font-semibold text-ink">{tr("Milk production summary")}</h2>
+              <p className="mt-0.5 text-[12px] text-muted">
+                {tr("Summed from individual cow session records in this period.", "নির্বাচিত সময়ের প্রতিটি গরুর দুধের হিসাব।")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                void downloadCsvFile(
+                  apiQuery(apiRoutes.reports.milkSummaryCsv, { start_date: start, end_date: end }),
+                  `milk_summary_${start}_${end}.csv`
+                )
+              }
+              className={btn("secondary", "sm")}
+            >
+              {tr("Export CSV")}
+            </button>
           </div>
           {loading ? (
-            <Panel>Loading milk records…</Panel>
+            <Panel>{tr("Loading milk records…")}</Panel>
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-3">
-                <StatTile label="Total production" value={`${fmt(milkTotal)} L`} />
-                <StatTile label="Session records" value={String(milkRows.length)} />
+                <StatTile label={tr("Total production")} value={`${num(milkTotal)} L`} />
+                <StatTile label={tr("Session records")} value={num(milkRows.length, 0)} />
                 <StatTile
-                  label="Average per record"
-                  value={`${fmt(milkRows.length ? milkTotal / milkRows.length : 0)} L`}
+                  label={tr("Average per record")}
+                  value={`${num(milkRows.length ? milkTotal / milkRows.length : 0)} L`}
                 />
               </div>
               <div className="overflow-hidden rounded-[8px] border border-line bg-surface">
                 <div className="border-b border-line px-4 py-3 text-[13px] font-semibold text-ink">
-                  Production by cow
+                  {tr("Production by cow")}
                 </div>
                 {byCow.length ? (
                   <div className="divide-y divide-line">
@@ -551,14 +522,14 @@ export function ReportsWorkspace() {
                       >
                         <span className="text-ink">{cow}</span>
                         <span className="font-semibold text-ink tabular-nums">
-                          {fmt(liters)} L
+                          {num(liters)} L
                         </span>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <p className="p-8 text-center text-[13px] text-muted">
-                    No milk records in this period.
+                    {tr("No milk records in this period.", "এই সময়ে কোনো দুধ রেকর্ড নেই।")}
                   </p>
                 )}
               </div>
@@ -571,14 +542,15 @@ export function ReportsWorkspace() {
 }
 
 export function MastersWorkspace() {
+  const { tr } = useI18n();
   const [tab, setTab] = useState("warehouses");
   const tabs = [
-    { key: "warehouses", label: "Warehouses" },
-    { key: "suppliers", label: "Suppliers" },
-    { key: "categories", label: "Expense categories" },
-    { key: "feed-types", label: "Feed types" },
-    { key: "customers", label: "Customers" },
-    { key: "market-prices", label: "Market prices" },
+    { key: "warehouses", label: tr("Sheds") },
+    { key: "suppliers", label: tr("Suppliers") },
+    { key: "categories", label: tr("Expense categories") },
+    { key: "feed-types", label: tr("Feed types") },
+    { key: "customers", label: tr("Customers") },
+    { key: "market-prices", label: tr("Market prices") },
   ] as const;
 
   return (
@@ -587,8 +559,9 @@ export function MastersWorkspace() {
 
       {tab === "warehouses" && (
         <DataWorkbench
-          title="Warehouses"
-          description="Manage housing areas, type, capacity, and current occupancy."
+          title="Sheds"
+          singularLabel="Shed"
+          description="Manage cattle sheds, housing type, capacity, and current occupancy."
           path={apiRoutes.herd.warehouses}
           updatePath={(row) => apiRoutes.herd.warehouse(String(row.warehouse_id))}
           lifecycle={{
@@ -601,29 +574,21 @@ export function MastersWorkspace() {
           }}
           deleteLabel="Archive"
           onDelete={async (row) => {
-            if (!window.confirm("Archive this warehouse?")) return;
-            await apiRequest(apiRoutes.herd.warehouse(String(row.warehouse_id)), { method: "PATCH", body: { is_archived: true } });
+            await apiRequest(apiRoutes.herd.warehouse(String(row.warehouse_id)), {
+              method: "PATCH",
+              body: { is_archived: true },
+            });
           }}
           columns={[
             { key: "name", label: "Name" },
             { key: "housing_type", label: "Housing type" },
             { key: "capacity", label: "Capacity" },
             { key: "current_occupancy", label: "Occupancy" },
-            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             { name: "name", label: "Name", required: true },
             { name: "housing_type", label: "Housing type", required: true, defaultValue: "shed" },
             { name: "capacity", label: "Capacity", type: "number", required: true, defaultValue: "10" },
-            {
-              name: "is_archived",
-              label: "Archived",
-              type: "select",
-              options: [
-                { value: "true", label: "Yes" },
-                { value: "false", label: "No" },
-              ],
-            },
           ]}
         />
       )}
@@ -631,6 +596,7 @@ export function MastersWorkspace() {
       {tab === "suppliers" && (
         <DataWorkbench
           title="Suppliers"
+          singularLabel="Supplier"
           description="Maintain suppliers used in purchases and herd records."
           path={apiRoutes.herd.suppliers}
           updatePath={(row) => apiRoutes.herd.supplier(String(row.supplier_id))}
@@ -644,33 +610,20 @@ export function MastersWorkspace() {
           }}
           deleteLabel="Archive"
           onDelete={async (row) => {
-            if (!window.confirm("Archive this supplier?")) return;
-            await apiRequest(apiRoutes.herd.supplier(String(row.supplier_id)), { method: "PATCH", body: { is_archived: true } });
+            await apiRequest(apiRoutes.herd.supplier(String(row.supplier_id)), {
+              method: "PATCH",
+              body: { is_archived: true },
+            });
           }}
           columns={[
             { key: "name", label: "Name" },
             { key: "phone", label: "Phone" },
             { key: "supplier_type", label: "Type" },
-            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             { name: "name", label: "Name", required: true },
             { name: "phone", label: "Phone" },
-            {
-              name: "supplier_type",
-              label: "Supplier type",
-              required: true,
-              defaultValue: "individual",
-            },
-            {
-              name: "is_archived",
-              label: "Archived",
-              type: "select",
-              options: [
-                { value: "true", label: "Yes" },
-                { value: "false", label: "No" },
-              ],
-            },
+            { name: "supplier_type", label: "Supplier type", required: true, defaultValue: "individual" },
           ]}
         />
       )}
@@ -678,6 +631,7 @@ export function MastersWorkspace() {
       {tab === "categories" && (
         <DataWorkbench
           title="Expense categories"
+          singularLabel="Expense category"
           description="Group expense categories as food or miscellaneous."
           path={apiRoutes.feeding.categories}
           updatePath={(row) => apiRoutes.feeding.category(String(row.category_id))}
@@ -691,14 +645,15 @@ export function MastersWorkspace() {
           }}
           deleteLabel="Archive"
           onDelete={async (row) => {
-            if (!window.confirm("Archive this expense category?")) return;
-            await apiRequest(apiRoutes.feeding.category(String(row.category_id)), { method: "PATCH", body: { is_archived: true } });
+            await apiRequest(apiRoutes.feeding.category(String(row.category_id)), {
+              method: "PATCH",
+              body: { is_archived: true },
+            });
           }}
           columns={[
             { key: "name", label: "Name" },
             { key: "name_bn", label: "Bangla name" },
             { key: "category_group", label: "Group" },
-            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             { name: "name", label: "Name", required: true },
@@ -713,15 +668,6 @@ export function MastersWorkspace() {
                 { value: "miscellaneous", label: "Miscellaneous" },
               ],
             },
-            {
-              name: "is_archived",
-              label: "Archived",
-              type: "select",
-              options: [
-                { value: "true", label: "Yes" },
-                { value: "false", label: "No" },
-              ],
-            },
           ]}
         />
       )}
@@ -729,9 +675,11 @@ export function MastersWorkspace() {
       {tab === "feed-types" && (
         <DataWorkbench
           title="Feed types"
-          description="Manage feed items, units, and per-unit costs."
+          singularLabel="Feed type"
+          description="Manage feed items, units, stock levels, and per-unit costs."
           path={apiRoutes.feeding.feedTypes}
           updatePath={(row) => apiRoutes.feeding.feedType(String(row.feed_type_id))}
+          invalidateKeys={[["feed-inventory-types"]]}
           lifecycle={{
             includeQuery: "include_archived=true",
             entityType: "feed_types",
@@ -742,8 +690,10 @@ export function MastersWorkspace() {
           }}
           deleteLabel="Archive"
           onDelete={async (row) => {
-            if (!window.confirm("Archive this feed type?")) return;
-            await apiRequest(apiRoutes.feeding.feedType(String(row.feed_type_id)), { method: "PATCH", body: { is_archived: true } });
+            await apiRequest(apiRoutes.feeding.feedType(String(row.feed_type_id)), {
+              method: "PATCH",
+              body: { is_archived: true },
+            });
           }}
           columns={[
             { key: "name", label: "Name" },
@@ -751,6 +701,8 @@ export function MastersWorkspace() {
             { key: "category_name", label: "Category" },
             { key: "unit", label: "Unit" },
             { key: "unit_cost", label: "Unit cost ৳" },
+            { key: "stock_quantity", label: "Current stock" },
+            { key: "reorder_level", label: "Reorder level" },
           ]}
           fields={[
             {
@@ -765,15 +717,8 @@ export function MastersWorkspace() {
             { name: "name_bn", label: "Bangla name", required: true },
             { name: "unit", label: "Unit", required: true, defaultValue: "kg" },
             { name: "unit_cost", label: "Cost per unit ৳", type: "number", required: true },
-            {
-              name: "is_archived",
-              label: "Archived",
-              type: "select",
-              options: [
-                { value: "true", label: "Yes" },
-                { value: "false", label: "No" },
-              ],
-            },
+            { name: "stock_quantity", label: "Current stock", type: "number", defaultValue: "0" },
+            { name: "reorder_level", label: "Reorder level", type: "number", defaultValue: "0" },
           ]}
         />
       )}
@@ -781,6 +726,7 @@ export function MastersWorkspace() {
       {tab === "customers" && (
         <DataWorkbench
           title="Customers"
+          singularLabel="Customer"
           description="Maintain buyers and monitor their account balances."
           path={apiRoutes.sales.customers}
           updatePath={(row) => apiRoutes.sales.customer(String(row.customer_id))}
@@ -794,15 +740,16 @@ export function MastersWorkspace() {
           }}
           deleteLabel="Archive"
           onDelete={async (row) => {
-            if (!window.confirm("Archive this customer?")) return;
-            await apiRequest(apiRoutes.sales.customer(String(row.customer_id)), { method: "PATCH", body: { is_archived: true } });
+            await apiRequest(apiRoutes.sales.customer(String(row.customer_id)), {
+              method: "PATCH",
+              body: { is_archived: true },
+            });
           }}
           columns={[
             { key: "name", label: "Name" },
             { key: "phone", label: "Phone" },
             { key: "customer_type", label: "Type" },
             { key: "current_balance", label: "Balance ৳" },
-            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             { name: "name", label: "Name", required: true },
@@ -815,18 +762,9 @@ export function MastersWorkspace() {
               defaultValue: "individual",
               options: [
                 { value: "individual", label: "Individual" },
-                { value: "dairy_shop", label: "Dairy shop" },
+                { value: "dairy_shop", label: "Dairy Shop" },
                 { value: "wholesaler", label: "Wholesaler" },
-                { value: "meat_buyer", label: "Meat buyer" },
-              ],
-            },
-            {
-              name: "is_archived",
-              label: "Archived",
-              type: "select",
-              options: [
-                { value: "true", label: "Yes" },
-                { value: "false", label: "No" },
+                { value: "meat_buyer", label: "Meat Buyer" },
               ],
             },
           ]}
@@ -836,6 +774,7 @@ export function MastersWorkspace() {
       {tab === "market-prices" && (
         <DataWorkbench
           title="Market prices"
+          singularLabel="Market price"
           description="Record dated market rates used as references for purchase evaluations."
           path={apiRoutes.evaluations.marketPrices}
           updatePath={(row) => apiRoutes.evaluations.marketPrice(String(row.market_price_id))}
@@ -849,14 +788,16 @@ export function MastersWorkspace() {
           }}
           deleteLabel="Archive"
           onDelete={async (row) => {
-            if (!window.confirm("Archive this market price?")) return;
-            await apiRequest(apiRoutes.evaluations.marketPrice(String(row.market_price_id)), { method: "PATCH", body: { is_archived: true } });
+            await apiRequest(apiRoutes.evaluations.marketPrice(String(row.market_price_id)), {
+              method: "PATCH",
+              body: { is_archived: true },
+            });
           }}
           columns={[
             { key: "price_date", label: "Date" },
+            { key: "price_basis", label: "Price basis" },
             { key: "price_per_kg_net", label: "Net ৳/kg" },
             { key: "source", label: "Source" },
-            { key: "is_archived", label: "Archived" },
           ]}
           fields={[
             {
@@ -866,17 +807,19 @@ export function MastersWorkspace() {
               required: true,
               defaultValue: today(),
             },
-            { name: "price_per_kg_net", label: "Net price per kg ৳", type: "number", required: true },
-            { name: "source", label: "Source" },
             {
-              name: "is_archived",
-              label: "Archived",
+              name: "price_basis",
+              label: "Price basis",
               type: "select",
+              required: true,
+              defaultValue: "dressed_meat",
               options: [
-                { value: "true", label: "Yes" },
-                { value: "false", label: "No" },
+                { value: "dressed_meat", label: "Dressed Meat" },
+                { value: "live_weight", label: "Live Weight" },
               ],
             },
+            { name: "price_per_kg_net", label: "Net price per kg ৳", type: "number", required: true },
+            { name: "source", label: "Source" },
           ]}
         />
       )}
@@ -889,6 +832,7 @@ export function Metric({ label, value }: { label: string; value: string }) {
 }
 
 export function Breakdown({ title, rows }: { title: string; rows: [string, number][] }) {
+  const { money } = useI18n();
   return (
     <div className="rounded-[8px] border border-line bg-surface p-4">
       <h3 className="border-b border-line pb-2.5 text-[14px] font-semibold text-ink">{title}</h3>
@@ -910,6 +854,7 @@ export function Breakdown({ title, rows }: { title: string; rows: [string, numbe
 }
 
 export function CountBreakdown({ title, rows }: { title: string; rows: Record<string, number> }) {
+  const { num, tr } = useI18n();
   const entries = Object.entries(rows);
   return (
     <div className="rounded-[8px] border border-line bg-surface p-4">
@@ -918,13 +863,13 @@ export function CountBreakdown({ title, rows }: { title: string; rows: Record<st
         <div className="divide-y divide-line">
           {entries.map(([label, value]) => (
             <div key={label} className="flex justify-between py-2 text-[13px]">
-              <span className="capitalize text-muted">{label.replaceAll("_", " ")}</span>
-              <span className="font-semibold text-ink tabular-nums">{value}</span>
+              <span className="text-muted">{label.replaceAll("_", " ")}</span>
+              <span className="font-semibold text-ink tabular-nums">{num(value, 0)}</span>
             </div>
           ))}
         </div>
       ) : (
-        <p className="py-4 text-center text-[13px] text-muted">No breakdown data.</p>
+        <p className="py-4 text-center text-[13px] text-muted">{tr("No breakdown data.", "কোনো তথ্য নেই।")}</p>
       )}
     </div>
   );
@@ -936,21 +881,6 @@ export function Panel({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-}
-
-function money(value: unknown) {
-  return value == null
-    ? "—"
-    : `৳ ${new Intl.NumberFormat("en-BD", { maximumFractionDigits: 2 }).format(Number(value))}`;
-}
-
-function fmt(value: unknown) {
-  return value == null
-    ? "0.00"
-    : new Intl.NumberFormat("en-BD", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(Number(value));
 }
 
 function today() {

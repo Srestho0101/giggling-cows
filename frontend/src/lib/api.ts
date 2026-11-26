@@ -110,9 +110,24 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 function getErrorMessage(payload: unknown): string | undefined {
   if (typeof payload !== "object" || payload === null || !("detail" in payload)) return undefined;
   const detail = payload.detail;
-  if (typeof detail === "string") return detail;
+  if (typeof detail === "string") {
+    return detail.replace(/^Value error,\s*/i, "");
+  }
   if (Array.isArray(detail)) {
-    return detail.map((item) => typeof item === "object" && item !== null && "msg" in item ? String(item.msg) : "Invalid request").join(" ");
+    return detail
+      .map((item) => {
+        if (typeof item !== "object" || item === null) return "Invalid request";
+        const rawMsg = "msg" in item ? String(item.msg) : "Invalid value";
+        const cleanMsg = rawMsg.replace(/^Value error,\s*/i, "");
+        if ("loc" in item && Array.isArray(item.loc) && item.loc.length > 1) {
+          const field = String(item.loc[item.loc.length - 1]).replaceAll("_", " ");
+          if (!cleanMsg.toLowerCase().includes(field.toLowerCase())) {
+            return `${field.charAt(0).toUpperCase() + field.slice(1)}: ${cleanMsg}`;
+          }
+        }
+        return cleanMsg;
+      })
+      .join(" ");
   }
   return undefined;
 }
@@ -142,12 +157,14 @@ export const apiRoutes = {
     categories: "/feeding/categories", category: (id: string) => `/feeding/categories/${id}`,
     feedTypes: "/feeding/feed-types", feedType: (id: string) => `/feeding/feed-types/${id}`,
     records: "/feeding/feeding-records", record: (id: string) => `/feeding/feeding-records/${id}`,
+    stockEntries: "/feeding/stock-entries", stockEntry: (id: string) => `/feeding/stock-entries/${id}`,
   },
   labor: {
     workers: "/labor/workers", worker: (id: string) => `/labor/workers/${id}`,
     attendance: "/labor/attendance", attendanceRecord: (id: string) => `/labor/attendance/${id}`,
     attendanceBatch: "/labor/attendance/batch",
     salaries: "/labor/salary-payments", salary: (id: string) => `/labor/salary-payments/${id}`,
+    advances: "/labor/advances", advance: (id: string) => `/labor/advances/${id}`,
     substitutes: "/labor/mill-charges", substitute: (id: string) => `/labor/mill-charges/${id}`,
   },
   health: {
@@ -168,5 +185,7 @@ export const apiRoutes = {
     dashboard: "/reports/dashboard",
     profitability: "/reports/profitability",
     profitabilityCsv: "/reports/profitability/csv",
+    herdSummaryCsv: "/reports/herd-summary/csv",
+    milkSummaryCsv: "/reports/milk-summary/csv",
   },
 } as const;

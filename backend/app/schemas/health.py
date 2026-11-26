@@ -61,7 +61,11 @@ class BreedingRecordCreate(BreedingRecordBase):
         has_sire = self.sire_id is not None
         has_semen = self.semen_code is not None and len(self.semen_code.strip()) > 0
         if (has_sire and has_semen) or (not has_sire and not has_semen):
-            raise ValueError("Exactly one source must be provided: either an on-farm sire_id OR purchased semen_code.")
+            raise ValueError("Please choose either an on-farm sire OR enter a purchased semen code.")
+        if self.heat_date is not None and self.seed_date < self.heat_date:
+            raise ValueError("Insemination date cannot be earlier than heat date.")
+        if self.conception_date is not None and self.conception_date < self.seed_date:
+            raise ValueError("Conception date cannot be earlier than insemination date.")
         return self
 
 
@@ -78,6 +82,14 @@ class BreedingRecordUpdate(BaseModel):
     outcome: Optional[str] = Field(None, pattern="^(pending|successful|failed)$")
     notes: Optional[str] = None
     is_archived: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "BreedingRecordUpdate":
+        if self.heat_date is not None and self.seed_date is not None and self.seed_date < self.heat_date:
+            raise ValueError("Insemination date cannot be earlier than heat date.")
+        if self.conception_date is not None and self.seed_date is not None and self.conception_date < self.seed_date:
+            raise ValueError("Conception date cannot be earlier than insemination date.")
+        return self
 
 
 class BreedingRecordRead(BreedingRecordBase, AuditBase):
@@ -99,7 +111,16 @@ class PregnancyReportBase(BaseModel):
 
 
 class PregnancyReportCreate(PregnancyReportBase):
-    pass
+    @model_validator(mode="after")
+    def validate_dates(self) -> "PregnancyReportCreate":
+        if (
+            self.expected_calving_date is not None
+            and self.actual_calving_date is None
+            and self.status in ("confirmed", "suspected")
+            and self.expected_calving_date < self.report_date
+        ):
+            raise ValueError("Expected calving date cannot be earlier than check date.")
+        return self
 
 
 class PregnancyReportUpdate(BaseModel):
@@ -110,6 +131,18 @@ class PregnancyReportUpdate(BaseModel):
     actual_calving_date: Optional[date] = None
     notes: Optional[str] = None
     is_archived: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "PregnancyReportUpdate":
+        if (
+            self.report_date is not None
+            and self.expected_calving_date is not None
+            and self.actual_calving_date is None
+            and self.status in (None, "confirmed", "suspected")
+            and self.expected_calving_date < self.report_date
+        ):
+            raise ValueError("Expected calving date cannot be earlier than check date.")
+        return self
 
 
 class PregnancyReportRead(PregnancyReportBase, AuditBase):

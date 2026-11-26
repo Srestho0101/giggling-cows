@@ -136,6 +136,7 @@ async def update_health_record(
 
     lifecycle_before = capture_lifecycle_state(record)
     update_dict = data.model_dump(exclude_unset=True)
+
     for field, val in update_dict.items():
         setattr(record, field, val)
     record_lifecycle_changes(db, record, lifecycle_before, current_user.id, current_user.email)
@@ -294,6 +295,24 @@ async def update_breeding_record(
 
     lifecycle_before = capture_lifecycle_state(record)
     update_dict = data.model_dump(exclude_unset=True)
+    next_heat = update_dict.get("heat_date", record.heat_date)
+    next_seed = update_dict.get("seed_date", record.seed_date)
+    next_conception = update_dict.get("conception_date", record.conception_date)
+    if next_heat is not None and next_seed < next_heat:
+        raise HTTPException(status_code=422, detail="Insemination date cannot be earlier than heat date.")
+    if next_conception is not None and next_conception < next_seed:
+        raise HTTPException(status_code=422, detail="Conception date cannot be earlier than insemination date.")
+
+    next_sire = update_dict.get("sire_id", record.sire_id)
+    next_semen = update_dict.get("semen_code", record.semen_code)
+    has_sire = next_sire is not None
+    has_semen = next_semen is not None and len(str(next_semen).strip()) > 0
+    if (has_sire and has_semen) or (not has_sire and not has_semen):
+        raise HTTPException(
+            status_code=422,
+            detail="Please choose either an on-farm sire OR enter a purchased semen code.",
+        )
+
     for field, val in update_dict.items():
         setattr(record, field, val)
     record_lifecycle_changes(db, record, lifecycle_before, current_user.id, current_user.email)
@@ -391,11 +410,30 @@ async def create_pregnancy_report(
     if not cow:
         raise HTTPException(status_code=404, detail="Cow not found")
 
+    if data.breeding_id:
+        breeding = await db.get(BreedingRecord, data.breeding_id)
+        if not breeding:
+            raise HTTPException(status_code=404, detail="Breeding record not found")
+        if data.report_date < breeding.seed_date:
+            raise HTTPException(
+                status_code=422,
+                detail="Check date cannot be earlier than insemination date.",
+            )
+        if data.expected_calving_date is not None and data.expected_calving_date <= breeding.seed_date:
+            raise HTTPException(
+                status_code=422,
+                detail="Expected calving date must be after insemination date.",
+            )
+
+    resolved_status = data.status
+    if data.actual_calving_date is not None and resolved_status in ("confirmed", "suspected"):
+        resolved_status = "calved"
+
     report = PregnancyReport(
         cow_id=data.cow_id,
         breeding_id=data.breeding_id,
         report_date=data.report_date,
-        status=data.status,
+        status=resolved_status,
         expected_calving_date=data.expected_calving_date,
         actual_calving_date=data.actual_calving_date,
         notes=data.notes,
@@ -403,6 +441,22 @@ async def create_pregnancy_report(
         updated_by=current_user.id,
     )
     db.add(report)
+    await db.flush()
+
+    if report.actual_calving_date is not None or report.status == "calved":
+        prior_open_stmt = select(PregnancyReport).where(
+            PregnancyReport.cow_id == report.cow_id,
+            PregnancyReport.pregnancy_id != report.pregnancy_id,
+            PregnancyReport.is_archived == False,
+            PregnancyReport.status.in_(["confirmed", "suspected"]),
+            PregnancyReport.report_date <= report.report_date,
+        )
+        for prior in (await db.execute(prior_open_stmt)).scalars().all():
+            prior.status = "calved"
+            if prior.actual_calving_date is None and report.actual_calving_date is not None:
+                prior.actual_calving_date = report.actual_calving_date
+            prior.updated_by = current_user.id
+
     await db.commit()
     await db.refresh(report)
 
@@ -437,6 +491,38 @@ async def update_pregnancy_report(
 
     lifecycle_before = capture_lifecycle_state(report)
     update_dict = data.model_dump(exclude_unset=True)
+    next_report_date = update_dict.get("report_date", report.report_date)
+    next_expected = update_dict.get("expected_calving_date", report.expected_calving_date)
+    next_actual = update_dict.get("actual_calving_date", report.actual_calving_date)
+    next_status = update_dict.get("status", report.status)
+    next_breeding_id = update_dict.get("breeding_id", report.breeding_id)
+
+    if (
+        next_expected is not None
+        and next_actual is None
+        and next_status in ("confirmed", "suspected")
+        and next_expected < next_report_date
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Expected calving date cannot be earlier than check date.",
+        )
+
+    if next_breeding_id:
+        breeding = await db.get(BreedingRecord, next_breeding_id)
+        if not breeding:
+            raise HTTPException(status_code=404, detail="Breeding record not found")
+        if next_report_date < breeding.seed_date:
+            raise HTTPException(
+                status_code=422,
+                detail="Check date cannot be earlier than insemination date.",
+            )
+        if next_expected is not None and next_expected <= breeding.seed_date:
+            raise HTTPException(
+                status_code=422,
+                detail="Expected calving date must be after insemination date.",
+            )
+
     for field, val in update_dict.items():
         setattr(report, field, val)
 
@@ -446,6 +532,20 @@ async def update_pregnancy_report(
         and report.status in ("confirmed", "suspected")
     ):
         report.status = "calved"
+
+    if report.actual_calving_date is not None or report.status == "calved":
+        prior_open_stmt = select(PregnancyReport).where(
+            PregnancyReport.cow_id == report.cow_id,
+            PregnancyReport.pregnancy_id != report.pregnancy_id,
+            PregnancyReport.is_archived == False,
+            PregnancyReport.status.in_(["confirmed", "suspected"]),
+            PregnancyReport.report_date <= report.report_date,
+        )
+        for prior in (await db.execute(prior_open_stmt)).scalars().all():
+            prior.status = "calved"
+            if prior.actual_calving_date is None and report.actual_calving_date is not None:
+                prior.actual_calving_date = report.actual_calving_date
+            prior.updated_by = current_user.id
 
     record_lifecycle_changes(db, report, lifecycle_before, current_user.id, current_user.email)
     report.updated_by = current_user.id

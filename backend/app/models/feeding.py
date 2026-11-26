@@ -39,11 +39,34 @@ class FeedType(Base, AuditMixin, ArchiveAuditMixin):
     name_bn: Mapped[str] = mapped_column(String(100), nullable=False)
     unit: Mapped[str] = mapped_column(String(20), nullable=False, default="kg")  # kg, bundle, bag, liter
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=0.00)
+    stock_quantity: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=0.00)
+    reorder_level: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=0.00)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     category: Mapped["ExpenseCategory"] = relationship("ExpenseCategory", back_populates="feed_types")
     feeding_records: Mapped[List["FeedingRecord"]] = relationship("FeedingRecord", back_populates="feed_type")
+    stock_entries: Mapped[List["FeedStockEntry"]] = relationship("FeedStockEntry", back_populates="feed_type")
+
+
+class FeedStockEntry(Base, AuditMixin, ArchiveAuditMixin):
+    __tablename__ = "feed_stock_entries"
+
+    stock_entry_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    feed_type_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("feed_types.feed_type_id", ondelete="RESTRICT"), nullable=False
+    )
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    quantity_added: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=0.00)
+    total_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0.00)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Relationships
+    feed_type: Mapped["FeedType"] = relationship("FeedType", back_populates="stock_entries")
 
 
 class FeedingRecord(Base, AuditMixin, ArchiveAuditMixin):

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { ConfirmActionModal, type ConfirmModalConfig } from "@/components/confirm-modal";
 import { PaginatedTableCard, type PaginatedColumn } from "@/components/paginated-scroll-table";
 import { SafeDataHistory } from "@/components/safe-data-history";
 import { Badge, btn, Segmented, statusTone, ui } from "@/components/ui";
@@ -45,6 +46,7 @@ export function HealthCareTab({
   const [cost, setCost] = useState("");
   const [nextDueDate, setNextDueDate] = useState("");
   const [details, setDetails] = useState("");
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalConfig | null>(null);
 
   const visible = useMemo(
     () => (showArchived ? records : records.filter((r) => !r.is_archived)),
@@ -90,9 +92,22 @@ export function HealthCareTab({
     }
   }
 
-  async function toggleArchive(row: HealthRecord) {
+  function toggleArchive(row: HealthRecord) {
     const archive = !row.is_archived;
-    if (archive && !window.confirm("Archive this health record?")) return;
+    if (!archive) {
+      void applyToggleArchive(row, false);
+      return;
+    }
+    setConfirmModal({
+      title: "Archive this health record?",
+      mode: "confirm",
+      confirmLabel: "Archive",
+      tone: "danger",
+      onConfirm: () => applyToggleArchive(row, true),
+    });
+  }
+
+  async function applyToggleArchive(row: HealthRecord, archive: boolean) {
     onError("");
     onNotice("");
     try {
@@ -291,6 +306,7 @@ export function HealthCareTab({
           </button>
         </form>
       </div>
+      <ConfirmActionModal config={confirmModal} onClose={() => setConfirmModal(null)} />
     </div>
   );
 }
@@ -363,9 +379,21 @@ export function BreedingTab({
 
   async function submitBreeding(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBreedingSaving(true);
     onError("");
     onNotice("");
+    if (heatDate && seedDate && seedDate < heatDate) {
+      onError("Insemination date cannot be earlier than heat date.");
+      return;
+    }
+    if (sourceMode === "sire" && !sireId) {
+      onError("Please select an on-farm sire.");
+      return;
+    }
+    if (sourceMode === "semen" && !semenCode.trim()) {
+      onError("Please enter a purchased semen code.");
+      return;
+    }
+    setBreedingSaving(true);
     try {
       await apiRequest(apiRoutes.health.breeding, {
         method: "POST",
@@ -398,9 +426,19 @@ export function BreedingTab({
 
   async function submitPregnancy(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPregSaving(true);
     onError("");
     onNotice("");
+    if (
+      reportDate &&
+      expectedCalving &&
+      !actualCalving &&
+      (pregStatus === "confirmed" || pregStatus === "suspected") &&
+      expectedCalving < reportDate
+    ) {
+      onError("Expected calving date cannot be earlier than check date.");
+      return;
+    }
+    setPregSaving(true);
     try {
       await apiRequest(apiRoutes.health.pregnancy, {
         method: "POST",

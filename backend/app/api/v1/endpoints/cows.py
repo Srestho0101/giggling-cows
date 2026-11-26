@@ -216,7 +216,17 @@ async def list_cows(
     if sex:
         stmt = stmt.where(Cow.sex == sex)
     if search:
-        stmt = stmt.where(Cow.current_tag_number.ilike(f"%{search}%"))
+        pattern = f"%{search}%"
+        stmt = stmt.outerjoin(Warehouse, Cow.warehouse_id == Warehouse.warehouse_id).where(
+            or_(
+                Cow.current_tag_number.ilike(pattern),
+                Cow.category.ilike(pattern),
+                Cow.cow_type.ilike(pattern),
+                Cow.breed.ilike(pattern),
+                Cow.notes.ilike(pattern),
+                Warehouse.name.ilike(pattern),
+            )
+        )
 
     stmt = stmt.order_by(Cow.created_at.desc())
     rows = (await db.execute(stmt)).unique().all()
@@ -350,7 +360,8 @@ async def create_cow(
         sire_id=data.sire_id,
         warehouse_id=data.warehouse_id,
         status=data.status,
-        gives_milk=bool(data.gives_milk) if data.sex == "female" else False,
+        gives_milk=bool(data.gives_milk) if data.sex == "female" and data.status == "active" else False,
+        milking_sessions=list(data.milking_sessions or []) if (data.sex == "female" and data.status == "active" and data.gives_milk) else [],
         notes=data.notes,
         created_by=current_user.id,
         updated_by=current_user.id,
@@ -495,10 +506,19 @@ async def update_cow(
         )
 
     next_sex = update_dict.get("sex", cow.sex)
-    if next_sex == "male":
+    next_status = update_dict.get("status", cow.status)
+    if data.is_archived is True:
+        next_status = "archived"
+    if next_sex == "male" or next_status != "active":
         update_dict["gives_milk"] = False
+        update_dict["milking_sessions"] = []
     elif "gives_milk" in update_dict and update_dict["gives_milk"] is not None:
-        update_dict["gives_milk"] = bool(update_dict["gives_milk"])
+        gives_milk_val = bool(update_dict["gives_milk"])
+        update_dict["gives_milk"] = gives_milk_val
+        if not gives_milk_val:
+            update_dict["milking_sessions"] = []
+        elif "milking_sessions" not in update_dict and not cow.milking_sessions:
+            update_dict["milking_sessions"] = ["morning", "noon", "evening"]
 
     for field, val in update_dict.items():
         setattr(cow, field, val)

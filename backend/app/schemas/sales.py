@@ -189,6 +189,15 @@ class SalesInvoiceCreate(BaseModel):
     lines: List[SalesInvoiceLineCreate] = Field(..., min_length=1)
 
 
+class SalesInvoiceUpdate(BaseModel):
+    customer_id: Optional[uuid.UUID] = None
+    invoice_date: Optional[date] = None
+    due_date: Optional[date] = None
+    discount: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    notes: Optional[str] = None
+    lines: Optional[List[SalesInvoiceLineCreate]] = Field(None, min_length=1)
+
+
 class SalesInvoiceStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(issued|void)$")
     notes: Optional[str] = None

@@ -37,6 +37,8 @@ class FeedTypeBase(BaseModel):
     name_bn: str = Field(..., max_length=100)
     unit: str = Field("kg", max_length=20)
     unit_cost: Decimal = Field(..., ge=0, max_digits=10, decimal_places=2)
+    stock_quantity: Decimal = Field(Decimal("0.00"), max_digits=10, decimal_places=2)
+    reorder_level: Decimal = Field(Decimal("0.00"), ge=0, max_digits=10, decimal_places=2)
 
 
 class FeedTypeCreate(FeedTypeBase):
@@ -49,6 +51,8 @@ class FeedTypeUpdate(BaseModel):
     name_bn: Optional[str] = Field(None, max_length=100)
     unit: Optional[str] = Field(None, max_length=20)
     unit_cost: Optional[Decimal] = Field(None, ge=0, max_digits=10, decimal_places=2)
+    stock_quantity: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
+    reorder_level: Optional[Decimal] = Field(None, ge=0, max_digits=10, decimal_places=2)
     is_archived: Optional[bool] = None
 
 
@@ -56,6 +60,38 @@ class FeedTypeRead(FeedTypeBase, AuditBase):
     feed_type_id: uuid.UUID
     is_archived: bool
     category_name: Optional[str] = None
+
+
+# FEED STOCK ENTRY
+class FeedStockEntryBase(BaseModel):
+    feed_type_id: uuid.UUID
+    entry_date: date
+    quantity_added: Decimal = Field(..., gt=0, max_digits=10, decimal_places=2)
+    unit_cost: Optional[Decimal] = Field(None, ge=0, max_digits=10, decimal_places=2)
+    notes: Optional[str] = None
+
+
+class FeedStockEntryCreate(FeedStockEntryBase):
+    pass
+
+
+class FeedStockEntryUpdate(BaseModel):
+    is_archived: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class FeedStockEntryRead(AuditBase):
+    stock_entry_id: uuid.UUID
+    feed_type_id: uuid.UUID
+    feed_name: Optional[str] = None
+    feed_name_bn: Optional[str] = None
+    unit: Optional[str] = None
+    entry_date: date
+    quantity_added: Decimal
+    unit_cost: Decimal
+    total_cost: Decimal
+    notes: Optional[str] = None
+    is_archived: bool = False
 
 
 # FEEDING RECORD

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import React, { useMemo, useState } from "react";
+import { ConfirmActionModal, type ConfirmModalConfig } from "@/components/confirm-modal";
 import { PaginatedTableCard, type PaginatedColumn } from "@/components/paginated-scroll-table";
 import { SafeDataHistory } from "@/components/safe-data-history";
 import { Badge, btn, statusTone, ui } from "@/components/ui";
@@ -92,9 +93,9 @@ export function ProfileOverviewTab({
             />
             <FieldItem label="Purchase price" value={formatMoney(cow.purchase_price)} />
             <div className="col-span-2 border-t border-line pt-2.5">
-              <dt className="text-[11.5px] text-muted">Current warehouse</dt>
+              <dt className="text-[11.5px] text-muted">Current shed</dt>
               <dd className="mt-0.5 text-[13px] font-medium text-ink">
-                {cow.warehouse_name ?? "No warehouse"}
+                {cow.warehouse_name ?? "No shed"}
               </dd>
             </div>
           </dl>
@@ -228,6 +229,7 @@ function WeightSection({
   const [editDate, setEditDate] = useState("");
   const [editWeight, setEditWeight] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalConfig | null>(null);
 
   const visibleRows = useMemo(
     () =>
@@ -302,8 +304,21 @@ function WeightSection({
     }
   }
 
-  async function setArchived(row: WeightRecord, archived: boolean) {
-    if (archived && !window.confirm("Archive this weight record?")) return;
+  function requestArchiveWeight(row: WeightRecord, archived: boolean) {
+    if (!archived) {
+      void applyArchiveWeight(row, false);
+      return;
+    }
+    setConfirmModal({
+      title: "Archive this weight record?",
+      mode: "confirm",
+      confirmLabel: "Archive",
+      tone: "danger",
+      onConfirm: () => applyArchiveWeight(row, true),
+    });
+  }
+
+  async function applyArchiveWeight(row: WeightRecord, archived: boolean) {
     onError("");
     onNotice("");
     try {
@@ -375,7 +390,7 @@ function WeightSection({
           </button>
           <button
             type="button"
-            onClick={() => void setArchived(row, !row.is_archived)}
+            onClick={() => requestArchiveWeight(row, !row.is_archived)}
             className="cursor-pointer font-medium text-muted hover:text-ink hover:underline"
           >
             {row.is_archived ? "Restore" : "Archive"}
@@ -503,6 +518,7 @@ function WeightSection({
           {saving ? "Saving…" : "Save weight"}
         </button>
       </form>
+      <ConfirmActionModal config={confirmModal} onClose={() => setConfirmModal(null)} />
     </div>
   );
 }
@@ -544,10 +560,10 @@ function WarehouseSection({
       });
       setWarehouseId("");
       setReason("");
-      onNotice("Warehouse move saved.");
+      onNotice("Shed move saved.");
       await reload();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not save warehouse move.");
+      onError(cause instanceof Error ? cause.message : "Could not save shed move.");
     } finally {
       setSaving(false);
     }
@@ -556,7 +572,7 @@ function WarehouseSection({
   const columns: PaginatedColumn<WarehouseHistoryItem>[] = [
     {
       key: "warehouse_name",
-      label: "Warehouse",
+      label: "Shed",
       render: (row) => <span className="font-medium text-ink">{row.warehouse_name ?? "—"}</span>,
     },
     {
@@ -594,12 +610,12 @@ function WarehouseSection({
   return (
     <div className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr] items-start">
       <PaginatedTableCard
-        title="Warehouse history"
+        title="Shed history"
         subtitle="Housing transfers and current shed assignment."
         rows={cow.warehouse_history ?? []}
         rowKey={(row) => row.movement_id}
         columns={columns}
-        emptyMessage="No warehouse movements recorded."
+        emptyMessage="No shed movements recorded."
         defaultPageSize={10}
         scrollHeightClass="max-h-[240px]"
       />
@@ -616,14 +632,14 @@ function WarehouseSection({
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className={ui.label}>
-            Destination warehouse *
+            Destination shed *
             <select
               required
               value={warehouseId}
               onChange={(e) => setWarehouseId(e.target.value)}
               className={ui.select}
             >
-              <option value="">Choose warehouse</option>
+              <option value="">Choose shed</option>
               {warehouses.map((warehouse) => {
                 const isCurrent = warehouse.warehouse_id === cow.warehouse_id;
                 return (
