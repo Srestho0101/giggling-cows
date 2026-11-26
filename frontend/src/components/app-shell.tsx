@@ -1,23 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import React, { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Icon, type IconName } from "@/components/icons";
-import { btn } from "@/components/ui";
+import { Badge, statusTone } from "@/components/ui";
 import { useWorkspaceDate } from "@/components/workspace-date";
 import { usePreference } from "@/lib/preferences";
 import { apiRequest, apiRoutes } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 type AppShellProps = { children: React.ReactNode };
-type Language = "en" | "bn";
 type ThemeMode = "system" | "light" | "dark";
 
 type DashboardData = {
   alerts?: { id: string; item_type?: string }[];
   health_alert_count?: number;
   breeding_alert_count?: number;
+};
+
+type SearchCow = {
+  cow_id: string;
+  current_tag_number: string;
+  category?: string | null;
+  cow_type?: string | null;
+  breed?: string | null;
+  warehouse_name?: string | null;
+  status: string;
+  is_archived?: boolean;
 };
 
 const navigation = [
@@ -47,9 +58,12 @@ function formatHeaderDate(iso: string, locale: string = "en-GB"): string {
 
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
-  const [language, setLanguage] = usePreference<Language>("cf-language", "en");
+  const router = useRouter();
+  const { lang, setLang, locale, tr, enumLabel } = useI18n();
   const [theme, setTheme] = usePreference<ThemeMode>("cf-theme", "system");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeResultIdx, setActiveResultIdx] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const searchInput = useRef<HTMLInputElement>(null);
@@ -59,15 +73,44 @@ export function AppShell({ children }: AppShellProps) {
 
   const isTodayPage = pathname === "/today" || pathname.startsWith("/today/");
   const activePage = navigation.find((item) => pathname.startsWith(item.href)) ?? navigation[0];
-  const locale = language === "bn" ? "bn-BD" : "en-GB";
 
-  // Shared dashboard query for health badge
+  // Shared dashboard query for health & breeding badges
   const { data: dashboard } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => apiRequest<DashboardData>(apiRoutes.reports.dashboard),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
+
+  // Global cow search query (loaded when modal opens or cached)
+  const searchCowsQuery = useQuery({
+    queryKey: ["global-cow-search"],
+    queryFn: () => apiRequest<SearchCow[]>(`${apiRoutes.herd.cows}?include_archived=true`),
+    enabled: searchOpen,
+    staleTime: 30_000,
+  });
+
+  const searchResults = useMemo(() => {
+    const all = searchCowsQuery.data ?? [];
+    const q = searchTerm.trim().toLowerCase();
+    const filtered = !q
+      ? all.filter((c) => !c.is_archived)
+      : all.filter((c) => {
+          const haystack = [
+            c.current_tag_number,
+            c.category,
+            c.cow_type,
+            c.breed,
+            c.warehouse_name,
+            c.status,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(q);
+        });
+    return filtered.slice(0, 12);
+  }, [searchCowsQuery.data, searchTerm]);
 
   const healthAlertCount = dashboard?.health_alert_count ?? 0;
   const breedingAlertCount = dashboard?.breeding_alert_count ?? 0;
@@ -86,6 +129,7 @@ export function AppShell({ children }: AppShellProps) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen(true);
+        setActiveResultIdx(0);
       }
       if (event.key === "Escape") {
         setSearchOpen(false);
@@ -102,13 +146,17 @@ export function AppShell({ children }: AppShellProps) {
     }
   }, [searchOpen]);
 
+  function openCowProfile(cowId: string) {
+    setSearchOpen(false);
+    setSearchTerm("");
+    router.push(`/herd/${cowId}`);
+  }
+
   const pageTitle = isTodayPage
     ? isToday
-      ? language === "bn"
-        ? "আজ"
-        : "Today"
+      ? tr("Today")
       : formatHeaderDate(date, locale)
-    : language === "bn"
+    : lang === "bn"
       ? activePage.bn
       : activePage.en;
 
@@ -118,7 +166,7 @@ export function AppShell({ children }: AppShellProps) {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-[6px] focus:bg-accent focus:px-3.5 focus:py-2 focus:text-on-accent focus:font-semibold"
       >
-        Skip to content
+        {tr("Skip to content")}
       </a>
 
       {/* Mobile Drawer Backdrop */}
@@ -135,7 +183,7 @@ export function AppShell({ children }: AppShellProps) {
         className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-nav text-nav-ink transition-transform duration-200 lg:translate-x-0 ${
           drawerOpen ? "translate-x-0" : "max-lg:-translate-x-full max-lg:invisible"
         }`}
-        aria-label={language === "bn" ? "প্রধান নেভিগেশন" : "Main navigation"}
+        aria-label={tr("Main navigation")}
       >
         {/* Brand Row 56px */}
         <div className="flex h-14 items-center justify-between border-b border-nav-line px-4">
@@ -144,11 +192,11 @@ export function AppShell({ children }: AppShellProps) {
               <rect width="28" height="28" rx="7" fill="var(--hay)" />
               <path d="M14 6c-3 4.5-6 8-6 11a6 6 0 0 0 12 0c0-3-3-6.5-6-11Z" fill="#0b0d0f" />
             </svg>
-            <span className="text-[16px] font-bold text-nav-ink-hi">Cow Farm</span>
+            <span className="text-[16px] font-bold text-nav-ink-hi">{tr("Cow Farm")}</span>
           </div>
           <button
             type="button"
-            aria-label="Close sidebar"
+            aria-label={tr("Close sidebar")}
             onClick={() => setDrawerOpen(false)}
             className="rounded-[6px] p-1.5 text-nav-ink hover:bg-white/10 hover:text-nav-ink-hi lg:hidden"
           >
@@ -173,7 +221,7 @@ export function AppShell({ children }: AppShellProps) {
                 }`}
               >
                 <Icon name={item.icon as IconName} className="size-[18px]" />
-                <span className="truncate">{language === "bn" ? item.bn : item.en}</span>
+                <span className="truncate">{lang === "bn" ? item.bn : item.en}</span>
                 {item.href === "/health" && healthAlertCount > 0 && (
                   <span className="ml-auto rounded-[4px] bg-warn-soft px-1.5 py-0.5 text-[11px] font-semibold text-warn">
                     {healthAlertCount}
@@ -201,10 +249,10 @@ export function AppShell({ children }: AppShellProps) {
           >
             <button
               type="button"
-              aria-pressed={language === "bn"}
-              onClick={() => setLanguage("bn")}
-              className={`flex-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors ${
-                language === "bn"
+              aria-pressed={lang === "bn"}
+              onClick={() => setLang("bn")}
+              className={`flex-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                lang === "bn"
                   ? "bg-white/15 text-nav-ink-hi font-semibold"
                   : "text-nav-ink hover:text-nav-ink-hi"
               }`}
@@ -213,10 +261,10 @@ export function AppShell({ children }: AppShellProps) {
             </button>
             <button
               type="button"
-              aria-pressed={language === "en"}
-              onClick={() => setLanguage("en")}
-              className={`flex-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors ${
-                language === "en"
+              aria-pressed={lang === "en"}
+              onClick={() => setLang("en")}
+              className={`flex-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                lang === "en"
                   ? "bg-white/15 text-nav-ink-hi font-semibold"
                   : "text-nav-ink hover:text-nav-ink-hi"
               }`}
@@ -235,7 +283,7 @@ export function AppShell({ children }: AppShellProps) {
               type="button"
               aria-pressed={theme === "system"}
               onClick={() => setTheme("system")}
-              className={`flex-1 flex items-center justify-center gap-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors cursor-pointer ${
                 theme === "system"
                   ? "bg-white/15 text-nav-ink-hi font-semibold"
                   : "text-nav-ink hover:text-nav-ink-hi"
@@ -243,13 +291,13 @@ export function AppShell({ children }: AppShellProps) {
               title="Auto (Follow OS theme)"
             >
               <Icon name="monitor" className="size-3.5" />
-              <span>Auto</span>
+              <span>{tr("Auto")}</span>
             </button>
             <button
               type="button"
               aria-pressed={theme === "light"}
               onClick={() => setTheme("light")}
-              className={`flex-1 flex items-center justify-center gap-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors cursor-pointer ${
                 theme === "light"
                   ? "bg-white/15 text-nav-ink-hi font-semibold"
                   : "text-nav-ink hover:text-nav-ink-hi"
@@ -257,13 +305,13 @@ export function AppShell({ children }: AppShellProps) {
               title="Light mode"
             >
               <Icon name="sun" className="size-3.5" />
-              <span>Light</span>
+              <span>{tr("Light")}</span>
             </button>
             <button
               type="button"
               aria-pressed={theme === "dark"}
               onClick={() => setTheme("dark")}
-              className={`flex-1 flex items-center justify-center gap-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-1 rounded-[4px] py-1 text-[11px] font-medium transition-colors cursor-pointer ${
                 theme === "dark"
                   ? "bg-white/15 text-nav-ink-hi font-semibold"
                   : "text-nav-ink hover:text-nav-ink-hi"
@@ -271,7 +319,7 @@ export function AppShell({ children }: AppShellProps) {
               title="Dark mode"
             >
               <Icon name="moon" className="size-3.5" />
-              <span>Dark</span>
+              <span>{tr("Dark")}</span>
             </button>
           </div>
         </div>
@@ -284,7 +332,7 @@ export function AppShell({ children }: AppShellProps) {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              aria-label="Open sidebar"
+              aria-label={tr("Open sidebar")}
               onClick={() => setDrawerOpen(true)}
               className="rounded-[6px] p-1.5 text-muted hover:bg-wash hover:text-ink lg:hidden"
             >
@@ -299,9 +347,9 @@ export function AppShell({ children }: AppShellProps) {
               <div className="flex items-center rounded-[6px] border border-line bg-surface p-0.5">
                 <button
                   type="button"
-                  aria-label="Previous day"
+                  aria-label={tr("Previous day")}
                   onClick={() => shift(-1)}
-                  className="rounded-[4px] p-1 text-muted hover:bg-wash hover:text-ink"
+                  className="rounded-[4px] p-1 text-muted hover:bg-wash hover:text-ink cursor-pointer"
                 >
                   <Icon name="chevron-left" className="size-4" />
                 </button>
@@ -313,7 +361,7 @@ export function AppShell({ children }: AppShellProps) {
                   <input
                     ref={dateInputRef}
                     type="date"
-                    aria-label="Choose date"
+                    aria-label={tr("Choose date")}
                     value={date}
                     onChange={(event) => {
                       if (event.target.value) setDate(event.target.value);
@@ -331,9 +379,9 @@ export function AppShell({ children }: AppShellProps) {
 
                 <button
                   type="button"
-                  aria-label="Next day"
+                  aria-label={tr("Next day")}
                   onClick={() => shift(1)}
-                  className="rounded-[4px] p-1 text-muted hover:bg-wash hover:text-ink"
+                  className="rounded-[4px] p-1 text-muted hover:bg-wash hover:text-ink cursor-pointer"
                 >
                   <Icon name="chevron-right" className="size-4" />
                 </button>
@@ -342,9 +390,9 @@ export function AppShell({ children }: AppShellProps) {
                   <button
                     type="button"
                     onClick={() => reset()}
-                    className="ml-1 rounded-[4px] px-2 py-0.5 text-[12px] font-medium text-accent hover:bg-accent-soft"
+                    className="ml-1 rounded-[4px] px-2 py-0.5 text-[12px] font-medium text-accent hover:bg-accent-soft cursor-pointer"
                   >
-                    {language === "bn" ? "আজ" : "Today"}
+                    {tr("Today")}
                   </button>
                 )}
               </div>
@@ -353,14 +401,15 @@ export function AppShell({ children }: AppShellProps) {
             {/* Cow Search Trigger */}
             <button
               type="button"
-              onClick={() => setSearchOpen(true)}
-              aria-label="Search cows"
+              onClick={() => {
+                setSearchOpen(true);
+                setActiveResultIdx(0);
+              }}
+              aria-label={tr("Search cows")}
               className="flex h-9 items-center gap-2 rounded-[6px] border border-line-strong bg-field px-2.5 text-[13px] text-muted hover:border-accent hover:text-ink transition-colors cursor-pointer"
             >
               <Icon name="search" className="size-4 text-muted" />
-              <span className="hidden sm:inline">
-                {language === "bn" ? "গরু খুঁজুন..." : "Search cows..."}
-              </span>
+              <span className="hidden sm:inline">{tr("Search cows...")}</span>
               <kbd className="hidden sm:inline rounded-[4px] border border-line bg-subtle px-1.5 py-0.5 text-[10px] font-medium text-muted">
                 Ctrl K
               </kbd>
@@ -372,42 +421,106 @@ export function AppShell({ children }: AppShellProps) {
         <main id="main-content">{children}</main>
       </div>
 
-      {/* Search Modal (Stub dialog) */}
+      {/* Global Cow Search Modal */}
       {searchOpen && (
         <div
           role="presentation"
           onClick={(event) => {
             if (event.target === event.currentTarget) setSearchOpen(false);
           }}
-          className="fixed inset-0 z-50 flex items-start justify-center bg-overlay p-4 pt-[16vh]"
+          className="fixed inset-0 z-50 flex items-start justify-center bg-overlay p-4 pt-[12vh]"
         >
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Search cows"
-            className="w-full max-w-xl rounded-[8px] border border-line bg-surface shadow-overlay overflow-hidden"
+            aria-label={tr("Search cows")}
+            className="w-full max-w-xl rounded-[8px] border border-line bg-surface text-ink shadow-overlay overflow-hidden"
           >
             <div className="flex items-center gap-3 border-b border-line px-4 py-3">
-              <Icon name="search" className="size-4.5 text-muted" />
+              <Icon name="search" className="size-4.5 text-muted shrink-0" />
               <input
                 ref={searchInput}
                 type="search"
-                placeholder={language === "bn" ? "ট্যাগ বা নাম দিয়ে খুঁজুন..." : "Search by cow tag or name..."}
+                value={searchTerm}
+                onChange={(event) => {
+                  setSearchTerm(event.target.value);
+                  setActiveResultIdx(0);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setActiveResultIdx((idx) =>
+                      searchResults.length ? (idx + 1) % searchResults.length : 0
+                    );
+                  } else if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setActiveResultIdx((idx) =>
+                      searchResults.length
+                        ? (idx - 1 + searchResults.length) % searchResults.length
+                        : 0
+                    );
+                  } else if (event.key === "Enter" && searchResults[activeResultIdx]) {
+                    event.preventDefault();
+                    openCowProfile(searchResults[activeResultIdx].cow_id);
+                  }
+                }}
+                placeholder={tr("Search by cow tag, breed, shed, or category...")}
                 className="h-9 flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-muted"
               />
               <button
                 type="button"
                 onClick={() => setSearchOpen(false)}
-                className="rounded-[4px] border border-line bg-subtle px-2 py-1 text-[11px] font-medium text-muted hover:text-ink"
+                className="rounded-[4px] border border-line bg-subtle px-2 py-1 text-[11px] font-medium text-muted hover:text-ink cursor-pointer"
               >
                 ESC
               </button>
             </div>
-            <p className="px-4 py-5 text-[13px] text-muted">
-              {language === "bn"
-                ? "গরু অনুসন্ধান শীঘ্রই যুক্ত হবে।"
-                : "Cow search will be connected here."}
-            </p>
+
+            <div className="max-h-80 overflow-y-auto divide-y divide-line">
+              {searchCowsQuery.isLoading ? (
+                <p className="px-4 py-6 text-center text-[13px] text-muted">
+                  {tr("Loading cows...")}
+                </p>
+              ) : searchResults.length === 0 ? (
+                <p className="px-4 py-6 text-center text-[13px] text-muted">
+                  {tr("No matching cows found.")}
+                </p>
+              ) : (
+                searchResults.map((cow, index) => {
+                  const selected = index === activeResultIdx;
+                  return (
+                    <button
+                      key={cow.cow_id}
+                      type="button"
+                      onMouseEnter={() => setActiveResultIdx(index)}
+                      onClick={() => openCowProfile(cow.cow_id)}
+                      className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer ${
+                        selected ? "bg-wash" : "hover:bg-wash"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-[13.5px] font-semibold text-ink">
+                          {cow.current_tag_number}
+                        </p>
+                        <p className="truncate text-[12px] text-muted">
+                          {[
+                            cow.category ? enumLabel(cow.category) : null,
+                            cow.cow_type || null,
+                            cow.breed ? enumLabel(cow.breed) : null,
+                            cow.warehouse_name || null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      </div>
+                      <Badge tone={statusTone(cow.is_archived ? "archived" : cow.status)}>
+                        {enumLabel(cow.is_archived ? "archived" : cow.status)}
+                      </Badge>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -141,7 +141,7 @@ export function EditProfilePanel({
           >
             <option value="dairy">Dairy</option>
             <option value="beef">Beef</option>
-            <option value="duel-purpose">Duel-purpose</option>
+            <option value="duel-purpose">Dual-purpose</option>
           </select>
         </label>
         <label className={ui.label}>

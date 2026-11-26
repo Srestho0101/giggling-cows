@@ -23,10 +23,19 @@ export function shiftIsoDate(iso: string, days: number): string {
 
 export function formatIsoDate(iso: string, locale: string = "en-GB"): string {
   if (!iso) return "—";
+  const m = iso.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const out = `${m[3]}/${m[2]}/${m[1]}`;
+    if (locale.startsWith("bn")) {
+      const bn = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
+      return out.replace(/\d/g, (d) => bn[Number(d)] ?? d);
+    }
+    return out;
+  }
   const date = new Date(`${iso}T00:00:00Z`);
   return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
     timeZone: "UTC",
   }).format(date);

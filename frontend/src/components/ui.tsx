@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useRef, useState } from "react";
+import { dmyToIso, isoToDmy } from "@/lib/format";
 
 export const ui = {
   input:
@@ -20,7 +21,7 @@ export type BtnSize = "sm" | "md";
 
 export function btn(variant: BtnVariant = "primary", size: BtnSize = "md"): string {
   const base =
-    "inline-flex items-center justify-center gap-1.5 rounded-[6px] font-medium transition-colors cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 rounded-[6px] font-medium transition-colors cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed";
 
   const sizeClass = size === "sm" ? "h-8 px-2.5 text-[12px]" : "h-9 px-3.5 text-[13px]";
 
@@ -153,6 +154,107 @@ export function Tabs({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+export function DateInput({
+  value,
+  onChange,
+  name,
+  id,
+  required,
+  disabled,
+  min,
+  max,
+  ariaLabel,
+  ariaInvalid,
+  className = "",
+  placeholder = "DD/MM/YYYY",
+}: {
+  value: string;
+  onChange: (isoDate: string) => void;
+  name?: string;
+  id?: string;
+  required?: boolean;
+  disabled?: boolean;
+  min?: string;
+  max?: string;
+  ariaLabel?: string;
+  ariaInvalid?: boolean;
+  className?: string;
+  placeholder?: string;
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+  const displayValue = draft !== null ? draft : isoToDmy(value);
+
+  return (
+    <div className="relative flex items-center">
+      {name ? <input type="hidden" name={name} value={value} /> : null}
+      <input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        required={required}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-invalid={ariaInvalid}
+        placeholder={placeholder}
+        value={displayValue}
+        onChange={(event) => {
+          const text = event.target.value;
+          setDraft(text);
+          if (!text.trim()) {
+            onChange("");
+            return;
+          }
+          const parsed = dmyToIso(text);
+          if (parsed) {
+            onChange(parsed);
+          }
+        }}
+        onBlur={() => {
+          setDraft(null);
+        }}
+        className={`${ui.input} pr-8 tabular-nums ${className}`}
+      />
+      <div className="absolute right-1.5 flex items-center">
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          aria-label="Open calendar"
+          onClick={() => {
+            try {
+              pickerRef.current?.showPicker();
+            } catch {
+              pickerRef.current?.click();
+            }
+          }}
+          className="rounded-[4px] p-1 text-muted hover:bg-wash hover:text-ink disabled:opacity-40 cursor-pointer"
+        >
+          <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <rect x="2" y="3" width="12" height="11" rx="1.5" />
+            <path d="M5 1.5v3M11 1.5v3M2 6.5h12" />
+          </svg>
+        </button>
+        <input
+          ref={pickerRef}
+          type="date"
+          tabIndex={-1}
+          aria-hidden="true"
+          disabled={disabled}
+          min={min}
+          max={max}
+          value={value}
+          onChange={(event) => {
+            setDraft(null);
+            onChange(event.target.value);
+          }}
+          className="sr-only"
+        />
+      </div>
     </div>
   );
 }

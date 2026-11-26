@@ -1,14 +1,6 @@
 import type { Metadata } from "next";
-import { Hind_Siliguri } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
-
-const hind = Hind_Siliguri({
-  subsets: ["bengali", "latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-  variable: "--font-hind",
-});
 
 export const metadata: Metadata = {
   title: "Cow Farm",
@@ -21,7 +13,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={hind.variable} data-scroll-behavior="smooth">
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         <script
           dangerouslySetInnerHTML={{

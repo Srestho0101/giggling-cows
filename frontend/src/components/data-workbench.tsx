@@ -4,8 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { apiRequest, ApiError } from "@/lib/api";
-import { Badge, btn, statusTone, ui } from "@/components/ui";
+import { ConfirmActionModal, type ConfirmModalConfig } from "@/components/confirm-modal";
+import { Badge, btn, DateInput, statusTone, ui } from "@/components/ui";
 import { SafeDataHistory } from "@/components/safe-data-history";
+import { isMoneyKey, isNumericKey } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
+import { todayInDhaka } from "@/components/workspace-date";
 
 export { Notice } from "@/components/ui";
 
@@ -15,7 +19,10 @@ export type FormField = {
   type?: "text" | "date" | "number" | "select" | "textarea" | "weekdays";
   required?: boolean;
   requiredOnCreate?: boolean;
+  editOnly?: boolean;
   placeholder?: string;
+  min?: string;
+  max?: string;
   options?: { value: string; label: string }[];
   sourcePath?: string;
   sourceValue?: string;
@@ -40,6 +47,7 @@ type LifecycleActions = {
 
 type DataWorkbenchProps = {
   title: string;
+  singularLabel?: string;
   description: string;
   path: string;
   columns: TableColumn[];
@@ -48,33 +56,40 @@ type DataWorkbenchProps = {
   onRows?: (rows: RecordRow[]) => void;
   emptyMessage?: string;
   rowHref?: (row: RecordRow) => string | undefined;
-  buildBody?: (values: Record<string, string>) => Record<string, unknown>;
+  buildBody?: (values: Record<string, string>, editing: RecordRow | null) => Record<string, unknown>;
+  hydrateEditValues?: (row: RecordRow) => Record<string, string>;
+  validateForm?: (
+    values: Record<string, string>,
+    editing: RecordRow | null
+  ) => { message?: string; fieldErrors?: Record<string, string> } | null;
   showCreate?: boolean;
   addLabel?: string;
   rowActions?: (row: RecordRow) => React.ReactNode;
   updatePath?: (row: RecordRow) => string;
   deletePath?: (row: RecordRow) => string;
   deleteLabel?: string;
-  onDelete?: (row: RecordRow) => void | Promise<void>;
+  deleteConfirmMode?: "confirm" | "reason";
+  deleteConfirmTitle?: string;
+  deleteConfirmDescription?: string;
+  onDelete?: (row: RecordRow, reason?: string) => void | Promise<void>;
   lifecycle?: LifecycleActions;
   refreshKey?: string | number;
+  invalidateKeys?: readonly (readonly unknown[])[];
 };
 
-const isNumericKey = (key: string) =>
-  /(amount|price|cost|salary|paid|balance|total|liters|weight|quantity|kg)$/i.test(key);
-
 const weekdays = [
-  { value: "0", label: "Monday" },
-  { value: "1", label: "Tuesday" },
-  { value: "2", label: "Wednesday" },
-  { value: "3", label: "Thursday" },
-  { value: "4", label: "Friday" },
-  { value: "5", label: "Saturday" },
-  { value: "6", label: "Sunday" },
+  { value: "0", label: "Monday", bn: "সোমবার" },
+  { value: "1", label: "Tuesday", bn: "মঙ্গলবার" },
+  { value: "2", label: "Wednesday", bn: "বুধবার" },
+  { value: "3", label: "Thursday", bn: "বৃহস্পতিবার" },
+  { value: "4", label: "Friday", bn: "শুক্রবার" },
+  { value: "5", label: "Saturday", bn: "শনিবার" },
+  { value: "6", label: "Sunday", bn: "রবিবার" },
 ];
 
 export function DataWorkbench({
   title,
+  singularLabel,
   description,
   path,
   columns,
@@ -84,20 +99,27 @@ export function DataWorkbench({
   emptyMessage = "No records yet.",
   rowHref,
   buildBody,
+  hydrateEditValues,
+  validateForm,
   showCreate = true,
   addLabel,
   rowActions,
   updatePath,
   deletePath,
   deleteLabel,
+  deleteConfirmMode,
+  deleteConfirmTitle,
+  deleteConfirmDescription,
   onDelete,
   lifecycle,
   refreshKey = 0,
+  invalidateKeys,
 }: DataWorkbenchProps) {
+  const { lang, tr, money, num, date: fmtDate, enumLabel, daysOnFarm } = useI18n();
   const [values, setValues] = useState<Record<string, string>>({});
   const [remoteOptions, setRemoteOptions] = useState<
     Record<string, { value: string; label: string }[]>
-  >( {});
+  >({});
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [error, setError] = useState("");
@@ -105,6 +127,8 @@ export function DataWorkbench({
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<RecordRow | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalConfig | null>(null);
+  const [todayMs] = useState(() => new Date(`${todayInDhaka()}T00:00:00Z`).getTime());
   const queryClient = useQueryClient();
 
   const sourceSignature = fields
@@ -112,21 +136,22 @@ export function DataWorkbench({
     .map((field) => `${field.sourcePath}:${field.sourceValue ?? "id"}:${field.sourceLabel ?? "name"}`)
     .join("|");
 
-  // Config arrays are often declared inline by a parent; the signature is their relevant stable identity.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const sourceFields = useMemo(
     () => fields.filter((field) => field.sourcePath),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [sourceSignature]
   );
 
   const effectiveQuery = [query, showInactive ? lifecycle?.includeQuery : ""].filter(Boolean).join("&");
-  const queryKey = useMemo(() => ["data-workbench", path, effectiveQuery, refreshKey] as const, [path, effectiveQuery, refreshKey]);
+  const queryKey = useMemo(
+    () => ["data-workbench", path, effectiveQuery, refreshKey] as const,
+    [path, effectiveQuery, refreshKey]
+  );
   const rowsQuery = useQuery({
     queryKey,
     queryFn: async () => {
       const data = await apiRequest<unknown>(effectiveQuery ? `${path}?${effectiveQuery}` : path);
-      const nextRows = Array.isArray(data) ? (data as RecordRow[]) : [];
-      return nextRows;
+      return Array.isArray(data) ? (data as RecordRow[]) : [];
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
@@ -134,10 +159,12 @@ export function DataWorkbench({
 
   const rows = useMemo(() => rowsQuery.data ?? [], [rowsQuery.data]);
   const loading = rowsQuery.isLoading;
+
   const visibleFields = fields.filter(
     (field) =>
-      !field.showWhen ||
-      field.showWhen.equals.includes(values[field.showWhen.field] ?? "")
+      (!field.editOnly || editing !== null) &&
+      (!field.showWhen ||
+        field.showWhen.equals.includes(values[field.showWhen.field] ?? field.defaultValue ?? ""))
   );
 
   useEffect(() => {
@@ -147,11 +174,17 @@ export function DataWorkbench({
   const loadRows = useCallback(async () => {
     setError("");
     try {
-      await queryClient.invalidateQueries({ queryKey, refetchType: "active" });
+      await queryClient.invalidateQueries({ queryKey: ["data-workbench", path] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      if (invalidateKeys?.length) {
+        await Promise.all(
+          invalidateKeys.map((key) => queryClient.invalidateQueries({ queryKey: key }))
+        );
+      }
     } catch (cause) {
       setError(errorText(cause));
     }
-  }, [queryClient, queryKey]);
+  }, [queryClient, path, invalidateKeys]);
 
   useEffect(() => {
     const sources = [
@@ -197,46 +230,53 @@ export function DataWorkbench({
     setError("");
     setFieldErrors({});
     setNotice("");
-    let body: Record<string, unknown>;
-    if (buildBody) {
-      const nextErrors: Record<string, string> = {};
-      for (const field of visibleFields) {
-        const value = (values[field.name] ?? field.defaultValue ?? "").trim();
-        if (!value && (field.required || (field.requiredOnCreate && !editing))) {
-          nextErrors[field.name] = `${field.label} is required.`;
-        }
+
+    const nextErrors: Record<string, string> = {};
+    for (const field of visibleFields) {
+      const value = (values[field.name] ?? field.defaultValue ?? "").trim();
+      if (!value && (field.required || (field.requiredOnCreate && !editing))) {
+        nextErrors[field.name] = `${tr(field.label)} ${tr("is required.", "প্রয়োজন।")}`;
       }
-      if (Object.keys(nextErrors).length > 0) {
-        setFieldErrors(nextErrors);
-        setError("Please fill in all required fields highlighted below.");
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      setError(tr("Please fill in all required fields highlighted below."));
+      setSaving(false);
+      return;
+    }
+
+    if (validateForm) {
+      const customValidation = validateForm(values, editing);
+      if (customValidation) {
+        if (customValidation.fieldErrors) setFieldErrors(customValidation.fieldErrors);
+        setError(
+          customValidation.message ?? tr("Please fill in all required fields highlighted below.")
+        );
         setSaving(false);
         return;
       }
-      body = buildBody(values);
+    }
+
+    let body: Record<string, unknown>;
+    if (buildBody) {
+      body = buildBody(values, editing);
     } else {
       body = {};
-      const nextErrors: Record<string, string> = {};
       for (const field of visibleFields) {
         const value = (values[field.name] ?? field.defaultValue ?? "").trim();
         if (field.type === "weekdays") {
           body[field.name] = value ? value.split(",").filter(Boolean).map(Number) : [];
           continue;
         }
-        if (!value) {
-          if (field.required || (field.requiredOnCreate && !editing)) {
-            nextErrors[field.name] = `${field.label} is required.`;
-          }
-          continue;
+        if (!value) continue;
+        if (field.name === "is_archived" || field.name === "gives_milk") {
+          body[field.name] = value === "true";
+        } else {
+          body[field.name] = field.type === "number" ? Number(value) : value;
         }
-        body[field.name] = field.type === "number" ? Number(value) : value;
-      }
-      if (Object.keys(nextErrors).length > 0) {
-        setFieldErrors(nextErrors);
-        setError("Please fill in all required fields highlighted below.");
-        setSaving(false);
-        return;
       }
     }
+
     try {
       await apiRequest(editing && updatePath ? updatePath(editing) : path, {
         method: editing ? "PATCH" : "POST",
@@ -245,7 +285,7 @@ export function DataWorkbench({
       setValues({});
       setFieldErrors({});
       setEditing(null);
-      setNotice(editing ? "Changes saved." : "Saved successfully.");
+      setNotice(editing ? tr("Changes saved.") : tr("Saved successfully."));
       setFormOpen(false);
       await loadRows();
     } catch (cause) {
@@ -257,47 +297,73 @@ export function DataWorkbench({
 
   function startEdit(row: RecordRow) {
     setEditing(row);
-    setValues(
-      Object.fromEntries(
-        fields.map((field) => [field.name, row[field.name] == null ? "" : String(row[field.name])])
-      )
+    const baseValues = Object.fromEntries(
+      fields.map((field) => [field.name, row[field.name] == null ? "" : String(row[field.name])])
     );
+    setValues(hydrateEditValues ? { ...baseValues, ...hydrateEditValues(row) } : baseValues);
     setNotice("");
     setError("");
     setFieldErrors({});
     setFormOpen(true);
   }
 
-  async function handleDelete(row: RecordRow) {
+  const itemNoun = singularLabel ?? title;
+
+  function requestDelete(row: RecordRow) {
     setError("");
-    try {
-      if (onDelete) {
-        await onDelete(row);
-        await loadRows();
-        return;
-      }
-      if (deletePath) {
-        if (!window.confirm(`Permanently remove this ${title.replace(/s$/, "").toLowerCase()}?`)) return;
-        await apiRequest(deletePath(row), { method: "DELETE" });
-        await loadRows();
-      }
-    } catch (cause) {
-      setError(errorText(cause));
-    }
+    const mode = deleteConfirmMode ?? (deleteLabel === "Void" ? "reason" : "confirm");
+    const labelText = deleteLabel ?? tr("Delete");
+    setConfirmModal({
+      title:
+        deleteConfirmTitle ??
+        (mode === "reason"
+          ? tr(`Void ${itemNoun.toLowerCase()}?`, `${tr(itemNoun)} বাতিল করবেন?`)
+          : deleteLabel === "Archive"
+            ? tr(`Archive ${itemNoun.toLowerCase()}?`, `${tr(itemNoun)} আর্কাইভ করবেন?`)
+            : tr(`Remove ${itemNoun.toLowerCase()}?`, `${tr(itemNoun)} অপসারণ করবেন?`)),
+      description: deleteConfirmDescription,
+      mode,
+      confirmLabel: tr(labelText),
+      tone: "danger",
+      reasonLabel: tr("Reason for voiding"),
+      onConfirm: async (reason) => {
+        if (onDelete) {
+          await onDelete(row, reason);
+          setNotice(
+            mode === "reason"
+              ? tr("Record voided.", "রেকর্ড বাতিল করা হয়েছে।")
+              : deleteLabel === "Archive"
+                ? tr("Record archived.")
+                : tr("Record removed.", "রেকর্ড অপসারণ করা হয়েছে।")
+          );
+          await loadRows();
+          return;
+        }
+        if (deletePath) {
+          await apiRequest(deletePath(row), { method: "DELETE" });
+          setNotice(tr("Record removed.", "রেকর্ড অপসারণ করা হয়েছে।"));
+          await loadRows();
+        }
+      },
+    });
   }
 
-  async function archiveRow(row: RecordRow) {
+  function requestArchive(row: RecordRow) {
     if (!lifecycle?.archiveBody || !updatePath) return;
-    if (!window.confirm(`Archive this ${title.replace(/s$/, "").toLowerCase()}?`)) return;
-    setError("");
-    setNotice("");
-    try {
-      await apiRequest(updatePath(row), { method: "PATCH", body: lifecycle.archiveBody(row) });
-      setNotice("Record archived.");
-      await loadRows();
-    } catch (cause) {
-      setError(errorText(cause));
-    }
+    setConfirmModal({
+      title: tr(`Archive ${itemNoun.toLowerCase()}?`, `${tr(itemNoun)} আর্কাইভ করবেন?`),
+      mode: "confirm",
+      confirmLabel: tr(lifecycle.archiveLabel ?? "Archive"),
+      tone: "danger",
+      onConfirm: async () => {
+        await apiRequest(updatePath(row), {
+          method: "PATCH",
+          body: lifecycle.archiveBody!(row),
+        });
+        setNotice(tr("Record archived."));
+        await loadRows();
+      },
+    });
   }
 
   async function restoreRow(row: RecordRow) {
@@ -306,29 +372,79 @@ export function DataWorkbench({
     setNotice("");
     try {
       await apiRequest(updatePath(row), { method: "PATCH", body: lifecycle.restoreBody(row) });
-      setNotice("Record restored.");
+      setNotice(tr("Record restored."));
       await loadRows();
     } catch (cause) {
       setError(errorText(cause));
     }
   }
 
-  const defaultAddLabel = `+ Add ${title.replace(/s$/, "")}`;
-  const toggleLabel = formOpen ? "Close form" : addLabel ?? defaultAddLabel;
+  function formatCell(value: unknown, key: string, row: RecordRow): string {
+    if (key === "days_on_farm") {
+      if (value !== null && value !== undefined && value !== "" && !Number.isNaN(Number(value))) {
+        return daysOnFarm(value);
+      }
+      if (typeof row.acquisition_date === "string" && row.acquisition_date) {
+        const acqMs = new Date(`${row.acquisition_date}T00:00:00Z`).getTime();
+        if (!Number.isNaN(acqMs)) {
+          return daysOnFarm(Math.max(0, Math.round((todayMs - acqMs) / 86_400_000)));
+        }
+      }
+      return "—";
+    }
+    if (value === null || value === undefined || value === "") return "—";
+    if (typeof value === "boolean") return value ? tr("Yes") : tr("No");
+    if (key === "weekly_holidays" && Array.isArray(value)) {
+      return value.length
+        ? value
+            .map((day) => {
+              const wd = weekdays[Number(day)];
+              return wd ? (lang === "bn" ? wd.bn : wd.label) : String(day);
+            })
+            .join(", ")
+        : tr("None");
+    }
+    if (typeof value === "object") return Array.isArray(value) ? `${value.length} items` : "—";
+    if (/_date$/i.test(key) || key === "pay_month") {
+      return fmtDate(String(value));
+    }
+    if (isMoneyKey(key) && !Number.isNaN(Number(value))) {
+      return money(value);
+    }
+    if (isNumericKey(key) && !Number.isNaN(Number(value))) {
+      return num(value);
+    }
+    if (
+      /^(category|breed|sex|status|outcome|decision|customer_type|charge_type|record_type|method|price_basis|housing_type|category_group|acquisition_type)$/i.test(
+        key
+      )
+    ) {
+      return enumLabel(value);
+    }
+    return String(value).replaceAll("_", " ");
+  }
+
+  const defaultAddLabel = tr(`+ Add ${itemNoun}`, `+ ${tr(itemNoun)} যোগ করুন`);
+  const toggleLabel = formOpen ? tr("Close form") : addLabel ? tr(addLabel) : defaultAddLabel;
+  const hasActionsCol = Boolean(rowActions || updatePath || deletePath || onDelete || lifecycle);
 
   return (
     <section className="rounded-[8px] border border-line bg-surface p-4 space-y-3.5">
       {/* Header Row */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
-          <p className="mt-0.5 text-[12px] text-muted">{description}</p>
+          <h2 className="text-[15px] font-semibold text-ink">{tr(title)}</h2>
+          <p className="mt-0.5 text-[12px] text-muted">{tr(description)}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {lifecycle ? (
-            <label className="flex items-center gap-2 text-xs text-muted">
-              <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
-              Show archived and voided
+            <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={(event) => setShowInactive(event.target.checked)}
+              />
+              {tr("Show archived and voided")}
             </label>
           ) : null}
           <button
@@ -336,7 +452,7 @@ export function DataWorkbench({
             onClick={() => void loadRows()}
             className={btn("secondary", "sm")}
           >
-            Refresh
+            {tr("Refresh")}
           </button>
           {showCreate && (
             <button
@@ -375,7 +491,9 @@ export function DataWorkbench({
           className="@container rounded-[6px] border border-line bg-subtle p-4 space-y-3.5"
         >
           <h3 className="text-[13px] font-semibold text-ink">
-            {editing ? `Edit ${title.replace(/s$/, "")}` : `New ${title.replace(/s$/, "")}`}
+            {editing
+              ? tr(`Edit ${itemNoun}`, `${tr(itemNoun)} সম্পাদনা`)
+              : tr(`New ${itemNoun}`, `নতুন ${tr(itemNoun)}`)}
           </h3>
           <div className="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-3">
             {visibleFields.map((field) => {
@@ -388,25 +506,35 @@ export function DataWorkbench({
                   .filter(Boolean);
                 return (
                   <fieldset key={field.name} className="text-[12px] font-medium text-ink @lg:col-span-2 @3xl:col-span-3">
-                    <legend className="mb-2">{field.label}</legend>
+                    <legend className="mb-2">{tr(field.label)}</legend>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
                       {weekdays.map((day) => (
-                        <label key={day.value} className="flex items-center gap-2 rounded-[5px] border border-line bg-surface px-2.5 py-2 font-normal">
+                        <label key={day.value} className="flex items-center gap-2 rounded-[5px] border border-line bg-surface px-2.5 py-2 font-normal cursor-pointer">
                           <input
                             type="checkbox"
                             checked={selectedDays.includes(day.value)}
-                            onChange={(event) => setValues((current) => {
-                              const selected = new Set((current[field.name] ?? "").split(",").filter(Boolean));
-                              if (event.target.checked) selected.add(day.value);
-                              else selected.delete(day.value);
-                              return { ...current, [field.name]: [...selected].sort((a, b) => Number(a) - Number(b)).join(",") };
-                            })}
+                            onChange={(event) =>
+                              setValues((current) => {
+                                const selected = new Set((current[field.name] ?? "").split(",").filter(Boolean));
+                                if (event.target.checked) selected.add(day.value);
+                                else selected.delete(day.value);
+                                return {
+                                  ...current,
+                                  [field.name]: [...selected].sort((a, b) => Number(a) - Number(b)).join(","),
+                                };
+                              })
+                            }
                           />
-                          {day.label}
+                          {lang === "bn" ? day.bn : day.label}
                         </label>
                       ))}
                     </div>
-                    <p className="mt-1.5 text-[11px] font-normal text-muted">Choose this worker’s regular weekly holidays. Holiday dates are excluded from attendance and salary deductions.</p>
+                    <p className="mt-1.5 text-[11px] font-normal text-muted">
+                      {tr(
+                        "Choose this worker’s regular weekly holidays. Holiday dates are excluded from attendance and salary deductions.",
+                        "কর্মীর সাপ্তাহিক ছুটির দিন নির্বাচন করুন। ছুটির দিন উপস্থিতি ও বেতন কর্তন থেকে বাদ থাকবে।"
+                      )}
+                    </p>
                   </fieldset>
                 );
               }
@@ -418,7 +546,7 @@ export function DataWorkbench({
                   }`}
                 >
                   <span className="block mb-1">
-                    {field.label}
+                    {tr(field.label)}
                     {required && <span className="ml-1 text-warn">*</span>}
                   </span>
                   {field.type === "select" ? (
@@ -446,15 +574,25 @@ export function DataWorkbench({
                               }
                             }
                           }
+                          if (field.name === "source_mode") {
+                            if (event.target.value === "sire") {
+                              next.semen_code = "";
+                              next.semen_provider = "";
+                            } else {
+                              next.sire_id = "";
+                            }
+                          }
                           return next;
                         });
                       }}
                       className={`${ui.select} ${fieldErrors[field.name] ? "border-warn" : ""}`}
                     >
-                      <option value="">Choose {field.label.toLowerCase()}</option>
+                      <option value="">
+                        {tr(`Choose ${field.label.toLowerCase()}`, `${tr(field.label)} নির্বাচন করুন`)}
+                      </option>
                       {fieldOptions.map((option) => (
                         <option key={option.value} value={option.value}>
-                          {option.label}
+                          {field.options ? tr(option.label) : option.label}
                         </option>
                       ))}
                     </select>
@@ -479,10 +617,39 @@ export function DataWorkbench({
                       }}
                       className={`${ui.textarea} ${fieldErrors[field.name] ? "border-warn" : ""}`}
                     />
+                  ) : field.type === "date" ? (
+                    <DateInput
+                      required={required}
+                      min={field.min}
+                      max={field.max}
+                      ariaInvalid={Boolean(fieldErrors[field.name])}
+                      value={values[field.name] ?? field.defaultValue ?? ""}
+                      onChange={(nextIso) => {
+                        setFieldErrors((prev) => {
+                          if (!prev[field.name]) return prev;
+                          const copy = { ...prev };
+                          delete copy[field.name];
+                          return copy;
+                        });
+                        setValues((current) => {
+                          const next = { ...current, [field.name]: nextIso };
+                          if (
+                            field.name === "birth_date" &&
+                            current.acquisition_type === "born_on_farm" &&
+                            nextIso
+                          ) {
+                            next.acquisition_date = nextIso;
+                          }
+                          return next;
+                        });
+                      }}
+                      className={fieldErrors[field.name] ? "border-warn" : ""}
+                    />
                   ) : (
                     <input
                       type={field.type ?? "text"}
-                      min={field.type === "number" ? "0" : undefined}
+                      min={field.min ?? (field.type === "number" ? "0" : undefined)}
+                      max={field.max}
                       step={field.step ?? (field.type === "number" ? "0.01" : undefined)}
                       required={required}
                       aria-invalid={Boolean(fieldErrors[field.name])}
@@ -495,17 +662,10 @@ export function DataWorkbench({
                           delete copy[field.name];
                           return copy;
                         });
-                        setValues((current) => {
-                          const next = { ...current, [field.name]: event.target.value };
-                          if (
-                            field.name === "birth_date" &&
-                            current.acquisition_type === "born_on_farm" &&
-                            event.target.value
-                          ) {
-                            next.acquisition_date = event.target.value;
-                          }
-                          return next;
-                        });
+                        setValues((current) => ({
+                          ...current,
+                          [field.name]: event.target.value,
+                        }));
                       }}
                       className={`${ui.input} ${fieldErrors[field.name] ? "border-warn" : ""}`}
                     />
@@ -531,10 +691,10 @@ export function DataWorkbench({
               }}
               className={btn("secondary", "sm")}
             >
-              Cancel
+              {tr("Cancel")}
             </button>
             <button disabled={saving} className={btn("primary", "sm")}>
-              {saving ? "Saving…" : editing ? "Save changes" : "Save record"}
+              {saving ? tr("Saving…") : editing ? tr("Save changes") : tr("Save record")}
             </button>
           </div>
         </form>
@@ -545,19 +705,27 @@ export function DataWorkbench({
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-line bg-subtle">
-              {columns.map((column) => (
-                <th
-                  key={column.key}
-                  className={`px-3 py-2.5 text-[12px] font-medium text-muted whitespace-nowrap ${
-                    isNumericKey(column.key) ? "text-right" : ""
-                  }`}
-                >
-                  {column.label}
-                </th>
-              ))}
-              {(rowActions || updatePath || deletePath || onDelete || lifecycle) && (
-                <th className="sticky right-0 z-10 border-l border-line bg-subtle px-3 py-2.5 text-[12px] font-medium text-muted whitespace-nowrap text-right">
-                  Actions
+              {columns.map((column) => {
+                const minWidthClass =
+                  column.key === "status"
+                    ? "min-w-[105px]"
+                    : /^(void_reason|description|notes)$/i.test(column.key)
+                      ? "min-w-[140px]"
+                      : "";
+                return (
+                  <th
+                    key={column.key}
+                    className={`px-3.5 py-2.5 text-[12px] font-medium text-muted whitespace-nowrap ${minWidthClass} ${
+                      isNumericKey(column.key) ? "text-right" : ""
+                    }`}
+                  >
+                    {tr(column.label)}
+                  </th>
+                );
+              })}
+              {hasActionsCol && (
+                <th className="sticky right-0 z-10 border-l border-line bg-subtle px-3.5 py-2.5 text-[12px] font-medium text-muted whitespace-nowrap text-right shadow-[-6px_0_10px_-8px_rgba(0,0,0,0.2)]">
+                  {tr("Actions")}
                 </th>
               )}
             </tr>
@@ -567,12 +735,12 @@ export function DataWorkbench({
               Array.from({ length: 4 }).map((_, index) => (
                 <tr key={`skeleton-${index}`} className="animate-pulse">
                   {columns.map((column) => (
-                    <td key={column.key} className="px-3 py-2.5 whitespace-nowrap">
+                    <td key={column.key} className="px-3.5 py-2.5 whitespace-nowrap">
                       <div className="h-4 w-20 rounded-[4px] bg-line/60" />
                     </td>
                   ))}
-                  {(rowActions || updatePath || deletePath || onDelete || lifecycle) && (
-                    <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                  {hasActionsCol && (
+                    <td className="px-3.5 py-2.5 whitespace-nowrap text-right">
                       <div className="ml-auto h-4 w-14 rounded-[4px] bg-line/60" />
                     </td>
                   )}
@@ -581,10 +749,10 @@ export function DataWorkbench({
             ) : rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length + (rowActions || updatePath || deletePath || onDelete || lifecycle ? 1 : 0)}
+                  colSpan={columns.length + (hasActionsCol ? 1 : 0)}
                   className="px-4 py-10 text-center text-[13px] text-muted"
                 >
-                  {emptyMessage}
+                  {tr(emptyMessage)}
                 </td>
               </tr>
             ) : (
@@ -600,6 +768,9 @@ export function DataWorkbench({
                     row.invoice_id ??
                     row.worker_id ??
                     row.payment_id ??
+                    row.advance_id ??
+                    row.feeding_id ??
+                    row.stock_entry_id ??
                     index
                 );
                 return (
@@ -611,23 +782,29 @@ export function DataWorkbench({
                       const isBadgeCol =
                         /^(status|outcome|decision)$/i.test(column.key) ||
                         column.key === "is_profitable";
+                      const minWidthClass =
+                        column.key === "status"
+                          ? "min-w-[105px]"
+                          : /^(void_reason|description|notes)$/i.test(column.key)
+                            ? "min-w-[140px]"
+                            : "";
 
                       let content: React.ReactNode;
                       if (column.key === "is_profitable") {
                         const profitable = Boolean(rawValue);
                         content = (
                           <Badge tone={profitable ? "good" : "bad"}>
-                            {profitable ? "Profitable" : "Not profitable"}
+                            {profitable ? tr("Profitable") : tr("Not profitable", "লাভজনক নয়")}
                           </Badge>
                         );
                       } else if (isBadgeCol && rawValue != null && rawValue !== "") {
                         content = (
                           <Badge tone={statusTone(rawValue)}>
-                            {formatCell(rawValue, column.key)}
+                            {formatCell(rawValue, column.key, row)}
                           </Badge>
                         );
                       } else {
-                        const formatted = formatCell(rawValue, column.key);
+                        const formatted = formatCell(rawValue, column.key, row);
                         if (columnIndex === 0 && href) {
                           content = (
                             <Link href={href} className="font-medium text-accent hover:underline">
@@ -642,7 +819,7 @@ export function DataWorkbench({
                       return (
                         <td
                           key={column.key}
-                          className={`px-3 py-2.5 whitespace-nowrap text-ink ${
+                          className={`px-3.5 py-2.5 whitespace-nowrap text-ink ${minWidthClass} ${
                             numeric ? "text-right tabular-nums font-mono-normal" : ""
                           }`}
                         >
@@ -650,8 +827,8 @@ export function DataWorkbench({
                         </td>
                       );
                     })}
-                    {(rowActions || updatePath || deletePath || onDelete || lifecycle) && (
-                      <td className="sticky right-0 z-10 border-l border-line bg-surface group-hover:bg-wash px-3 py-2.5 whitespace-nowrap text-right transition-colors">
+                    {hasActionsCol && (
+                      <td className="sticky right-0 z-10 border-l border-line bg-surface px-3.5 py-2.5 whitespace-nowrap text-right shadow-[-6px_0_10px_-8px_rgba(0,0,0,0.2)]">
                         <div className="flex items-center justify-end gap-2.5 text-[12px]">
                           {rowActions?.(row)}
                           {lifecycle && lifecycle.isInactive(row) && updatePath ? (
@@ -660,16 +837,16 @@ export function DataWorkbench({
                               onClick={() => void restoreRow(row)}
                               className="font-medium text-accent hover:underline cursor-pointer"
                             >
-                              {lifecycle.restoreLabel?.(row) ?? "Restore"}
+                              {tr(lifecycle.restoreLabel?.(row) ?? "Restore")}
                             </button>
                           ) : null}
                           {lifecycle && lifecycle.archiveBody && !lifecycle.isInactive(row) && updatePath ? (
                             <button
                               type="button"
-                              onClick={() => void archiveRow(row)}
+                              onClick={() => requestArchive(row)}
                               className="font-medium text-muted hover:underline cursor-pointer"
                             >
-                              {lifecycle.archiveLabel ?? "Archive"}
+                              {tr(lifecycle.archiveLabel ?? "Archive")}
                             </button>
                           ) : null}
                           {updatePath && (
@@ -678,16 +855,16 @@ export function DataWorkbench({
                               onClick={() => startEdit(row)}
                               className="font-medium text-accent hover:underline cursor-pointer"
                             >
-                              Edit
+                              {tr("Edit")}
                             </button>
                           )}
                           {(deletePath || (onDelete && !(lifecycle?.isInactive(row)))) && (
                             <button
                               type="button"
-                              onClick={() => void handleDelete(row)}
+                              onClick={() => requestDelete(row)}
                               className="font-medium text-warn hover:underline cursor-pointer"
                             >
-                              {deleteLabel ?? "Delete"}
+                              {tr(deleteLabel ?? "Delete")}
                             </button>
                           )}
                           {lifecycle ? (
@@ -704,6 +881,8 @@ export function DataWorkbench({
                                     row.seed_date ??
                                     row.record_date ??
                                     row.expense_date ??
+                                    row.feeding_date ??
+                                    row.advance_date ??
                                     ""
                                 ).trim() || undefined
                               }
@@ -719,6 +898,8 @@ export function DataWorkbench({
           </tbody>
         </table>
       </div>
+
+      <ConfirmActionModal config={confirmModal} onClose={() => setConfirmModal(null)} />
     </section>
   );
 }
@@ -728,29 +909,4 @@ function errorText(cause: unknown) {
   if (cause instanceof TypeError)
     return "Could not reach the API. Check that the backend is running.";
   return "Something went wrong. Your form data is still here; please try again.";
-}
-
-function formatCell(value: unknown, key: string) {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (key === "days_on_farm" && !Number.isNaN(Number(value))) {
-    return `${value} d`;
-  }
-  if (key === "category") {
-    const s = String(value);
-    if (s === "dairy") return "Dairy";
-    if (s === "beef") return "Beef";
-    if (s === "duel-purpose") return "Duel-purpose";
-  }
-  if (key === "weekly_holidays" && Array.isArray(value)) {
-    return value.length ? value.map((day) => weekdays[Number(day)]?.label ?? String(day)).join(", ") : "None";
-  }
-  if (typeof value === "object") return Array.isArray(value) ? `${value.length} items` : "—";
-  if (key === "breed") {
-    return ({ deshi: "Deshi", friesian: "Friesian", other: "Other / unknown" } as Record<string, string>)[String(value)] ?? String(value);
-  }
-  if (isNumericKey(key) && !Number.isNaN(Number(value))) {
-    return new Intl.NumberFormat("en-BD", { maximumFractionDigits: 2 }).format(Number(value));
-  }
-  return String(value).replaceAll("_", " ");
 }
