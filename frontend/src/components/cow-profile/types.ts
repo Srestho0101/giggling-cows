@@ -21,16 +21,6 @@ export type WarehouseHistoryItem = {
   reason?: string | null;
 };
 
-export type TagHistoryItem = {
-  history_id: string;
-  cow_id: string;
-  tag_number: string;
-  tag_type: string;
-  assigned_date: string;
-  removed_date?: string | null;
-  reason?: string | null;
-};
-
 export type OffspringItem = {
   cow_id: string;
   current_tag_number: string;
@@ -41,6 +31,22 @@ export type OffspringItem = {
   status: string;
 };
 
+export type CowSaleRecord = {
+  sale_date?: string | null;
+  sale_price?: string | number | null;
+  buyer_name?: string | null;
+  buyer_phone?: string | null;
+  buyer_address?: string | null;
+  buyer_type?: string | null;
+  customer_id?: string | null;
+  invoice_id?: string | null;
+  invoice_number?: string | null;
+  invoice_status?: string | null;
+  paid_amount?: string | number | null;
+  outstanding_balance?: string | number | null;
+  notes?: string | null;
+};
+
 export type CowDetail = {
   cow_id: string;
   current_tag_number: string;
@@ -48,6 +54,9 @@ export type CowDetail = {
   category: string;
   cow_type?: string | null;
   breed?: "deshi" | "friesian" | "other" | null;
+  color?: string | null;
+  marking?: string | null;
+  profile_picture_url?: string | null;
   birth_date?: string | null;
   acquisition_type: "born_on_farm" | "bought_from_supplier" | "bought_from_bazar";
   acquisition_date: string;
@@ -63,16 +72,22 @@ export type CowDetail = {
   status: "active" | "sold" | "deceased" | "archived";
   gives_milk: boolean;
   milking_sessions: MilkSession[];
+  sold_date?: string | null;
+  sale_price?: string | number | null;
+  buyer_name?: string | null;
+  buyer_phone?: string | null;
+  buyer_address?: string | null;
+  sale_notes?: string | null;
   notes?: string | null;
   is_archived: boolean;
   age?: string | null;
   age_group?: string | null;
   latest_weight_kg?: string | number | null;
   days_on_farm?: number | null;
-  id_history: TagHistoryItem[];
   warehouse_history: WarehouseHistoryItem[];
   weight_records: WeightRecord[];
   offspring: OffspringItem[];
+  sale_record?: CowSaleRecord | null;
 };
 
 export type HealthRecord = {
@@ -200,13 +215,6 @@ export function acquisitionLabel(value: string | null | undefined): string {
   if (value === "bought_from_supplier") return "Bought from supplier";
   if (value === "bought_from_bazar") return "Bought from bazar";
   return value ? value.replaceAll("_", " ") : "—";
-}
-
-export function tagTypeLabel(value: string | null | undefined): string {
-  if (!value) return "—";
-  if (value === "rfid") return "RFID";
-  const spaced = value.replaceAll("_", " ");
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 export function daysBetween(startIso: string, endIso: string): number | null {

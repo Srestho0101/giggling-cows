@@ -262,12 +262,18 @@ async def update_invoice_status(
                 status_code=400,
                 detail=f"Cannot transition to 'issued' from '{invoice.status}'",
             )
-        # Update any cow to 'sold'
+        # Update any cow to 'sold' and record buyer/sale details
+        customer = await session.get(Customer, invoice.customer_id)
         for line in invoice.lines:
             if line.item_type == "animal" and line.cow_id:
                 cow = await session.get(Cow, line.cow_id)
                 if cow:
                     cow.status = "sold"
+                    cow.sold_date = invoice.invoice_date
+                    cow.sale_price = line.line_total
+                    cow.buyer_name = customer.name if customer else cow.buyer_name
+                    cow.buyer_phone = customer.phone if customer else cow.buyer_phone
+                    cow.sale_notes = invoice.notes or line.description
                     cow.updated_by = user_id
 
         invoice.status = "issued"
@@ -282,12 +288,18 @@ async def update_invoice_status(
             )
         if not (void_reason or "").strip():
             raise HTTPException(status_code=422, detail="A reason is required when voiding an invoice.")
-        # Revert sold cows back to active
+        # Revert sold cows back to active and clear sale details
         for line in invoice.lines:
             if line.item_type == "animal" and line.cow_id:
                 cow = await session.get(Cow, line.cow_id)
                 if cow and cow.status == "sold":
                     cow.status = "active"
+                    cow.sold_date = None
+                    cow.sale_price = None
+                    cow.buyer_name = None
+                    cow.buyer_phone = None
+                    cow.buyer_address = None
+                    cow.sale_notes = None
                     cow.updated_by = user_id
 
         invoice.status = "void"

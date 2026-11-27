@@ -83,7 +83,7 @@ async def test_cow_lifecycle_and_invoicing_flow(client: AsyncClient):
     cow_data = cow_resp.json()
     cow_id = cow_data["cow_id"]
     assert cow_data["status"] == "active"
-    assert len(cow_data["id_history"]) == 1
+    assert "id_history" not in cow_data
     assert len(cow_data["warehouse_history"]) == 1
 
     # 3. Create a customer
@@ -475,51 +475,35 @@ async def test_cow_profile_details_weights_tags_moves_and_offspring(client: Asyn
     assert detail_after_archive["weight_records"][0]["weight_id"] == w2["weight_id"]
     assert detail_after_archive["offspring"][0]["cow_id"] == calf_id
 
-    # Add secondary RFID tag without changing primary tag
-    rfid_resp = await client.post(
+    # Tag history endpoint should be removed; updating tag directly on PATCH works and enforces uniqueness
+    removed_tags_endpoint = await client.post(
         f"/api/v1/herd/cows/{dam_id}/tags",
-        json={
-            "tag_number": "RFID-9901",
-            "tag_type": "rfid",
-            "assigned_date": "2026-06-05",
-            "reason": "Electronic collar",
-            "set_as_current": False,
-        },
+        json={"tag_number": "PROF-DAM-02", "assigned_date": "2026-06-10"},
         headers=auth_headers,
     )
-    assert rfid_resp.status_code == 201
-    assert rfid_resp.json()["current_tag_number"] == "PROF-DAM-01"
+    assert removed_tags_endpoint.status_code in (404, 405)
 
-    # Replace primary tag (must reject duplicate active tag, succeed for unique tag)
-    dup_tag = await client.post(
-        f"/api/v1/herd/cows/{dam_id}/tags",
-        json={
-            "tag_number": "PROF-CALF-01",
-            "tag_type": "ear_tag",
-            "assigned_date": "2026-06-10",
-            "set_as_current": True,
-        },
+    dup_tag = await client.patch(
+        f"/api/v1/herd/cows/{dam_id}",
+        json={"current_tag_number": "PROF-CALF-01"},
         headers=auth_headers,
     )
     assert dup_tag.status_code == 400
 
-    new_tag = await client.post(
-        f"/api/v1/herd/cows/{dam_id}/tags",
+    new_tag = await client.patch(
+        f"/api/v1/herd/cows/{dam_id}",
         json={
-            "tag_number": "PROF-DAM-02",
-            "tag_type": "ear_tag",
-            "assigned_date": "2026-06-10",
-            "reason": "Replacement ear tag",
-            "set_as_current": True,
+            "current_tag_number": "PROF-DAM-02",
+            "color": "Black and white",
+            "marking": "White star on forehead",
         },
         headers=auth_headers,
     )
-    assert new_tag.status_code == 201
+    assert new_tag.status_code == 200
     new_tag_data = new_tag.json()
     assert new_tag_data["current_tag_number"] == "PROF-DAM-02"
-    assert len(new_tag_data["id_history"]) == 3
-    old_primary = next(t for t in new_tag_data["id_history"] if t["tag_number"] == "PROF-DAM-01")
-    assert old_primary["removed_date"] == "2026-06-10"
+    assert new_tag_data["color"] == "Black and white"
+    assert new_tag_data["marking"] == "White star on forehead"
 
     # Self-parent guard on PATCH
     self_parent = await client.patch(
@@ -528,6 +512,84 @@ async def test_cow_profile_details_weights_tags_moves_and_offspring(client: Asyn
         headers=auth_headers,
     )
     assert self_parent.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncClient):
+    auth_headers = {"Authorization": "Bearer dev-user:admin"}
+    wh_resp = await client.post(
+        "/api/v1/herd/warehouses",
+        json={"name": "Profile Shed", "housing_type": "shed", "capacity": 10},
+        headers=auth_headers,
+    )
+    assert wh_resp.status_code == 201
+    wh_id = wh_resp.json()["warehouse_id"]
+
+    # Create cow with color and marking
+    cow_resp = await client.post(
+        "/api/v1/herd/cows",
+        json={
+            "current_tag_number": "PIC-001",
+            "sex": "female",
+            "category": "dairy",
+            "color": "Reddish brown",
+            "marking": "White patch on left flank",
+            "acquisition_type": "born_on_farm",
+            "acquisition_date": str(date.today()),
+            "warehouse_id": wh_id,
+        },
+        headers=auth_headers,
+    )
+    assert cow_resp.status_code == 201
+    cow_data = cow_resp.json()
+    cow_id = cow_data["cow_id"]
+    assert cow_data["color"] == "Reddish brown"
+    assert cow_data["marking"] == "White patch on left flank"
+
+    # Upload profile picture
+    tiny_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+    upload_resp = await client.post(
+        f"/api/v1/herd/cows/{cow_id}/profile-picture",
+        files={"file": ("cow.png", tiny_png, "image/png")},
+        headers=auth_headers,
+    )
+    assert upload_resp.status_code == 200
+    assert upload_resp.json()["profile_picture_url"].startswith(f"/api/v1/herd/cows/{cow_id}/profile-picture")
+
+    # Fetch profile picture
+    pic_resp = await client.get(f"/api/v1/herd/cows/{cow_id}/profile-picture")
+    assert pic_resp.status_code == 200
+    assert pic_resp.content == tiny_png
+
+    # Delete profile picture
+    del_resp = await client.delete(
+        f"/api/v1/herd/cows/{cow_id}/profile-picture",
+        headers=auth_headers,
+    )
+    assert del_resp.status_code == 200
+    assert del_resp.json()["profile_picture_url"] is None
+
+    # Mark cow sold directly with buyer details
+    sold_resp = await client.patch(
+        f"/api/v1/herd/cows/{cow_id}",
+        json={
+            "status": "sold",
+            "sold_date": str(date.today()),
+            "sale_price": 145000,
+            "buyer_name": "Rahim Uddin",
+            "buyer_phone": "01812345678",
+            "buyer_address": "Savar Dairy Market",
+            "sale_notes": "Paid in full",
+        },
+        headers=auth_headers,
+    )
+    assert sold_resp.status_code == 200
+    sold_data = sold_resp.json()
+    assert sold_data["status"] == "sold"
+    assert sold_data["sale_record"]["buyer_name"] == "Rahim Uddin"
+    assert sold_data["sale_record"]["buyer_phone"] == "01812345678"
+    assert sold_data["sale_record"]["buyer_address"] == "Savar Dairy Market"
+    assert Decimal(sold_data["sale_record"]["sale_price"]) == Decimal("145000.00")
 
 
 @pytest.mark.asyncio

@@ -1,22 +1,24 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import List, Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_db
 from app.core.security import AuthUser, UserRole, get_current_user, require_roles
-from app.models.herd import Cow, CowIDHistory, CowWarehouseHistory, Supplier, Warehouse, WeightRecord
+from app.models.herd import Cow, CowWarehouseHistory, Supplier, Warehouse, WeightRecord
+from app.models.sales import Customer, SalesInvoice, SalesInvoiceLine
 from app.schemas.herd import (
     CowCreate,
     CowDetailRead,
-    CowIDHistoryCreate,
-    CowIDHistoryRead,
     CowOffspringRead,
     CowRead,
+    CowSaleRecordRead,
     CowUpdate,
     CowWarehouseHistoryCreate,
     CowWarehouseHistoryRead,
@@ -33,6 +35,16 @@ from app.schemas.herd import (
 from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 
 router = APIRouter()
+
+COW_PROFILE_UPLOAD_DIR = Path(__file__).resolve().parents[4] / "uploads" / "cow_profiles"
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 # ---------------------- WAREHOUSES ----------------------
@@ -223,6 +235,9 @@ async def list_cows(
                 Cow.category.ilike(pattern),
                 Cow.cow_type.ilike(pattern),
                 Cow.breed.ilike(pattern),
+                Cow.color.ilike(pattern),
+                Cow.marking.ilike(pattern),
+                Cow.buyer_name.ilike(pattern),
                 Cow.notes.ilike(pattern),
                 Warehouse.name.ilike(pattern),
             )
@@ -257,7 +272,6 @@ async def get_cow_detail(
             selectinload(Cow.supplier),
             selectinload(Cow.dam),
             selectinload(Cow.sire),
-            selectinload(Cow.id_history),
             selectinload(Cow.warehouse_history).selectinload(CowWarehouseHistory.warehouse),
             selectinload(Cow.weight_records),
         )
@@ -282,9 +296,6 @@ async def get_cow_detail(
 
     sorted_weights = sorted(cow.weight_records, key=lambda w: (w.weigh_date, w.created_at), reverse=True)
     detail.weight_records = [WeightRecordRead.model_validate(w) for w in sorted_weights]
-
-    sorted_id_history = sorted(cow.id_history, key=lambda h: (h.assigned_date, h.created_at), reverse=True)
-    detail.id_history = [CowIDHistoryRead.model_validate(h) for h in sorted_id_history]
 
     sorted_warehouse_history = sorted(
         cow.warehouse_history,
@@ -319,6 +330,48 @@ async def get_cow_detail(
     offspring_rows = (await db.execute(offspring_stmt)).scalars().all()
     detail.offspring = [CowOffspringRead.model_validate(child) for child in offspring_rows]
 
+    sale_stmt = (
+        select(SalesInvoiceLine, SalesInvoice, Customer)
+        .join(SalesInvoice, SalesInvoiceLine.invoice_id == SalesInvoice.invoice_id)
+        .join(Customer, SalesInvoice.customer_id == Customer.customer_id)
+        .where(
+            SalesInvoiceLine.cow_id == cow_id,
+            SalesInvoiceLine.item_type == "animal",
+            SalesInvoice.status != "void",
+        )
+        .order_by(SalesInvoice.invoice_date.desc(), SalesInvoice.created_at.desc())
+        .limit(1)
+    )
+    sale_row = (await db.execute(sale_stmt)).first()
+    if sale_row:
+        line, invoice, customer = sale_row
+        detail.sale_record = CowSaleRecordRead(
+            sale_date=cow.sold_date or invoice.invoice_date,
+            sale_price=cow.sale_price if cow.sale_price is not None else line.line_total,
+            buyer_name=cow.buyer_name or customer.name,
+            buyer_phone=cow.buyer_phone or customer.phone,
+            buyer_address=cow.buyer_address,
+            buyer_type=customer.customer_type,
+            customer_id=customer.customer_id,
+            invoice_id=invoice.invoice_id,
+            invoice_number=invoice.invoice_number,
+            invoice_status=invoice.status,
+            paid_amount=invoice.paid_amount,
+            outstanding_balance=max(Decimal("0.00"), invoice.total_amount - invoice.paid_amount),
+            notes=cow.sale_notes or invoice.notes or line.description,
+        )
+    elif cow.status == "sold" or any(
+        [cow.sold_date, cow.sale_price is not None, cow.buyer_name, cow.buyer_phone, cow.buyer_address, cow.sale_notes]
+    ):
+        detail.sale_record = CowSaleRecordRead(
+            sale_date=cow.sold_date,
+            sale_price=cow.sale_price,
+            buyer_name=cow.buyer_name,
+            buyer_phone=cow.buyer_phone,
+            buyer_address=cow.buyer_address,
+            notes=cow.sale_notes,
+        )
+
     return detail
 
 
@@ -351,6 +404,9 @@ async def create_cow(
         category=data.category,
         cow_type=data.cow_type,
         breed=data.breed,
+        color=data.color,
+        marking=data.marking,
+        profile_picture_url=data.profile_picture_url,
         birth_date=data.birth_date,
         acquisition_type=data.acquisition_type,
         acquisition_date=data.acquisition_date,
@@ -362,24 +418,18 @@ async def create_cow(
         status=data.status,
         gives_milk=bool(data.gives_milk) if data.sex == "female" and data.status == "active" else False,
         milking_sessions=list(data.milking_sessions or []) if (data.sex == "female" and data.status == "active" and data.gives_milk) else [],
+        sold_date=data.sold_date,
+        sale_price=data.sale_price,
+        buyer_name=data.buyer_name,
+        buyer_phone=data.buyer_phone,
+        buyer_address=data.buyer_address,
+        sale_notes=data.sale_notes,
         notes=data.notes,
         created_by=current_user.id,
         updated_by=current_user.id,
     )
     db.add(cow)
     await db.flush()
-
-    # Add initial tag history
-    id_hist = CowIDHistory(
-        cow_id=cow.cow_id,
-        tag_number=cow.current_tag_number,
-        tag_type="ear_tag",
-        assigned_date=cow.acquisition_date,
-        reason="Initial tag on creation",
-        created_by=current_user.id,
-        updated_by=current_user.id,
-    )
-    db.add(id_hist)
 
     # Add initial warehouse movement
     wh_hist = CowWarehouseHistory(
@@ -408,7 +458,7 @@ async def update_cow(
         raise HTTPException(status_code=404, detail="Cow not found")
 
     lifecycle_before = capture_lifecycle_state(cow)
-    # If tag number is changing, create tag history record
+    # Check tag uniqueness when tag changes
     if data.current_tag_number and data.current_tag_number != cow.current_tag_number:
         stmt = select(Cow).where(
             Cow.current_tag_number == data.current_tag_number,
@@ -421,33 +471,6 @@ async def update_cow(
                 status_code=400,
                 detail=f"An active cow with tag number '{data.current_tag_number}' already exists.",
             )
-
-        # Close old tag history
-        old_tag_stmt = (
-            select(CowIDHistory)
-            .where(
-                CowIDHistory.cow_id == cow_id,
-                CowIDHistory.tag_number == cow.current_tag_number,
-                CowIDHistory.removed_date.is_(None),
-            )
-            .order_by(CowIDHistory.assigned_date.desc())
-        )
-        old_tag_record = (await db.execute(old_tag_stmt)).scalars().first()
-        today = date.today()
-        if old_tag_record:
-            old_tag_record.removed_date = today
-
-        # Add new tag history
-        new_tag_record = CowIDHistory(
-            cow_id=cow_id,
-            tag_number=data.current_tag_number,
-            tag_type="ear_tag",
-            assigned_date=today,
-            reason="Tag number updated",
-            created_by=current_user.id,
-            updated_by=current_user.id,
-        )
-        db.add(new_tag_record)
 
     # If warehouse is changing, update movement history
     if data.warehouse_id and data.warehouse_id != cow.warehouse_id:
@@ -640,11 +663,29 @@ async def move_cow_warehouse(
     return await get_cow_detail(cow.cow_id, db, current_user)
 
 
-# ---------------------- TAG HISTORY ----------------------
-@router.post("/cows/{cow_id}/tags", response_model=CowDetailRead, status_code=status.HTTP_201_CREATED)
-async def add_cow_tag_history(
+# ---------------------- PROFILE PICTURE ----------------------
+def _find_profile_picture_file(cow_id: uuid.UUID) -> Optional[Path]:
+    if not COW_PROFILE_UPLOAD_DIR.exists():
+        return None
+    for ext in (".jpg", ".png", ".webp", ".gif"):
+        candidate = COW_PROFILE_UPLOAD_DIR / f"{cow_id}{ext}"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+@router.get("/cows/{cow_id}/profile-picture")
+async def get_cow_profile_picture(cow_id: uuid.UUID):
+    file_path = _find_profile_picture_file(cow_id)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Profile picture not found")
+    return FileResponse(file_path, headers={"Cache-Control": "public, max-age=3600"})
+
+
+@router.post("/cows/{cow_id}/profile-picture", response_model=CowDetailRead)
+async def upload_cow_profile_picture(
     cow_id: uuid.UUID,
-    data: CowIDHistoryCreate,
+    file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER, UserRole.DATA_ENTRY])),
 ):
@@ -652,46 +693,52 @@ async def add_cow_tag_history(
     if not cow:
         raise HTTPException(status_code=404, detail="Cow not found")
 
-    if data.set_as_current and data.removed_date is None:
-        if data.tag_number != cow.current_tag_number:
-            dup_stmt = select(Cow).where(
-                Cow.current_tag_number == data.tag_number,
-                Cow.cow_id != cow_id,
-                Cow.status != "archived",
-                Cow.is_archived == False,
-            )
-            if (await db.execute(dup_stmt)).scalar_one_or_none():
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"An active cow with tag number '{data.tag_number}' already exists.",
-                )
+    content_type = (file.content_type or "").lower()
+    ext = ALLOWED_IMAGE_TYPES.get(content_type)
+    if not ext:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported image format. Please upload a JPG, PNG, WebP, or GIF image.",
+        )
 
-            old_tag_stmt = (
-                select(CowIDHistory)
-                .where(
-                    CowIDHistory.cow_id == cow_id,
-                    CowIDHistory.tag_number == cow.current_tag_number,
-                    CowIDHistory.removed_date.is_(None),
-                )
-                .order_by(CowIDHistory.assigned_date.desc())
-            )
-            old_tag_record = (await db.execute(old_tag_stmt)).scalars().first()
-            if old_tag_record:
-                old_tag_record.removed_date = data.assigned_date
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Uploaded image file is empty.")
+    if len(data) > MAX_PROFILE_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="Profile picture must be 5 MB or smaller.")
 
-            cow.current_tag_number = data.tag_number
-            cow.updated_by = current_user.id
+    COW_PROFILE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    for old_ext in (".jpg", ".png", ".webp", ".gif"):
+        old_file = COW_PROFILE_UPLOAD_DIR / f"{cow_id}{old_ext}"
+        if old_file.exists():
+            old_file.unlink()
 
-    new_tag = CowIDHistory(
-        cow_id=cow_id,
-        tag_number=data.tag_number,
-        tag_type=data.tag_type,
-        assigned_date=data.assigned_date,
-        removed_date=data.removed_date,
-        reason=data.reason,
-        created_by=current_user.id,
-        updated_by=current_user.id,
-    )
-    db.add(new_tag)
+    target_path = COW_PROFILE_UPLOAD_DIR / f"{cow_id}{ext}"
+    target_path.write_bytes(data)
+
+    version = int(datetime.now(timezone.utc).timestamp())
+    cow.profile_picture_url = f"/api/v1/herd/cows/{cow_id}/profile-picture?v={version}"
+    cow.updated_by = current_user.id
+    await db.commit()
+    return await get_cow_detail(cow_id, db, current_user)
+
+
+@router.delete("/cows/{cow_id}/profile-picture", response_model=CowDetailRead)
+async def delete_cow_profile_picture(
+    cow_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER, UserRole.DATA_ENTRY])),
+):
+    cow = await db.get(Cow, cow_id)
+    if not cow:
+        raise HTTPException(status_code=404, detail="Cow not found")
+
+    for old_ext in (".jpg", ".png", ".webp", ".gif"):
+        old_file = COW_PROFILE_UPLOAD_DIR / f"{cow_id}{old_ext}"
+        if old_file.exists():
+            old_file.unlink()
+
+    cow.profile_picture_url = None
+    cow.updated_by = current_user.id
     await db.commit()
     return await get_cow_detail(cow_id, db, current_user)

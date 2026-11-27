@@ -36,6 +36,8 @@ export function EditProfilePanel({
     cow_type: cow.cow_type ?? "",
     gives_milk: Boolean(cow.gives_milk),
     breed: cow.breed ?? "",
+    color: cow.color ?? "",
+    marking: cow.marking ?? "",
     birth_date: cow.birth_date ?? "",
     acquisition_type: cow.acquisition_type,
     acquisition_date: cow.acquisition_date,
@@ -68,6 +70,8 @@ export function EditProfilePanel({
         cow_type: values.cow_type.trim() || null,
         gives_milk: values.sex === "female" ? values.gives_milk : false,
         breed: values.breed || null,
+        color: values.color.trim() || null,
+        marking: values.marking.trim() || null,
         birth_date: values.birth_date || null,
         acquisition_type: values.acquisition_type,
         acquisition_date: isBornOnFarm && values.birth_date ? values.birth_date : values.acquisition_date,
@@ -101,7 +105,7 @@ export function EditProfilePanel({
         <div>
           <h3 className="text-[14px] font-semibold text-ink">Edit cow details</h3>
           <p className="text-[12px] text-muted">
-            Changing the tag number here also closes the previous tag and appends a tag history entry.
+            Update tag, physical details, acquisition, and lineage information.
           </p>
         </div>
         <button type="button" onClick={onCancel} className={btn("quiet", "sm")}>
@@ -111,7 +115,7 @@ export function EditProfilePanel({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className={ui.label}>
-          Tag number *
+          Tag *
           <input
             required
             maxLength={50}
@@ -185,6 +189,26 @@ export function EditProfilePanel({
             <option value="friesian">Friesian</option>
             <option value="other">Other / unknown</option>
           </select>
+        </label>
+        <label className={ui.label}>
+          Color
+          <input
+            maxLength={80}
+            placeholder="e.g. Black & white, Red, Brown"
+            value={values.color}
+            onChange={(e) => setValues((c) => ({ ...c, color: e.target.value }))}
+            className={ui.input}
+          />
+        </label>
+        <label className={ui.label}>
+          Marking
+          <input
+            maxLength={200}
+            placeholder="e.g. White star on forehead, spotted"
+            value={values.marking}
+            onChange={(e) => setValues((c) => ({ ...c, marking: e.target.value }))}
+            className={ui.input}
+          />
         </label>
         <label className={ui.label}>
           Birth date

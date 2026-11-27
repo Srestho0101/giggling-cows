@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
 from app.models.evaluation import MarketPrice, PurchaseEvaluation
-from app.models.herd import Cow, CowIDHistory, CowWarehouseHistory
+from app.models.herd import Cow, CowWarehouseHistory
 from app.schemas.evaluation import ConvertEvaluationToCow, EvaluationCalculationRequest, EvaluationCalculationResult, PurchaseEvaluationCreate
 
 
@@ -170,18 +170,6 @@ async def convert_evaluation_to_cow(
     )
     session.add(new_cow)
     await session.flush()
-
-    # Create initial tag history
-    tag_history = CowIDHistory(
-        cow_id=new_cow.cow_id,
-        tag_number=new_cow.current_tag_number,
-        tag_type="ear_tag",
-        assigned_date=new_cow.acquisition_date,
-        reason="Initial tag on purchase conversion",
-        created_by=user_id,
-        updated_by=user_id,
-    )
-    session.add(tag_history)
 
     # Create initial warehouse movement history
     warehouse_history = CowWarehouseHistory(

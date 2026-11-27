@@ -92,35 +92,6 @@ class WeightRecordRead(WeightRecordBase, AuditBase):
     is_archived: bool = False
 
 
-# COW ID / TAG HISTORY
-class CowIDHistoryCreate(BaseModel):
-    tag_number: str = Field(..., min_length=1, max_length=50)
-    tag_type: str = Field("ear_tag", max_length=50)
-    assigned_date: date
-    removed_date: Optional[date] = None
-    reason: Optional[str] = Field(None, max_length=500)
-    set_as_current: bool = True
-
-    @model_validator(mode="after")
-    def validate_dates_and_tag(self) -> "CowIDHistoryCreate":
-        self.tag_number = self.tag_number.strip()
-        if not self.tag_number:
-            raise ValueError("Tag number cannot be empty.")
-        if self.removed_date is not None and self.removed_date < self.assigned_date:
-            raise ValueError("Removed date cannot be earlier than assigned date.")
-        return self
-
-
-class CowIDHistoryRead(AuditBase):
-    history_id: uuid.UUID
-    cow_id: uuid.UUID
-    tag_number: str
-    tag_type: str
-    assigned_date: date
-    removed_date: Optional[date] = None
-    reason: Optional[str] = None
-
-
 # COW WAREHOUSE MOVEMENT HISTORY
 class CowWarehouseHistoryCreate(BaseModel):
     warehouse_id: uuid.UUID
@@ -145,6 +116,9 @@ class CowBase(BaseModel):
     category: str = Field(..., max_length=50)  # dairy, beef, duel-purpose
     cow_type: Optional[str] = Field(None, max_length=50)
     breed: Optional[str] = Field(None, pattern="^(deshi|friesian|other)$")
+    color: Optional[str] = Field(None, max_length=80)
+    marking: Optional[str] = Field(None, max_length=200)
+    profile_picture_url: Optional[str] = None
     birth_date: Optional[date] = None
     acquisition_type: str = Field(..., pattern="^(born_on_farm|bought_from_supplier|bought_from_bazar)$")
     acquisition_date: date
@@ -156,6 +130,12 @@ class CowBase(BaseModel):
     status: str = Field("active", pattern="^(active|sold|deceased|archived)$")
     gives_milk: Optional[bool] = None
     milking_sessions: Optional[List[Literal["morning", "noon", "evening"]]] = None
+    sold_date: Optional[date] = None
+    sale_price: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    buyer_name: Optional[str] = Field(None, max_length=150)
+    buyer_phone: Optional[str] = Field(None, max_length=50)
+    buyer_address: Optional[str] = Field(None, max_length=255)
+    sale_notes: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -192,6 +172,9 @@ class CowUpdate(BaseModel):
     category: Optional[str] = Field(None, max_length=50)
     cow_type: Optional[str] = Field(None, max_length=50)
     breed: Optional[str] = Field(None, pattern="^(deshi|friesian|other)$")
+    color: Optional[str] = Field(None, max_length=80)
+    marking: Optional[str] = Field(None, max_length=200)
+    profile_picture_url: Optional[str] = None
     birth_date: Optional[date] = None
     acquisition_type: Optional[str] = Field(None, pattern="^(born_on_farm|bought_from_supplier|bought_from_bazar)$")
     acquisition_date: Optional[date] = None
@@ -203,6 +186,12 @@ class CowUpdate(BaseModel):
     status: Optional[str] = Field(None, pattern="^(active|sold|deceased|archived)$")
     gives_milk: Optional[bool] = None
     milking_sessions: Optional[List[Literal["morning", "noon", "evening"]]] = None
+    sold_date: Optional[date] = None
+    sale_price: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    buyer_name: Optional[str] = Field(None, max_length=150)
+    buyer_phone: Optional[str] = Field(None, max_length=50)
+    buyer_address: Optional[str] = Field(None, max_length=255)
+    sale_notes: Optional[str] = None
     notes: Optional[str] = None
     is_archived: Optional[bool] = None
 
@@ -285,8 +274,24 @@ class CowOffspringRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CowSaleRecordRead(BaseModel):
+    sale_date: Optional[date] = None
+    sale_price: Optional[Decimal] = None
+    buyer_name: Optional[str] = None
+    buyer_phone: Optional[str] = None
+    buyer_address: Optional[str] = None
+    buyer_type: Optional[str] = None
+    customer_id: Optional[uuid.UUID] = None
+    invoice_id: Optional[uuid.UUID] = None
+    invoice_number: Optional[str] = None
+    invoice_status: Optional[str] = None
+    paid_amount: Optional[Decimal] = None
+    outstanding_balance: Optional[Decimal] = None
+    notes: Optional[str] = None
+
+
 class CowDetailRead(CowRead):
-    id_history: List[CowIDHistoryRead] = []
     warehouse_history: List[CowWarehouseHistoryRead] = []
     weight_records: List[WeightRecordRead] = []
     offspring: List[CowOffspringRead] = []
+    sale_record: Optional[CowSaleRecordRead] = None

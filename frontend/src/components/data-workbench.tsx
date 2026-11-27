@@ -7,6 +7,7 @@ import { apiRequest, ApiError } from "@/lib/api";
 import { ConfirmActionModal, type ConfirmModalConfig } from "@/components/confirm-modal";
 import { Badge, btn, DateInput, statusTone, ui } from "@/components/ui";
 import { SafeDataHistory } from "@/components/safe-data-history";
+import { CowAvatar } from "@/components/cow-profile/cow-avatar";
 import { isMoneyKey, isNumericKey } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { todayInDhaka } from "@/components/workspace-date";
@@ -807,8 +808,20 @@ export function DataWorkbench({
                         const formatted = formatCell(rawValue, column.key, row);
                         if (columnIndex === 0 && href) {
                           content = (
-                            <Link href={href} className="font-medium text-accent hover:underline">
-                              {formatted}
+                            <Link href={href} className="inline-flex items-center gap-2.5 font-medium text-accent hover:underline">
+                              {typeof row.cow_id === "string" && column.key === "current_tag_number" ? (
+                                <CowAvatar
+                                  cowId={row.cow_id}
+                                  tag={String(rawValue ?? "")}
+                                  profilePictureUrl={
+                                    typeof row.profile_picture_url === "string"
+                                      ? row.profile_picture_url
+                                      : null
+                                  }
+                                  size="sm"
+                                />
+                              ) : null}
+                              <span>{formatted}</span>
                             </Link>
                           );
                         } else {
