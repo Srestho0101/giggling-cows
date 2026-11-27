@@ -1,10 +1,8 @@
-from datetime import date, datetime, timezone
+from datetime import date
 from decimal import Decimal
-from pathlib import Path
 from typing import List, Optional
 import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -33,10 +31,13 @@ from app.schemas.herd import (
     WeightRecordUpdate,
 )
 from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
+from app.services.storage_service import (
+    delete_cow_profile_picture as delete_profile_picture_from_storage,
+    upload_cow_profile_picture as upload_profile_picture_to_storage,
+)
 
 router = APIRouter()
 
-COW_PROFILE_UPLOAD_DIR = Path(__file__).resolve().parents[4] / "uploads" / "cow_profiles"
 ALLOWED_IMAGE_TYPES = {
     "image/jpeg": ".jpg",
     "image/jpg": ".jpg",
@@ -664,24 +665,6 @@ async def move_cow_warehouse(
 
 
 # ---------------------- PROFILE PICTURE ----------------------
-def _find_profile_picture_file(cow_id: uuid.UUID) -> Optional[Path]:
-    if not COW_PROFILE_UPLOAD_DIR.exists():
-        return None
-    for ext in (".jpg", ".png", ".webp", ".gif"):
-        candidate = COW_PROFILE_UPLOAD_DIR / f"{cow_id}{ext}"
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-@router.get("/cows/{cow_id}/profile-picture")
-async def get_cow_profile_picture(cow_id: uuid.UUID):
-    file_path = _find_profile_picture_file(cow_id)
-    if not file_path:
-        raise HTTPException(status_code=404, detail="Profile picture not found")
-    return FileResponse(file_path, headers={"Cache-Control": "public, max-age=3600"})
-
-
 @router.post("/cows/{cow_id}/profile-picture", response_model=CowDetailRead)
 async def upload_cow_profile_picture(
     cow_id: uuid.UUID,
@@ -707,17 +690,13 @@ async def upload_cow_profile_picture(
     if len(data) > MAX_PROFILE_IMAGE_BYTES:
         raise HTTPException(status_code=400, detail="Profile picture must be 5 MB or smaller.")
 
-    COW_PROFILE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    for old_ext in (".jpg", ".png", ".webp", ".gif"):
-        old_file = COW_PROFILE_UPLOAD_DIR / f"{cow_id}{old_ext}"
-        if old_file.exists():
-            old_file.unlink()
-
-    target_path = COW_PROFILE_UPLOAD_DIR / f"{cow_id}{ext}"
-    target_path.write_bytes(data)
-
-    version = int(datetime.now(timezone.utc).timestamp())
-    cow.profile_picture_url = f"/api/v1/herd/cows/{cow_id}/profile-picture?v={version}"
+    cow.profile_picture_url = await upload_profile_picture_to_storage(
+        cow_id=cow_id,
+        data=data,
+        content_type=content_type,
+        ext=ext,
+        previous_url=cow.profile_picture_url,
+    )
     cow.updated_by = current_user.id
     await db.commit()
     return await get_cow_detail(cow_id, db, current_user)
@@ -733,10 +712,7 @@ async def delete_cow_profile_picture(
     if not cow:
         raise HTTPException(status_code=404, detail="Cow not found")
 
-    for old_ext in (".jpg", ".png", ".webp", ".gif"):
-        old_file = COW_PROFILE_UPLOAD_DIR / f"{cow_id}{old_ext}"
-        if old_file.exists():
-            old_file.unlink()
+    await delete_profile_picture_from_storage(cow.profile_picture_url)
 
     cow.profile_picture_url = None
     cow.updated_by = current_user.id

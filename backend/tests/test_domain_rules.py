@@ -515,7 +515,7 @@ async def test_cow_profile_details_weights_tags_moves_and_offspring(client: Asyn
 
 
 @pytest.mark.asyncio
-async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncClient):
+async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncClient, monkeypatch):
     auth_headers = {"Authorization": "Bearer dev-user:admin"}
     wh_resp = await client.post(
         "/api/v1/herd/warehouses",
@@ -546,6 +546,23 @@ async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncCl
     assert cow_data["color"] == "Reddish brown"
     assert cow_data["marking"] == "White patch on left flank"
 
+    # Mock Supabase Storage upload/delete
+    stored_objects = {}
+    deleted_urls = []
+
+    async def fake_upload(cow_id, data, content_type, ext, previous_url=None):
+        url = f"https://example.supabase.co/storage/v1/object/public/cow-profiles/{cow_id}/123{ext}"
+        stored_objects[url] = data
+        return url
+
+    async def fake_delete(previous_url):
+        if previous_url:
+            deleted_urls.append(previous_url)
+            stored_objects.pop(previous_url, None)
+
+    monkeypatch.setattr("app.api.v1.endpoints.cows.upload_profile_picture_to_storage", fake_upload)
+    monkeypatch.setattr("app.api.v1.endpoints.cows.delete_profile_picture_from_storage", fake_delete)
+
     # Upload profile picture
     tiny_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
     upload_resp = await client.post(
@@ -554,12 +571,9 @@ async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncCl
         headers=auth_headers,
     )
     assert upload_resp.status_code == 200
-    assert upload_resp.json()["profile_picture_url"].startswith(f"/api/v1/herd/cows/{cow_id}/profile-picture")
-
-    # Fetch profile picture
-    pic_resp = await client.get(f"/api/v1/herd/cows/{cow_id}/profile-picture")
-    assert pic_resp.status_code == 200
-    assert pic_resp.content == tiny_png
+    expected_url = f"https://example.supabase.co/storage/v1/object/public/cow-profiles/{cow_id}/123.png"
+    assert upload_resp.json()["profile_picture_url"] == expected_url
+    assert stored_objects[expected_url] == tiny_png
 
     # Delete profile picture
     del_resp = await client.delete(
@@ -568,6 +582,7 @@ async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncCl
     )
     assert del_resp.status_code == 200
     assert del_resp.json()["profile_picture_url"] is None
+    assert deleted_urls == [expected_url]
 
     # Mark cow sold directly with buyer details
     sold_resp = await client.patch(
