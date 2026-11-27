@@ -5,7 +5,7 @@ import React, { useMemo, useState } from "react";
 import { ConfirmActionModal, type ConfirmModalConfig } from "@/components/confirm-modal";
 import { PaginatedTableCard, type PaginatedColumn } from "@/components/paginated-scroll-table";
 import { SafeDataHistory } from "@/components/safe-data-history";
-import { Badge, btn, statusTone, ui } from "@/components/ui";
+import { Badge, btn, ui } from "@/components/ui";
 import { todayInDhaka } from "@/components/workspace-date";
 import { apiRequest, apiRoutes } from "@/lib/api";
 import { WeightTrendChart } from "@/components/cow-profile/weight-chart";
@@ -18,9 +18,7 @@ import {
   formatMoney,
   formatNumber,
   sessionLabel,
-  tagTypeLabel,
   type CowDetail,
-  type TagHistoryItem,
   type WarehouseHistoryItem,
   type WarehouseOption,
   type WeightRecord,
@@ -56,11 +54,13 @@ export function ProfileOverviewTab({
         <section className="rounded-[8px] border border-line bg-surface p-4">
           <h3 className="text-[13px] font-semibold text-ink">Identity & classification</h3>
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[12.5px]">
-            <FieldItem label="Tag number" value={cow.current_tag_number} />
+            <FieldItem label="Tag" value={cow.current_tag_number} />
             <FieldItem label="Category" value={cow.category} capitalize />
             <FieldItem label="Cow type" value={cow.cow_type ?? "—"} />
             <FieldItem label="Sex" value={cow.sex} capitalize />
             <FieldItem label="Breed" value={breedLabel(cow.breed)} />
+            <FieldItem label="Color" value={cow.color?.trim() ? cow.color : "—"} />
+            <FieldItem label="Marking" value={cow.marking?.trim() ? cow.marking : "—"} />
             <FieldItem label="Birth date" value={formatDisplayDate(cow.birth_date)} />
             <FieldItem label="Age" value={computedAge ?? "—"} />
             <FieldItem label="Age group" value={cow.age_group ?? "—"} />
@@ -157,6 +157,17 @@ export function ProfileOverviewTab({
         </section>
       </div>
 
+      {/* Sale & Buyer Record (shown when sold or sale info exists) */}
+      {(cow.status === "sold" || cow.sale_record) ? (
+        <SaleRecordSection
+          cow={cow}
+          today={today}
+          reload={reload}
+          onError={onError}
+          onNotice={onNotice}
+        />
+      ) : null}
+
       {/* Weight History (Paginated + Scrollable) & Entry */}
       <WeightSection
         cowId={cow.cow_id}
@@ -171,15 +182,6 @@ export function ProfileOverviewTab({
       <WarehouseSection
         cow={cow}
         warehouses={warehouses}
-        today={today}
-        reload={reload}
-        onError={onError}
-        onNotice={onNotice}
-      />
-
-      {/* Tag History (Paginated + Scrollable) & Assign / Add Tag */}
-      <TagSection
-        cow={cow}
         today={today}
         reload={reload}
         onError={onError}
@@ -684,7 +686,7 @@ function WarehouseSection({
   );
 }
 
-function TagSection({
+function SaleRecordSection({
   cow,
   today,
   reload,
@@ -697,167 +699,174 @@ function TagSection({
   onError: (message: string) => void;
   onNotice: (message: string) => void;
 }) {
+  const sale = cow.sale_record;
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [tagNumber, setTagNumber] = useState("");
-  const [tagType, setTagType] = useState("ear_tag");
-  const [assignedDate, setAssignedDate] = useState(today);
-  const [reason, setReason] = useState("");
-  const [setAsCurrent, setSetAsCurrent] = useState(true);
+  const [buyerName, setBuyerName] = useState(sale?.buyer_name ?? cow.buyer_name ?? "");
+  const [buyerPhone, setBuyerPhone] = useState(sale?.buyer_phone ?? cow.buyer_phone ?? "");
+  const [buyerAddress, setBuyerAddress] = useState(sale?.buyer_address ?? cow.buyer_address ?? "");
+  const [soldDate, setSoldDate] = useState(sale?.sale_date ?? cow.sold_date ?? today);
+  const [salePrice, setSalePrice] = useState(
+    sale?.sale_price != null
+      ? String(sale.sale_price)
+      : cow.sale_price != null
+        ? String(cow.sale_price)
+        : ""
+  );
+  const [saleNotes, setSaleNotes] = useState(sale?.notes ?? cow.sale_notes ?? "");
 
-  async function handleAddTag(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSaveSale(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     onError("");
     onNotice("");
     try {
-      await apiRequest(apiRoutes.herd.tags(cow.cow_id), {
-        method: "POST",
+      await apiRequest(apiRoutes.herd.cow(cow.cow_id), {
+        method: "PATCH",
         body: {
-          tag_number: tagNumber.trim(),
-          tag_type: tagType,
-          assigned_date: assignedDate,
-          reason: reason.trim() || null,
-          set_as_current: setAsCurrent,
+          status: "sold",
+          buyer_name: buyerName.trim() || null,
+          buyer_phone: buyerPhone.trim() || null,
+          buyer_address: buyerAddress.trim() || null,
+          sold_date: soldDate || null,
+          sale_price: salePrice !== "" ? Number(salePrice) : null,
+          sale_notes: saleNotes.trim() || null,
         },
       });
-      setTagNumber("");
-      setReason("");
-      onNotice(setAsCurrent ? "Current tag updated and logged." : "Tag record added.");
+      setEditing(false);
+      onNotice("Sale record updated.");
       await reload();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not save tag record.");
+      onError(cause instanceof Error ? cause.message : "Could not update sale record.");
     } finally {
       setSaving(false);
     }
   }
 
-  const primaryActiveTagId = useMemo(() => {
-    const active = (cow.id_history ?? []).filter((h) => !h.removed_date);
-    const matchingCurrent = active.filter((h) => h.tag_number === cow.current_tag_number);
-    return (
-      matchingCurrent.find((h) => h.tag_type === "ear_tag")?.history_id ??
-      matchingCurrent[0]?.history_id ??
-      null
-    );
-  }, [cow.id_history, cow.current_tag_number]);
-
-  const columns: PaginatedColumn<TagHistoryItem>[] = [
-    {
-      key: "tag_number",
-      label: "Tag",
-      render: (row) => <span className="font-semibold text-ink">{row.tag_number}</span>,
-    },
-    {
-      key: "tag_type",
-      label: "Type",
-      render: (row) => tagTypeLabel(row.tag_type),
-    },
-    {
-      key: "assigned_date",
-      label: "Assigned",
-      render: (row) => formatDisplayDate(row.assigned_date),
-    },
-    {
-      key: "removed_date",
-      label: "Removed",
-      render: (row) =>
-        row.removed_date ? (
-          formatDisplayDate(row.removed_date)
-        ) : row.history_id === primaryActiveTagId ? (
-          <Badge tone={statusTone("active")}>Current ({tagTypeLabel(row.tag_type)})</Badge>
-        ) : (
-          <Badge tone="neutral">Active ({tagTypeLabel(row.tag_type)})</Badge>
-        ),
-    },
-    {
-      key: "reason",
-      label: "Reason",
-      render: (row) => <span className="text-muted">{row.reason || "—"}</span>,
-    },
-  ];
-
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr] items-start">
-      <PaginatedTableCard
-        title="Tag history"
-        subtitle="Ear tags, RFIDs, and identification changes."
-        rows={cow.id_history ?? []}
-        rowKey={(row) => row.history_id}
-        columns={columns}
-        emptyMessage="No tag history recorded."
-        defaultPageSize={10}
-        scrollHeightClass="max-h-[240px]"
-      />
-
-      <form
-        onSubmit={(event) => void handleAddTag(event)}
-        className="rounded-[8px] border border-line bg-surface p-4 space-y-3"
-      >
+    <section className="rounded-[8px] border border-line bg-surface p-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2.5">
         <div>
-          <h3 className="text-[14px] font-semibold text-ink">Assign or add tag</h3>
-          <p className="mt-0.5 text-[12px] text-muted">
-            Replace a lost ear tag or attach a secondary identifier (RFID, neck band).
+          <h3 className="text-[14px] font-semibold text-ink">Sale &amp; buyer record</h3>
+          <p className="text-[12px] text-muted">
+            Buyer details, sale price, date, and invoice reference for this sold cow.
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className={ui.label}>
-            Tag number *
-            <input
-              required
-              maxLength={50}
-              placeholder="e.g. GC-001-R2"
-              value={tagNumber}
-              onChange={(e) => setTagNumber(e.target.value)}
-              className={ui.input}
-            />
-          </label>
-          <label className={ui.label}>
-            Tag type *
-            <select
-              value={tagType}
-              onChange={(e) => setTagType(e.target.value)}
-              className={ui.select}
+        <div className="flex items-center gap-2">
+          {sale?.invoice_id && sale.invoice_number ? (
+            <Link
+              href={`/milk-sales/invoices/${sale.invoice_id}`}
+              className="rounded-[6px] border border-line-strong bg-subtle px-2.5 py-1 text-[12px] font-medium text-accent hover:underline"
             >
-              <option value="ear_tag">Ear tag</option>
-              <option value="rfid">RFID</option>
-              <option value="neck_band">Neck band</option>
-              <option value="tattoo">Tattoo</option>
-              <option value="other">Other</option>
-            </select>
-          </label>
-          <label className={ui.label}>
-            Assigned date *
-            <input
-              type="date"
-              required
-              value={assignedDate}
-              onChange={(e) => setAssignedDate(e.target.value)}
-              className={ui.input}
-            />
-          </label>
-          <label className={ui.label}>
-            Reason
-            <input
-              maxLength={200}
-              placeholder="e.g. Lost tag replacement"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className={ui.input}
-            />
-          </label>
+              Invoice {sale.invoice_number}
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            className={btn("secondary", "sm")}
+          >
+            {editing ? "Cancel" : "Edit sale info"}
+          </button>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-ink">
-          <input
-            type="checkbox"
-            checked={setAsCurrent}
-            onChange={(e) => setSetAsCurrent(e.target.checked)}
+      </div>
+
+      {editing ? (
+        <form onSubmit={(e) => void handleSaveSale(e)} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className={ui.label}>
+            Buyer name *
+            <input
+              required
+              maxLength={150}
+              value={buyerName}
+              onChange={(e) => setBuyerName(e.target.value)}
+              placeholder="e.g. Abdul Karim"
+              className={ui.input}
+            />
+          </label>
+          <label className={ui.label}>
+            Buyer phone
+            <input
+              maxLength={50}
+              value={buyerPhone}
+              onChange={(e) => setBuyerPhone(e.target.value)}
+              placeholder="e.g. 017XXXXXXXX"
+              className={ui.input}
+            />
+          </label>
+          <label className={ui.label}>
+            Buyer address
+            <input
+              maxLength={255}
+              value={buyerAddress}
+              onChange={(e) => setBuyerAddress(e.target.value)}
+              placeholder="Village, upazila, or market"
+              className={ui.input}
+            />
+          </label>
+          <label className={ui.label}>
+            Sale date *
+            <input
+              required
+              type="date"
+              value={soldDate}
+              onChange={(e) => setSoldDate(e.target.value)}
+              className={ui.input}
+            />
+          </label>
+          <label className={ui.label}>
+            Sale price (৳)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={salePrice}
+              onChange={(e) => setSalePrice(e.target.value)}
+              className={ui.input}
+            />
+          </label>
+          <label className={`${ui.label} sm:col-span-2 lg:col-span-3`}>
+            Sale notes
+            <textarea
+              rows={2}
+              value={saleNotes}
+              onChange={(e) => setSaleNotes(e.target.value)}
+              placeholder="Payment terms, transport notes, or remarks"
+              className={ui.textarea}
+            />
+          </label>
+          <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-2">
+            <button type="submit" disabled={saving} className={btn("primary", "sm")}>
+              {saving ? "Saving…" : "Save sale record"}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[12.5px] sm:grid-cols-3 lg:grid-cols-6">
+          <FieldItem label="Buyer" value={sale?.buyer_name || cow.buyer_name || "—"} />
+          <FieldItem label="Buyer phone" value={sale?.buyer_phone || cow.buyer_phone || "—"} />
+          <FieldItem label="Buyer address" value={sale?.buyer_address || cow.buyer_address || "—"} />
+          <FieldItem label="Sale date" value={formatDisplayDate(sale?.sale_date ?? cow.sold_date)} />
+          <FieldItem label="Sale price" value={formatMoney(sale?.sale_price ?? cow.sale_price)} />
+          <FieldItem
+            label="Invoice status"
+            value={sale?.invoice_status ? sale.invoice_status.replaceAll("_", " ") : "Direct sale"}
+            capitalize
           />
-          Set as current primary tag (closes previous primary tag)
-        </label>
-        <button type="submit" disabled={saving} className={btn("primary", "md")}>
-          {saving ? "Saving…" : "Save tag"}
-        </button>
-      </form>
-    </div>
+          {sale?.invoice_id ? (
+            <>
+              <FieldItem label="Paid amount" value={formatMoney(sale.paid_amount)} />
+              <FieldItem label="Balance due" value={formatMoney(sale.outstanding_balance)} />
+            </>
+          ) : null}
+          <div className="col-span-2 sm:col-span-3 lg:col-span-6 border-t border-line pt-2.5">
+            <dt className="text-[11.5px] text-muted">Sale notes</dt>
+            <dd className="mt-0.5 whitespace-pre-wrap text-[12.5px] text-ink">
+              {(sale?.notes || cow.sale_notes)?.trim() ? (sale?.notes || cow.sale_notes) : "—"}
+            </dd>
+          </div>
+        </dl>
+      )}
+    </section>
   );
 }

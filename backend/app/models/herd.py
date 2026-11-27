@@ -50,6 +50,9 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     category: Mapped[str] = mapped_column(String(50), nullable=False)  # dairy, beef, duel-purpose
     cow_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # bull_calf, heifer_calf, bull, cow, heifer, ox
     breed: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)  # deshi | friesian | other
+    color: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    marking: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    profile_picture_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     acquisition_type: Mapped[str] = mapped_column(
         String(50), nullable=False
@@ -74,6 +77,12 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     )  # 'active' | 'sold' | 'deceased' | 'archived'
     gives_milk: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     milking_sessions: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list, server_default=text("'[]'"))
+    sold_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    sale_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    buyer_name: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    buyer_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    buyer_address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    sale_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
@@ -92,28 +101,8 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     dam: Mapped[Optional["Cow"]] = relationship("Cow", remote_side=[cow_id], foreign_keys=[dam_id])
     sire: Mapped[Optional["Cow"]] = relationship("Cow", remote_side=[cow_id], foreign_keys=[sire_id])
     
-    id_history: Mapped[List["CowIDHistory"]] = relationship("CowIDHistory", back_populates="cow", cascade="save-update, merge")
     warehouse_history: Mapped[List["CowWarehouseHistory"]] = relationship("CowWarehouseHistory", back_populates="cow", cascade="save-update, merge")
     weight_records: Mapped[List["WeightRecord"]] = relationship("WeightRecord", back_populates="cow", cascade="save-update, merge")
-
-
-class CowIDHistory(Base, AuditMixin):
-    __tablename__ = "cow_id_histories"
-
-    history_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    cow_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("cows.cow_id", ondelete="RESTRICT"), nullable=False
-    )
-    tag_number: Mapped[str] = mapped_column(String(50), nullable=False)
-    tag_type: Mapped[str] = mapped_column(String(50), nullable=False, default="ear_tag")
-    assigned_date: Mapped[date] = mapped_column(Date, nullable=False)
-    removed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # Relationships
-    cow: Mapped["Cow"] = relationship("Cow", back_populates="id_history")
 
 
 class CowWarehouseHistory(Base, AuditMixin):

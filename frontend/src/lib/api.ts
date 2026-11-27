@@ -25,6 +25,14 @@ export function apiUrl(path: string): string {
   return `${API_BASE_URL}${API_PREFIX}${normalizedPath}`;
 }
 
+export function resolveMediaUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url;
+  }
+  return `${API_BASE_URL}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
 export function apiQuery(path: string, values: Record<string, string | number | boolean | undefined>): string {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) {
@@ -107,6 +115,31 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   throw new ApiError(0, "Request failed after retry", null);
 }
 
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  options: Omit<RequestInit, "body" | "method"> & { method?: "POST" | "PUT" | "PATCH"; accessToken?: string } = {}
+): Promise<T> {
+  const { accessToken, headers, method = "POST", ...requestOptions } = options;
+  const requestHeaders = new Headers(headers);
+  if (accessToken) requestHeaders.set("Authorization", `Bearer ${accessToken}`);
+
+  const response = await fetch(apiUrl(path), {
+    ...requestOptions,
+    method,
+    headers: requestHeaders,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined);
+    const message = getErrorMessage(payload) ?? `Upload failed (${response.status})`;
+    throw new ApiError(response.status, message, payload);
+  }
+
+  return (await response.json()) as T;
+}
+
 function getErrorMessage(payload: unknown): string | undefined {
   if (typeof payload !== "object" || payload === null || !("detail" in payload)) return undefined;
   const detail = payload.detail;
@@ -143,7 +176,7 @@ export const apiRoutes = {
     weight: (id: string) => `/herd/cows/${id}/weight`,
     weightRecord: (cowId: string, weightId: string) => `/herd/cows/${cowId}/weight/${weightId}`,
     move: (id: string) => `/herd/cows/${id}/move`,
-    tags: (id: string) => `/herd/cows/${id}/tags`,
+    profilePicture: (id: string) => `/herd/cows/${id}/profile-picture`,
     warehouses: "/herd/warehouses", warehouse: (id: string) => `/herd/warehouses/${id}`,
     suppliers: "/herd/suppliers", supplier: (id: string) => `/herd/suppliers/${id}`,
   },

@@ -15,6 +15,8 @@ const cowColumns: TableColumn[] = [
   { key: "category", label: "Category" },
   { key: "cow_type", label: "Cow type" },
   { key: "breed", label: "Breed" },
+  { key: "color", label: "Color" },
+  { key: "marking", label: "Marking" },
   { key: "sex", label: "Sex" },
   { key: "days_on_farm", label: "Days on farm" },
   { key: "birth_date", label: "Birth date" },
@@ -28,7 +30,7 @@ const cowColumns: TableColumn[] = [
 ];
 
 const cowFields: FormField[] = [
-  { name: "current_tag_number", label: "Tag number", required: true },
+  { name: "current_tag_number", label: "Tag", required: true },
   {
     name: "sex",
     label: "Sex",
@@ -85,6 +87,8 @@ const cowFields: FormField[] = [
       { value: "other", label: "Other / Unknown" },
     ],
   },
+  { name: "color", label: "Color", placeholder: "e.g. Black & white, Red" },
+  { name: "marking", label: "Marking", placeholder: "e.g. White star on forehead" },
   { name: "birth_date", label: "Birth date", type: "date" },
   {
     name: "acquisition_type",

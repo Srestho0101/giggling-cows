@@ -12,6 +12,7 @@ import { Badge, btn, StatTile, statusTone, Tabs, ui } from "@/components/ui";
 import { shiftIsoDate, todayInDhaka } from "@/components/workspace-date";
 import { apiRequest, apiRoutes } from "@/lib/api";
 import { EditProfilePanel } from "@/components/cow-profile/edit-profile-panel";
+import { CowAvatar } from "@/components/cow-profile/cow-avatar";
 import { ProfileOverviewTab } from "@/components/cow-profile/profile-overview-tab";
 import { BreedingTab, HealthCareTab, MilkCostsTab } from "@/components/cow-profile/profile-domain-tabs";
 import {
@@ -39,6 +40,15 @@ export default function CowProfilePage() {
   const [notice, setNotice] = useState("");
   const [statusBusy, setStatusBusy] = useState(false);
   const [confirmModal, setConfirmModal] = useState<ConfirmModalConfig | null>(null);
+  const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [saleForm, setSaleForm] = useState({
+    buyer_name: "",
+    buyer_phone: "",
+    buyer_address: "",
+    sold_date: todayInDhaka(),
+    sale_price: "",
+    sale_notes: "",
+  });
 
   const cowQuery = useQuery({
     queryKey: ["cow-profile", cowId],
@@ -178,6 +188,23 @@ export default function CowProfilePage() {
 
   async function updateStatus(status: string) {
     if (!cow) return;
+    if (status === "sold" && cow.status !== "sold") {
+      setSaleForm({
+        buyer_name: cow.sale_record?.buyer_name ?? cow.buyer_name ?? "",
+        buyer_phone: cow.sale_record?.buyer_phone ?? cow.buyer_phone ?? "",
+        buyer_address: cow.sale_record?.buyer_address ?? cow.buyer_address ?? "",
+        sold_date: cow.sale_record?.sale_date ?? cow.sold_date ?? today,
+        sale_price:
+          cow.sale_record?.sale_price != null
+            ? String(cow.sale_record.sale_price)
+            : cow.sale_price != null
+              ? String(cow.sale_price)
+              : "",
+        sale_notes: cow.sale_record?.notes ?? cow.sale_notes ?? "",
+      });
+      setSaleModalOpen(true);
+      return;
+    }
     setStatusBusy(true);
     setError("");
     setNotice("");
@@ -190,6 +217,35 @@ export default function CowProfilePage() {
       await reloadAll();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not update status.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  async function handleConfirmSale(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!cow) return;
+    setStatusBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(apiRoutes.herd.cow(cowId), {
+        method: "PATCH",
+        body: {
+          status: "sold",
+          buyer_name: saleForm.buyer_name.trim() || null,
+          buyer_phone: saleForm.buyer_phone.trim() || null,
+          buyer_address: saleForm.buyer_address.trim() || null,
+          sold_date: saleForm.sold_date || today,
+          sale_price: saleForm.sale_price !== "" ? Number(saleForm.sale_price) : null,
+          sale_notes: saleForm.sale_notes.trim() || null,
+        },
+      });
+      setSaleModalOpen(false);
+      setNotice(tr("Cow marked as sold and buyer record saved.", "গরু বিক্রি হিসেবে সংরক্ষণ হয়েছে।"));
+      await reloadAll();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not record cow sale.");
     } finally {
       setStatusBusy(false);
     }
@@ -248,7 +304,7 @@ export default function CowProfilePage() {
   return (
     <ModulePage
       title={tr("Cow profile")}
-      subtitle={tr("Detailed animal record, weights, shed housing, tags, health, and lineage.", "গরুর বিস্তারিত তথ্য, ওজন, শেড, ট্যাগ ও স্বাস্থ্য।")}
+      subtitle={tr("Detailed animal record, weights, shed housing, health, and lineage.", "গরুর বিস্তারিত তথ্য, ওজন, শেড ও স্বাস্থ্য।")}
     >
       <div className="mb-4">
         <Link href="/herd" className={ui.link}>
@@ -266,28 +322,41 @@ export default function CowProfilePage() {
           {/* Header Card */}
           <section className="rounded-[8px] border border-line bg-surface p-4 sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-[20px] font-semibold tracking-tight text-ink">
-                    {tr("Cow")} {cow.current_tag_number}
-                  </h2>
-                  <Badge tone={statusTone(cow.status)}>{enumLabel(cow.status)}</Badge>
-                  {cow.is_archived ? <Badge tone="warn">{enumLabel("archived")}</Badge> : null}
-                  {cow.gives_milk ? (
-                    <Badge tone="good">
-                      {tr("Milking")}
-                      {cow.milking_sessions?.length
-                        ? ` · ${cow.milking_sessions.map((s) => enumLabel(s)).join(", ")}`
-                        : ""}
-                    </Badge>
-                  ) : null}
+              <div className="flex items-center gap-4">
+                <CowAvatar
+                  cowId={cow.cow_id}
+                  tag={cow.current_tag_number}
+                  profilePictureUrl={cow.profile_picture_url}
+                  size="xl"
+                  editable
+                  onUpdated={reloadAll}
+                  onError={setError}
+                  onNotice={setNotice}
+                />
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-[20px] font-semibold tracking-tight text-ink">
+                      {tr("Cow")} {cow.current_tag_number}
+                    </h2>
+                    <Badge tone={statusTone(cow.status)}>{enumLabel(cow.status)}</Badge>
+                    {cow.is_archived ? <Badge tone="warn">{enumLabel("archived")}</Badge> : null}
+                    {cow.gives_milk ? (
+                      <Badge tone="good">
+                        {tr("Milking")}
+                        {cow.milking_sessions?.length
+                          ? ` · ${cow.milking_sessions.map((s) => enumLabel(s)).join(", ")}`
+                          : ""}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-[13px] text-muted">
+                    {enumLabel(cow.category)}
+                    {cow.cow_type ? ` · ${cow.cow_type}` : ""} · {enumLabel(cow.sex)}
+                    {cow.breed ? ` · ${enumLabel(cow.breed)}` : ""}
+                    {cow.color ? ` · ${cow.color}` : ""} ·{" "}
+                    {cow.warehouse_name ?? tr("No shed", "কোনো শেড নেই")}
+                  </p>
                 </div>
-                <p className="mt-1 text-[13px] text-muted">
-                  {enumLabel(cow.category)}
-                  {cow.cow_type ? ` · ${cow.cow_type}` : ""} · {enumLabel(cow.sex)}
-                  {cow.breed ? ` · ${enumLabel(cow.breed)}` : ""} ·{" "}
-                  {cow.warehouse_name ?? tr("No shed", "কোনো শেড নেই")}
-                </p>
               </div>
 
               <div className="flex flex-wrap items-end gap-2">
@@ -456,6 +525,113 @@ export default function CowProfilePage() {
       ) : null}
 
       <ConfirmActionModal config={confirmModal} onClose={() => setConfirmModal(null)} />
+
+      {saleModalOpen && cow ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setSaleModalOpen(false)}
+        >
+          <form
+            onSubmit={(e) => void handleConfirmSale(e)}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg rounded-[10px] border border-line bg-surface p-5 shadow-xl space-y-4"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
+              <div>
+                <h3 className="text-[15px] font-semibold text-ink">
+                  {tr("Record cow sale")} — {cow.current_tag_number}
+                </h3>
+                <p className="text-[12px] text-muted">
+                  {tr("Save who bought this cow and the sale details.")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSaleModalOpen(false)}
+                className={btn("quiet", "sm")}
+              >
+                {tr("Cancel")}
+              </button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className={ui.label}>
+                {tr("Buyer name")} *
+                <input
+                  required
+                  maxLength={150}
+                  value={saleForm.buyer_name}
+                  onChange={(e) => setSaleForm((f) => ({ ...f, buyer_name: e.target.value }))}
+                  placeholder="e.g. Abdul Karim"
+                  className={ui.input}
+                />
+              </label>
+              <label className={ui.label}>
+                {tr("Buyer phone")}
+                <input
+                  maxLength={50}
+                  value={saleForm.buyer_phone}
+                  onChange={(e) => setSaleForm((f) => ({ ...f, buyer_phone: e.target.value }))}
+                  placeholder="e.g. 017XXXXXXXX"
+                  className={ui.input}
+                />
+              </label>
+              <label className={ui.label}>
+                {tr("Sale date")} *
+                <input
+                  required
+                  type="date"
+                  value={saleForm.sold_date}
+                  onChange={(e) => setSaleForm((f) => ({ ...f, sold_date: e.target.value }))}
+                  className={ui.input}
+                />
+              </label>
+              <label className={ui.label}>
+                {tr("Sale price (৳)")}
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={saleForm.sale_price}
+                  onChange={(e) => setSaleForm((f) => ({ ...f, sale_price: e.target.value }))}
+                  className={ui.input}
+                />
+              </label>
+              <label className={`${ui.label} sm:col-span-2`}>
+                {tr("Buyer address")}
+                <input
+                  maxLength={255}
+                  value={saleForm.buyer_address}
+                  onChange={(e) => setSaleForm((f) => ({ ...f, buyer_address: e.target.value }))}
+                  placeholder="Village, market, or address"
+                  className={ui.input}
+                />
+              </label>
+              <label className={`${ui.label} sm:col-span-2`}>
+                {tr("Sale notes")}
+                <textarea
+                  rows={2}
+                  value={saleForm.sale_notes}
+                  onChange={(e) => setSaleForm((f) => ({ ...f, sale_notes: e.target.value }))}
+                  placeholder="Payment method, transport, or remarks"
+                  className={ui.textarea}
+                />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setSaleModalOpen(false)}
+                className={btn("secondary", "sm")}
+              >
+                {tr("Cancel")}
+              </button>
+              <button type="submit" disabled={statusBusy} className={btn("primary", "sm")}>
+                {statusBusy ? tr("Saving…") : tr("Confirm sale")}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </ModulePage>
   );
 }

@@ -1,5 +1,5 @@
 from app.core.database import Base
-from app.models.herd import Cow, CowIDHistory, CowWarehouseHistory, Supplier, Warehouse, WeightRecord
+from app.models.herd import Cow, CowWarehouseHistory, Supplier, Warehouse, WeightRecord
 from app.models.evaluation import MarketPrice, PurchaseEvaluation
 from app.models.feeding import Expense, ExpenseCategory, FeedStockEntry, FeedType, FeedingRecord
 from app.models.labor import MillCharge, SalaryPayment, Worker, WorkerAdvance, WorkerAttendance
@@ -12,7 +12,6 @@ __all__ = [
     "Warehouse",
     "Supplier",
     "Cow",
-    "CowIDHistory",
     "CowWarehouseHistory",
     "WeightRecord",
     "MarketPrice",

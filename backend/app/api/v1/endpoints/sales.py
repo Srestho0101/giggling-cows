@@ -628,6 +628,7 @@ async def get_sales_invoice(
             selectinload(SalesInvoice.payments),
         )
         .where(SalesInvoice.invoice_id == invoice_id)
+        .execution_options(populate_existing=True)
     )
     invoice = (await db.execute(stmt)).scalars().unique().first()
     if not invoice:
