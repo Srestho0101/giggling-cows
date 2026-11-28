@@ -14,9 +14,8 @@ import {
 } from "@/components/breeding/breeding-drawers";
 import { Badge, btn, StatTile, statusTone, Tabs, ui } from "@/components/ui";
 import { apiRequest, apiRoutes } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import {
-  formatDisplayDate,
-  formatMoney,
   type BreedingActionQueueItem,
   type BreedingRecord,
   type BreedingSummary,
@@ -27,6 +26,7 @@ import {
 } from "@/components/cow-profile/types";
 
 export function BreedingWorkspaceView() {
+  const { lang, tr, money, num, integer, date: fmtDate, enumLabel } = useI18n();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("queue");
@@ -132,13 +132,35 @@ export function BreedingWorkspaceView() {
       setProvider("");
       setSireBreed("");
       setSireFormOpen(false);
-      setNotice("External AI sire added to registry.");
+      setNotice(tr("External AI sire added to registry.", "বাইরের এআই সিমেন তালিকায় যোগ করা হয়েছে।"));
       await reloadAll();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save sire.");
+      setError(cause instanceof Error ? cause.message : tr("Could not save sire.", "ষাঁড়/সিমেনের তথ্য সংরক্ষণ করা যায়নি।"));
     } finally {
       setSireSaving(false);
     }
+  }
+
+  function formatQueueDetail(item: BreedingActionQueueItem): string {
+    if (lang !== "bn") return item.detail;
+    const days = integer(Math.abs(item.days_value));
+    if (item.bucket === "due_for_check") {
+      return `${days} দিন আগে প্রজনন হয়েছে — গর্ভধারণ পরীক্ষা প্রয়োজন`;
+    }
+    if (item.bucket === "due_for_dry_off") {
+      return item.days_value < 0
+        ? `দুধ শুকানোর তারিখ ${days} দিন পার হয়েছে`
+        : `${days} দিন পর দুধ শুকানোর সময়`;
+    }
+    if (item.bucket === "calving_due") {
+      return item.days_value < 0
+        ? `প্রসবের সম্ভাব্য তারিখ ${days} দিন পার হয়েছে`
+        : `${days} দিন পর প্রসবের সময়`;
+    }
+    if (item.bucket === "open_over_90_days") {
+      return `${days} দিন ধরে গর্ভধারণ ছাড়াই খালি রয়েছে`;
+    }
+    return item.detail;
   }
 
   function renderQueueBucket(
@@ -153,22 +175,22 @@ export function BreedingWorkspaceView() {
         <div className="flex items-center justify-between gap-2">
           <div>
             <h3 className="text-[13.5px] font-semibold text-ink">
-              {title} ({items.length})
+              {title} ({integer(items.length)})
             </h3>
             <p className="text-[12px] text-muted">{subtitle}</p>
           </div>
         </div>
         {items.length === 0 ? (
-          <p className="text-[12.5px] text-muted py-2">Nothing due right now.</p>
+          <p className="text-[12.5px] text-muted py-2">{tr("Nothing due right now.", "এই মুহূর্তে কোনো কাজ বাকি নেই।")}</p>
         ) : (
           <div className="divide-y divide-line">
             {items.map((item) => (
               <div key={`${item.bucket}-${item.cow_id}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-[13px]">
                 <div>
                   <Link href={`/herd/${item.cow_id}`} className="font-semibold text-accent hover:underline">
-                    Cow {item.cow_tag_number}
+                    {tr("Cow")} {item.cow_tag_number}
                   </Link>
-                  <span className="ml-2 text-muted">{item.detail}</span>
+                  <span className="ml-2 text-muted">{formatQueueDetail(item)}</span>
                 </div>
                 <button
                   type="button"
@@ -199,19 +221,19 @@ export function BreedingWorkspaceView() {
       {/* Top 3 Herd KPIs */}
       <div className="grid gap-3 sm:grid-cols-3">
         <StatTile
-          label="Conception rate"
-          value={summary?.conception_rate_pct != null ? `${summary.conception_rate_pct}%` : "—"}
-          subtext="Successful vs resolved breedings"
+          label={tr("Conception rate", "গর্ভধারণের হার")}
+          value={summary?.conception_rate_pct != null ? `${num(summary.conception_rate_pct, 1)}%` : "—"}
+          subtext={tr("Successful vs resolved breedings", "সফল বনাম নিষ্পত্তিকৃত প্রজনন")}
         />
         <StatTile
-          label="Avg services / conception"
-          value={summary?.avg_services_per_conception != null ? String(summary.avg_services_per_conception) : "—"}
-          subtext="Lower is better"
+          label={tr("Avg services / conception", "গড় প্রজনন প্রচেষ্টা")}
+          value={summary?.avg_services_per_conception != null ? num(summary.avg_services_per_conception, 2) : "—"}
+          subtext={tr("Lower is better", "সংখ্যা কম হওয়া ভালো")}
         />
         <StatTile
-          label="Active pregnant cows"
-          value={String(summary?.active_pregnant_count ?? activePregnancies.length)}
-          subtext="Confirmed & suspected episodes"
+          label={tr("Active pregnant cows", "বর্তমান গর্ভবতী গরু")}
+          value={integer(summary?.active_pregnant_count ?? activePregnancies.length)}
+          subtext={tr("Confirmed & suspected episodes", "নিশ্চিত ও সম্ভাব্য গর্ভধারণ")}
         />
       </div>
 
@@ -221,10 +243,10 @@ export function BreedingWorkspaceView() {
           active={activeTab}
           onChange={setActiveTab}
           items={[
-            { key: "queue", label: `Action queue (${queueTotal})` },
-            { key: "breedings", label: `Breeding log (${breedings.length})` },
-            { key: "pregnancies", label: `Active pregnancies (${activePregnancies.length})` },
-            { key: "sires", label: `Sire registry (${sires.length})` },
+            { key: "queue", label: `${tr("Action queue", "করণীয় তালিকা")} (${integer(queueTotal)})` },
+            { key: "breedings", label: `${tr("Breeding log", "প্রজনন লগ")} (${integer(breedings.length)})` },
+            { key: "pregnancies", label: `${tr("Active pregnancies", "সক্রিয় গর্ভধারণ")} (${integer(activePregnancies.length)})` },
+            { key: "sires", label: `${tr("Sire registry", "ষাঁড় ও সিমেন তালিকা")} (${integer(sires.length)})` },
           ]}
         />
         <div className="flex flex-wrap items-center gap-2">
@@ -237,7 +259,7 @@ export function BreedingWorkspaceView() {
             }}
             className={btn("primary", "sm")}
           >
-            + Log breeding
+            {tr("+ Log breeding", "+ প্রজনন লিখুন")}
           </button>
           <button
             type="button"
@@ -248,7 +270,7 @@ export function BreedingWorkspaceView() {
             }}
             className={btn("secondary", "sm")}
           >
-            + Log check
+            {tr("+ Log check", "+ পরীক্ষা লিখুন")}
           </button>
         </div>
       </div>
@@ -256,10 +278,10 @@ export function BreedingWorkspaceView() {
       {activeTab === "queue" ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {renderQueueBucket(
-            "Due for pregnancy check",
-            "Pending services 28+ days ago with no active pregnancy.",
+            tr("Due for pregnancy check", "গর্ভধারণ পরীক্ষার সময় হয়েছে"),
+            tr("Pending services 28+ days ago with no active pregnancy.", "২৮+ দিন আগে প্রজনন হয়েছে কিন্তু এখনও পরীক্ষা হয়নি।"),
             summary?.due_for_check ?? [],
-            "Log check",
+            tr("Log check", "পরীক্ষা লিখুন"),
             (item) => {
               setCheckFixedCowId(item.cow_id);
               setCheckDefaultBreedingId(item.breeding_id ?? null);
@@ -267,10 +289,10 @@ export function BreedingWorkspaceView() {
             }
           )}
           {renderQueueBucket(
-            "Calving due (<14d)",
-            "Confirmed or suspected pregnancies nearing due date.",
+            tr("Calving due (<14d)", "আসন্ন প্রসব (১৪ দিনের মধ্যে)"),
+            tr("Confirmed or suspected pregnancies nearing due date.", "প্রসবের সম্ভাব্য তারিখ কাছাকাছি এসেছে।"),
             summary?.calving_due ?? [],
-            "Record calving",
+            tr("Record calving", "বাচ্চা প্রসব লিখুন"),
             (item) => {
               if (item.pregnancy_id) {
                 setCalvingTarget({ pregnancyId: item.pregnancy_id, damTag: item.cow_tag_number });
@@ -278,19 +300,19 @@ export function BreedingWorkspaceView() {
             }
           )}
           {renderQueueBucket(
-            "Due for dry-off",
-            "Confirmed pregnancies approaching 60 days pre-calving.",
+            tr("Due for dry-off", "দুধ শুকানোর সময়"),
+            tr("Confirmed pregnancies approaching 60 days pre-calving.", "প্রসবের ৬০ দিন আগে দুধ দোহন বন্ধ করার সময় হয়েছে।"),
             summary?.due_for_dry_off ?? [],
-            "View cow",
+            tr("View cow", "গরু দেখুন"),
             (item) => {
               router.push(`/herd/${item.cow_id}`);
             }
           )}
           {renderQueueBucket(
-            "Open > 90 days",
-            "Adult females past VWP with no active pregnancy for 90+ days.",
+            tr("Open > 90 days", "৯০+ দিন ধরে খালি"),
+            tr("Adult females past VWP with no active pregnancy for 90+ days.", "৯০ দিনের বেশি সময় ধরে গর্ভধারণ ছাড়াই খালি থাকা গাভী।"),
             summary?.open_over_90_days ?? [],
-            "Log breeding",
+            tr("Log breeding", "প্রজনন লিখুন"),
             (item) => {
               setEditingBreeding(null);
               setBreedingFixedCowId(item.cow_id);
@@ -303,30 +325,30 @@ export function BreedingWorkspaceView() {
       {activeTab === "breedings" ? (
         <section className="rounded-[8px] border border-line bg-surface p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-[14px] font-semibold text-ink">Breeding log</h3>
+            <h3 className="text-[14px] font-semibold text-ink">{tr("Breeding log", "প্রজনন লগ")}</h3>
             <select
               value={outcomeFilter}
               onChange={(e) => setOutcomeFilter(e.target.value)}
               className={`${ui.select} w-44`}
             >
-              <option value="">All outcomes</option>
-              <option value="pending">Pending</option>
-              <option value="successful">Successful</option>
-              <option value="failed">Failed</option>
+              <option value="">{tr("All outcomes", "সকল ফলাফল")}</option>
+              <option value="pending">{enumLabel("pending")}</option>
+              <option value="successful">{enumLabel("successful")}</option>
+              <option value="failed">{enumLabel("failed")}</option>
             </select>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[13px]">
               <thead className="border-b border-line text-[11.5px] text-muted">
                 <tr>
-                  <th className="py-2 pr-3">Cow</th>
-                  <th className="py-2 pr-3">Insemination</th>
-                  <th className="py-2 pr-3">Method</th>
-                  <th className="py-2 pr-3">Sire / Semen</th>
-                  <th className="py-2 pr-3">Doctor</th>
-                  <th className="py-2 pr-3 text-right">Cost</th>
-                  <th className="py-2 pr-3">Outcome</th>
-                  <th className="py-2 text-right">Actions</th>
+                  <th className="py-2 pr-3">{tr("Cow")}</th>
+                  <th className="py-2 pr-3">{tr("Insemination")}</th>
+                  <th className="py-2 pr-3">{tr("Method")}</th>
+                  <th className="py-2 pr-3">{tr("Sire / Semen", "ষাঁড় / সিমেন")}</th>
+                  <th className="py-2 pr-3">{tr("Doctor")}</th>
+                  <th className="py-2 pr-3 text-right">{tr("Cost", "খরচ")}</th>
+                  <th className="py-2 pr-3">{tr("Outcome")}</th>
+                  <th className="py-2 text-right">{tr("Actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -337,14 +359,14 @@ export function BreedingWorkspaceView() {
                         {br.cow_tag_number ?? br.cow_id}
                       </Link>
                     </td>
-                    <td className="py-2 pr-3">{formatDisplayDate(br.seed_date)}</td>
-                    <td className="py-2 pr-3 capitalize">{br.method.replaceAll("_", " ")}</td>
+                    <td className="py-2 pr-3">{fmtDate(br.seed_date)}</td>
+                    <td className="py-2 pr-3">{enumLabel(br.method)}</td>
                     <td className="py-2 pr-3">{br.sire_display_name || br.sire_tag_number || br.semen_code || "—"}</td>
                     <td className="py-2 pr-3">{br.doctor_name || "—"}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{formatMoney(br.cost)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{money(br.cost)}</td>
                     <td className="py-2 pr-3">
                       <Badge tone={statusTone(br.outcome)}>
-                        <span className="capitalize">{br.outcome}</span>
+                        <span>{enumLabel(br.outcome)}</span>
                       </Badge>
                     </td>
                     <td className="py-2 text-right">
@@ -358,31 +380,31 @@ export function BreedingWorkspaceView() {
                           }}
                           className="font-medium text-accent hover:underline"
                         >
-                          Edit
+                          {tr("Edit")}
                         </button>
                         <button
                           type="button"
                           onClick={() =>
                             setConfirmModal({
-                              title: "Archive breeding record?",
+                              title: tr("Archive breeding record?", "প্রজনন রেকর্ড আর্কাইভ করবেন?"),
                               mode: "confirm",
-                              confirmLabel: "Archive",
+                              confirmLabel: tr("Archive"),
                               tone: "danger",
                               onConfirm: async () => {
                                 await apiRequest(apiRoutes.health.breedingRecord(br.breeding_id), {
                                   method: "PATCH",
                                   body: { is_archived: true },
                                 });
-                                setNotice("Breeding record archived.");
+                                setNotice(tr("Breeding record archived.", "প্রজনন রেকর্ড আর্কাইভ করা হয়েছে।"));
                                 await reloadAll();
                               },
                             })
                           }
                           className="font-medium text-muted hover:underline"
                         >
-                          Archive
+                          {tr("Archive")}
                         </button>
-                        <SafeDataHistory entityType="breeding_records" entityId={br.breeding_id} entityLabel={`Breeding ${br.seed_date}`} />
+                        <SafeDataHistory entityType="breeding_records" entityId={br.breeding_id} entityLabel={`${tr("Breeding")} ${fmtDate(br.seed_date)}`} />
                       </div>
                     </td>
                   </tr>
@@ -395,26 +417,26 @@ export function BreedingWorkspaceView() {
 
       {activeTab === "pregnancies" ? (
         <section className="rounded-[8px] border border-line bg-surface p-4 space-y-3">
-          <h3 className="text-[14px] font-semibold text-ink">Active pregnancies</h3>
+          <h3 className="text-[14px] font-semibold text-ink">{tr("Active pregnancies", "সক্রিয় গর্ভধারণ")}</h3>
           {activePregnancies.length === 0 ? (
-            <p className="text-[13px] text-muted">No active pregnancies.</p>
+            <p className="text-[13px] text-muted">{tr("No active pregnancies.", "কোনো সক্রিয় গর্ভধারণের তথ্য নেই।")}</p>
           ) : (
             <div className="divide-y divide-line">
               {activePregnancies.map((ep) => (
                 <div key={ep.pregnancy_id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-[13px]">
                   <div>
                     <Link href={`/herd/${ep.cow_id}`} className="font-semibold text-accent hover:underline">
-                      Cow {ep.cow_tag_number}
+                      {tr("Cow")} {ep.cow_tag_number}
                     </Link>
                     <span className="ml-2">
                       <Badge tone={statusTone(ep.status)}>
-                        <span className="capitalize">{ep.status}</span>
+                        <span>{enumLabel(ep.status)}</span>
                       </Badge>
                     </span>
                     <p className="mt-0.5 text-[12px] text-muted">
-                      {ep.sire_display_name ? `Sire: ${ep.sire_display_name} · ` : ""}
-                      Expected calving: {formatDisplayDate(ep.expected_calving_date)}
-                      {ep.dry_off_date ? ` · Dry-off: ${formatDisplayDate(ep.dry_off_date)}` : ""}
+                      {ep.sire_display_name ? `${tr("Sire")}: ${ep.sire_display_name} · ` : ""}
+                      {tr("Expected calving:")} {fmtDate(ep.expected_calving_date)}
+                      {ep.dry_off_date ? ` · ${tr("Dry-off:", "দুধ শুকানোর তারিখ:")} ${fmtDate(ep.dry_off_date)}` : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -423,12 +445,12 @@ export function BreedingWorkspaceView() {
                       onClick={() =>
                         setCalvingTarget({
                           pregnancyId: ep.pregnancy_id,
-                          damTag: ep.cow_tag_number ?? "Cow",
+                          damTag: ep.cow_tag_number ?? tr("Cow"),
                         })
                       }
                       className={btn("primary", "sm")}
                     >
-                      Record calving
+                      {tr("Record calving", "বাচ্চা প্রসব লিখুন")}
                     </button>
                     <button
                       type="button"
@@ -439,7 +461,7 @@ export function BreedingWorkspaceView() {
                       }}
                       className={btn("secondary", "sm")}
                     >
-                      Log check
+                      {tr("Log check", "পরীক্ষা লিখুন")}
                     </button>
                   </div>
                 </div>
@@ -453,35 +475,35 @@ export function BreedingWorkspaceView() {
         <section className="rounded-[8px] border border-line bg-surface p-4 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-[14px] font-semibold text-ink">Sire registry</h3>
-              <p className="text-[12px] text-muted">On-farm bulls and external AI semen straws.</p>
+              <h3 className="text-[14px] font-semibold text-ink">{tr("Sire registry", "ষাঁড় ও সিমেন তালিকা")}</h3>
+              <p className="text-[12px] text-muted">{tr("On-farm bulls and external AI semen straws.", "খামারের ষাঁড় এবং বাইরের কৃত্রিম প্রজননের সিমেন।")}</p>
             </div>
             <button type="button" onClick={() => setSireFormOpen((v) => !v)} className={btn("secondary", "sm")}>
-              {sireFormOpen ? "Close" : "+ Add external AI sire"}
+              {sireFormOpen ? tr("Close") : tr("+ Add external AI sire", "+ বাইরের সিমেন যোগ করুন")}
             </button>
           </div>
 
           {sireFormOpen ? (
             <form onSubmit={(e) => void handleCreateExternalSire(e)} className="grid gap-3 rounded-[6px] border border-line bg-subtle p-3.5 sm:grid-cols-4">
               <label className={ui.label}>
-                Bull name
-                <input value={bullName} onChange={(e) => setBullName(e.target.value)} placeholder="e.g. Raja HF-22" className={ui.input} />
+                {tr("Bull name", "ষাঁড়ের নাম")}
+                <input value={bullName} onChange={(e) => setBullName(e.target.value)} placeholder={tr("e.g. Raja HF-22", "যেমন: রাজা HF-22")} className={ui.input} />
               </label>
               <label className={ui.label}>
-                Semen code *
+                {tr("Semen code")} *
                 <input required value={semenCode} onChange={(e) => setSemenCode(e.target.value)} placeholder="e.g. HF-2026-220" className={ui.input} />
               </label>
               <label className={ui.label}>
-                Provider
-                <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="e.g. BRAC / DLS" className={ui.input} />
+                {tr("Provider", "সরবরাহকারী")}
+                <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder={tr("e.g. BRAC / DLS", "যেমন: ব্র্যাক / প্রাণিসম্পদ")} className={ui.input} />
               </label>
               <label className={ui.label}>
-                Breed
-                <input value={sireBreed} onChange={(e) => setSireBreed(e.target.value)} placeholder="e.g. Friesian" className={ui.input} />
+                {tr("Breed")}
+                <input value={sireBreed} onChange={(e) => setSireBreed(e.target.value)} placeholder={tr("e.g. Friesian", "যেমন: ফ্রিজিয়ান")} className={ui.input} />
               </label>
               <div className="sm:col-span-4 flex justify-end">
                 <button type="submit" disabled={sireSaving} className={btn("primary", "sm")}>
-                  {sireSaving ? "Saving…" : "Save AI sire"}
+                  {sireSaving ? tr("Saving…") : tr("Save AI sire", "সিমেন সংরক্ষণ করুন")}
                 </button>
               </div>
             </form>
@@ -491,11 +513,11 @@ export function BreedingWorkspaceView() {
             <table className="w-full text-left text-[13px]">
               <thead className="border-b border-line text-[11.5px] text-muted">
                 <tr>
-                  <th className="py-2 pr-3">Sire</th>
-                  <th className="py-2 pr-3">Type</th>
-                  <th className="py-2 pr-3">Semen code</th>
-                  <th className="py-2 pr-3">Provider</th>
-                  <th className="py-2 pr-3">Breed</th>
+                  <th className="py-2 pr-3">{tr("Sire")}</th>
+                  <th className="py-2 pr-3">{tr("Type")}</th>
+                  <th className="py-2 pr-3">{tr("Semen code")}</th>
+                  <th className="py-2 pr-3">{tr("Provider", "সরবরাহকারী")}</th>
+                  <th className="py-2 pr-3">{tr("Breed")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -510,10 +532,10 @@ export function BreedingWorkspaceView() {
                         s.display_name || s.bull_name || s.semen_code
                       )}
                     </td>
-                    <td className="py-2 pr-3 capitalize">{s.source_type.replaceAll("_", " ")}</td>
+                    <td className="py-2 pr-3">{enumLabel(s.source_type)}</td>
                     <td className="py-2 pr-3">{s.semen_code || "—"}</td>
                     <td className="py-2 pr-3">{s.provider || "—"}</td>
-                    <td className="py-2 pr-3 capitalize">{s.breed || "—"}</td>
+                    <td className="py-2 pr-3">{s.breed ? enumLabel(s.breed) : "—"}</td>
                   </tr>
                 ))}
               </tbody>

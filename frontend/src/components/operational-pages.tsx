@@ -215,8 +215,8 @@ export function HerdWorkspace() {
           className={ui.select}
         >
           <option value="">{tr("All sexes")}</option>
-          <option value="female">{tr("Female", "গাভী/বকনা")}</option>
-          <option value="male">{tr("Male", "ষাঁড়/বাছুর")}</option>
+          <option value="female">{tr("Female", "গাভী / বকনা")}</option>
+          <option value="male">{tr("Male", "ষাঁড় / বাছুর")}</option>
         </select>
       </div>
 

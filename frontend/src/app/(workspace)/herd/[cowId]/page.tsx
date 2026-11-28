@@ -34,7 +34,7 @@ import { useI18n } from "@/lib/i18n";
 
 export default function CowProfilePage() {
   const { cowId } = useParams<{ cowId: string }>();
-  const { tr, money, num, date: fmtDate, enumLabel, daysOnFarm } = useI18n();
+  const { tr, money, num, integer, date: fmtDate, enumLabel, daysOnFarm } = useI18n();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
@@ -369,7 +369,7 @@ export default function CowProfilePage() {
                   </div>
                   <p className="mt-1 text-[13px] text-muted">
                     {enumLabel(cow.category)}
-                    {cow.cow_type ? ` · ${cow.cow_type}` : ""} · {enumLabel(cow.sex)}
+                    {cow.cow_type ? ` · ${enumLabel(cow.cow_type)}` : ""} · {enumLabel(cow.sex)}
                     {cow.breed ? ` · ${enumLabel(cow.breed)}` : ""}
                     {cow.color ? ` · ${cow.color}` : ""} ·{" "}
                     {cow.warehouse_name ?? tr("No shed", "কোনো শেড নেই")}
@@ -408,7 +408,7 @@ export default function CowProfilePage() {
                   {cow.is_archived ? tr("Restore") : tr("Archive")}
                 </button>
                 <div className="inline-flex h-9 items-center rounded-[6px] border border-line-strong bg-surface px-3 text-[12.5px]">
-                  <SafeDataHistory entityType="cows" entityId={cow.cow_id} entityLabel={`Cow #${cow.current_tag_number}`} />
+                  <SafeDataHistory entityType="cows" entityId={cow.cow_id} entityLabel={tr(`Cow #${cow.current_tag_number}`, `গরু #${cow.current_tag_number}`)} />
                 </div>
               </div>
             </div>
@@ -431,15 +431,15 @@ export default function CowProfilePage() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatTile
               label={tr("Latest weight", "সর্বশেষ ওজন")}
-              value={cow.latest_weight_kg != null ? `${num(cow.latest_weight_kg)} kg` : "—"}
+              value={cow.latest_weight_kg != null ? `${num(cow.latest_weight_kg)} ${tr("kg", "কেজি")}` : "—"}
               subtext={
                 kpis.latestWeight
                   ? `${fmtDate(kpis.latestWeight.weigh_date)}${
                       kpis.weightDelta !== null
-                        ? ` · ${kpis.weightDelta >= 0 ? "+" : ""}${num(kpis.weightDelta)} kg`
+                        ? ` · ${kpis.weightDelta >= 0 ? "+" : ""}${num(kpis.weightDelta)} ${tr("kg", "কেজি")}`
                         : ""
                     }`
-                  : tr("No active weight recorded", "কোনো ওজন রেকর্ড নেই")
+                  : tr("No active weight recorded", "কোনো সক্রিয় ওজন রেকর্ড নেই")
               }
             />
             <StatTile
@@ -447,14 +447,14 @@ export default function CowProfilePage() {
               value={<span className="text-[18px]">{cow.warehouse_name ?? "—"}</span>}
               subtext={
                 kpis.daysOnFarm !== null && kpis.daysOnFarm >= 0
-                  ? `${daysOnFarm(kpis.daysOnFarm)} ${tr("on farm", "খামারে")}${kpis.stayDays !== null && kpis.stayDays >= 0 ? ` · ${kpis.stayDays}d ${tr("in shed", "শেডে")}` : ""}`
+                  ? `${daysOnFarm(kpis.daysOnFarm)} ${tr("on farm", "খামারে")}${kpis.stayDays !== null && kpis.stayDays >= 0 ? ` · ${integer(kpis.stayDays)} ${tr("d in shed", "দিন শেডে")}` : ""}`
                   : kpis.currentStay
                     ? `${fmtDate(kpis.currentStay.moved_in_date)}`
-                    : tr("No active stay record")
+                    : tr("No active stay record", "শেডে থাকার কোনো সক্রিয় তথ্য নেই")
               }
             />
             <StatTile
-              label={kpis.activePregnancy ? tr("Pregnancy status", "গর্ভধারণ অবস্থা") : tr("Next care due", "পরবর্তী চিকিৎসা")}
+              label={kpis.activePregnancy ? tr("Pregnancy status", "গর্ভধারণের অবস্থা") : tr("Next care due", "পরবর্তী চিকিৎসা")}
               value={
                 <span className="text-[18px]">
                   {kpis.activePregnancy
@@ -463,30 +463,30 @@ export default function CowProfilePage() {
                       : tr("Confirmed", "নিশ্চিত")
                     : kpis.dueCare?.next_due_date
                       ? fmtDate(kpis.dueCare.next_due_date)
-                      : tr("Up to date", "হালনাগাদ")}
+                      : tr("Up to date", "সব ঠিক আছে")}
                 </span>
               }
               subtext={
                 kpis.activePregnancy
-                  ? `${tr("Expected calving")} (${enumLabel(kpis.activePregnancy.status)})`
+                  ? `${tr("Expected calving", "সম্ভাব্য প্রসব")} (${enumLabel(kpis.activePregnancy.status)})`
                   : kpis.dueCare?.next_due_date
-                    ? `${enumLabel(kpis.dueCare.record_type)}${kpis.dueCare.next_due_date < today ? ` · ${tr("Overdue", "বিলম্বিত")}` : ""}`
-                    : tr("No pending care dates")
+                    ? `${enumLabel(kpis.dueCare.record_type)}${kpis.dueCare.next_due_date < today ? ` · ${tr("Overdue", "মেয়াদোত্তীর্ণ")}` : ""}`
+                    : tr("No pending care dates", "আপাতত কোনো নির্ধারিত চিকিৎসা নেই")
               }
             />
             <StatTile
-              label={cow.gives_milk || milkRecords.length > 0 ? tr("30-day milk", "৩০ দিনের দুধ") : tr("Direct cow costs", "সরাসরি খরচ")}
+              label={cow.gives_milk || milkRecords.length > 0 ? tr("30-day milk", "গত ৩০ দিনের দুধ") : tr("Direct cow costs", "সরাসরি খরচ")}
               value={
                 cow.gives_milk || milkRecords.length > 0
                   ? kpis.milkDaysCount > 0
-                    ? `${num(kpis.milk30Liters / kpis.milkDaysCount)} L/day`
-                    : "0 L/day"
+                    ? `${num(kpis.milk30Liters / kpis.milkDaysCount)} ${tr("L/day", "লিটার/দিন")}`
+                    : `${integer(0)} ${tr("L/day", "লিটার/দিন")}`
                   : money(kpis.totalDirectCost)
               }
               subtext={
                 cow.gives_milk || milkRecords.length > 0
-                  ? `${num(kpis.milk30Liters)} L (${num(kpis.milkDaysCount, 0)}d) · ${money(kpis.totalDirectCost)}`
-                  : tr("Health, breeding, expenses & feeding")
+                  ? `${num(kpis.milk30Liters)} ${tr("L", "লিটার")} (${integer(kpis.milkDaysCount)} ${tr("d", "দিন")}) · ${money(kpis.totalDirectCost)}`
+                  : tr("Health, breeding, expenses & feeding", "স্বাস্থ্য, প্রজনন, খরচ ও খাদ্য")
               }
             />
           </div>
@@ -560,10 +560,10 @@ export default function CowProfilePage() {
             <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
               <div>
                 <h3 className="text-[15px] font-semibold text-ink">
-                  {tr("Record cow sale")} — {cow.current_tag_number}
+                  {tr("Record cow sale", "গরু বিক্রির তথ্য")} — {cow.current_tag_number}
                 </h3>
                 <p className="text-[12px] text-muted">
-                  {tr("Save who bought this cow and the sale details.")}
+                  {tr("Save who bought this cow and the sale details.", "কে গরু কিনেছেন এবং বিক্রির বিবরণ সংরক্ষণ করুন।")}
                 </p>
               </div>
               <button
@@ -576,28 +576,28 @@ export default function CowProfilePage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={ui.label}>
-                {tr("Buyer name")} *
+                {tr("Buyer name", "ক্রেতার নাম")} *
                 <input
                   required
                   maxLength={150}
                   value={saleForm.buyer_name}
                   onChange={(e) => setSaleForm((f) => ({ ...f, buyer_name: e.target.value }))}
-                  placeholder="e.g. Abdul Karim"
+                  placeholder={tr("e.g. Abdul Karim", "যেমন: আব্দুল করিম")}
                   className={ui.input}
                 />
               </label>
               <label className={ui.label}>
-                {tr("Buyer phone")}
+                {tr("Buyer phone", "ক্রেতার ফোন")}
                 <input
                   maxLength={50}
                   value={saleForm.buyer_phone}
                   onChange={(e) => setSaleForm((f) => ({ ...f, buyer_phone: e.target.value }))}
-                  placeholder="e.g. 017XXXXXXXX"
+                  placeholder={tr("e.g. 017XXXXXXXX", "যেমন: ০১৭XXXXXXXX")}
                   className={ui.input}
                 />
               </label>
               <label className={ui.label}>
-                {tr("Sale date")} *
+                {tr("Sale date", "বিক্রির তারিখ")} *
                 <input
                   required
                   type="date"
@@ -607,7 +607,7 @@ export default function CowProfilePage() {
                 />
               </label>
               <label className={ui.label}>
-                {tr("Sale price (৳)")}
+                {tr("Sale price (৳)", "বিক্রয়মূল্য (৳)")}
                 <input
                   type="number"
                   min="0"
@@ -618,22 +618,22 @@ export default function CowProfilePage() {
                 />
               </label>
               <label className={`${ui.label} sm:col-span-2`}>
-                {tr("Buyer address")}
+                {tr("Buyer address", "ক্রেতার ঠিকানা")}
                 <input
                   maxLength={255}
                   value={saleForm.buyer_address}
                   onChange={(e) => setSaleForm((f) => ({ ...f, buyer_address: e.target.value }))}
-                  placeholder="Village, market, or address"
+                  placeholder={tr("Village, market, or address", "গ্রাম, বাজার বা ঠিকানা")}
                   className={ui.input}
                 />
               </label>
               <label className={`${ui.label} sm:col-span-2`}>
-                {tr("Sale notes")}
+                {tr("Sale notes", "বিক্রির নোট")}
                 <textarea
                   rows={2}
                   value={saleForm.sale_notes}
                   onChange={(e) => setSaleForm((f) => ({ ...f, sale_notes: e.target.value }))}
-                  placeholder="Payment method, transport, or remarks"
+                  placeholder={tr("Payment method, transport, or remarks", "পেমেন্ট মাধ্যম, পরিবহন বা মন্তব্য")}
                   className={ui.textarea}
                 />
               </label>
@@ -647,7 +647,7 @@ export default function CowProfilePage() {
                 {tr("Cancel")}
               </button>
               <button type="submit" disabled={statusBusy} className={btn("primary", "sm")}>
-                {statusBusy ? tr("Saving…") : tr("Confirm sale")}
+                {statusBusy ? tr("Saving…") : tr("Confirm sale", "বিক্রি নিশ্চিত করুন")}
               </button>
             </div>
           </form>

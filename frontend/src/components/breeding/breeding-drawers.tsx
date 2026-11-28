@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { btn, Segmented, ui } from "@/components/ui";
 import { shiftIsoDate, todayInDhaka } from "@/components/workspace-date";
 import { apiRequest, apiRoutes } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type {
   BreedingRecord,
   CowListOption,
@@ -39,6 +40,7 @@ export function BreedingFormModal({
   relatedSireIds = [],
   relatedSireCowIds = [],
 }: BreedingFormModalProps) {
+  const { tr, enumLabel } = useI18n();
   const today = todayInDhaka();
   const isEdit = Boolean(initialRecord);
   const [cowId, setCowId] = useState(initialRecord?.cow_id ?? fixedCowId ?? "");
@@ -82,19 +84,19 @@ export function BreedingFormModal({
     setFormError("");
     const targetCowId = fixedCowId || cowId;
     if (!targetCowId) {
-      setFormError("Please select a cow.");
+      setFormError(tr("Please select a cow.", "দয়া করে একটি গরু নির্বাচন করুন।"));
       return;
     }
     if (heatDate && seedDate && seedDate < heatDate) {
-      setFormError("Insemination date cannot be earlier than heat date.");
+      setFormError(tr("Insemination date cannot be earlier than heat date.", "প্রজননের তারিখ হিট তারিখের আগে হতে পারবে না।"));
       return;
     }
     if (sourceMode === "registry" && !sireRegistryId) {
-      setFormError("Please select a sire from the registry or switch to New AI semen.");
+      setFormError(tr("Please select a sire from the registry or switch to New AI semen.", "তালিকা থেকে একটি ষাঁড়/সিমেন বেছে নিন অথবা নতুন এআই সিমেন নির্বাচন করুন।"));
       return;
     }
     if (sourceMode === "new_semen" && !semenCode.trim()) {
-      setFormError("Please enter a semen code.");
+      setFormError(tr("Please enter a semen code.", "দয়া করে সিমেন কোড লিখুন।"));
       return;
     }
 
@@ -128,18 +130,18 @@ export function BreedingFormModal({
           method: "PATCH",
           body,
         });
-        onNotice("Breeding record updated.");
+        onNotice(tr("Breeding record updated.", "প্রজনন রেকর্ড আপডেট হয়েছে।"));
       } else {
         await apiRequest(apiRoutes.health.breeding, {
           method: "POST",
           body,
         });
-        onNotice("Breeding record saved.");
+        onNotice(tr("Breeding record saved.", "প্রজনন রেকর্ড সংরক্ষণ করা হয়েছে।"));
       }
       await onSaved();
       onClose();
     } catch (cause) {
-      const msg = cause instanceof Error ? cause.message : "Could not save breeding record.";
+      const msg = cause instanceof Error ? cause.message : tr("Could not save breeding record.", "প্রজনন রেকর্ড সংরক্ষণ করা যায়নি।");
       setFormError(msg);
       onError(msg);
     } finally {
@@ -156,10 +158,10 @@ export function BreedingFormModal({
       >
         <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
           <h3 className="text-[15px] font-semibold text-ink">
-            {isEdit ? "Edit breeding record" : "Log breeding"}
+            {isEdit ? tr("Edit breeding record", "প্রজনন রেকর্ড সম্পাদনা") : tr("Log breeding", "প্রজনন তথ্য লিখুন")}
           </h3>
           <button type="button" onClick={onClose} className={btn("quiet", "sm")}>
-            Cancel
+            {tr("Cancel")}
           </button>
         </div>
 
@@ -171,16 +173,19 @@ export function BreedingFormModal({
 
         {inbreedingWarning ? (
           <p className="rounded-[6px] border border-warn/40 bg-warn/10 px-3 py-2 text-[12.5px] text-warn">
-            Inbreeding warning: the selected sire matches this cow&apos;s own sire or grand-sire.
+            {tr(
+              "Inbreeding warning: the selected sire matches this cow's own sire or grand-sire.",
+              "সতর্কতা: নির্বাচিত ষাঁড়টি এই গরুর নিজস্ব বাবা বা দাদা-নানার বংশের সাথে মিলে গেছে (ইনব্রিডিং ঝুঁকি)।"
+            )}
           </p>
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
           {!fixedCowId && !isEdit ? (
             <label className={`${ui.label} sm:col-span-2`}>
-              Cow *
+              {tr("Cow")} *
               <select required value={cowId} onChange={(e) => setCowId(e.target.value)} className={ui.select}>
-                <option value="">Choose female cow</option>
+                <option value="">{tr("Choose female cow", "গাভী/বকনা নির্বাচন করুন")}</option>
                 {femaleCows.map((c) => (
                   <option key={c.cow_id} value={c.cow_id}>
                     {c.current_tag_number}
@@ -191,57 +196,57 @@ export function BreedingFormModal({
           ) : null}
 
           <label className={ui.label}>
-            Heat date
+            {tr("Heat date")}
             <input type="date" value={heatDate} onChange={(e) => setHeatDate(e.target.value)} className={ui.input} />
           </label>
           <label className={ui.label}>
-            Insemination date *
+            {tr("Insemination date")} *
             <input type="date" required value={seedDate} onChange={(e) => setSeedDate(e.target.value)} className={ui.input} />
           </label>
 
           <label className={ui.label}>
-            Method *
+            {tr("Method")} *
             <select value={method} onChange={(e) => setMethod(e.target.value)} className={ui.select}>
-              <option value="artificial_insemination">Artificial insemination</option>
-              <option value="natural">Natural</option>
+              <option value="artificial_insemination">{enumLabel("artificial_insemination")}</option>
+              <option value="natural">{enumLabel("natural")}</option>
             </select>
           </label>
           <label className={ui.label}>
-            Outcome
+            {tr("Outcome")}
             <select value={outcome} onChange={(e) => setOutcome(e.target.value)} className={ui.select}>
-              <option value="pending">Pending</option>
-              <option value="successful">Successful</option>
-              <option value="failed">Failed</option>
+              <option value="pending">{enumLabel("pending")}</option>
+              <option value="successful">{enumLabel("successful")}</option>
+              <option value="failed">{enumLabel("failed")}</option>
             </select>
           </label>
 
           <div className="sm:col-span-2">
-            <span className="mb-1.5 block text-[12px] font-medium text-muted">Sire / Semen source</span>
+            <span className="mb-1.5 block text-[12px] font-medium text-muted">{tr("Sire / Semen source", "ষাঁড় / সিমেনের উৎস")}</span>
             <Segmented
               name="breeding_source_mode"
               size="sm"
               value={sourceMode}
               onChange={setSourceMode}
               options={[
-                { value: "registry", label: "Sire registry (On-farm / AI)" },
-                { value: "new_semen", label: "New AI semen straw" },
+                { value: "registry", label: tr("Sire registry (On-farm / AI)", "নিবন্ধিত তালিকা (খামার / এআই)") },
+                { value: "new_semen", label: tr("New AI semen straw", "নতুন এআই সিমেন") },
               ]}
             />
           </div>
 
           {sourceMode === "registry" ? (
             <label className={`${ui.label} sm:col-span-2`}>
-              Sire *
+              {tr("Sire")} *
               <select
                 required
                 value={sireRegistryId}
                 onChange={(e) => setSireRegistryId(e.target.value)}
                 className={ui.select}
               >
-                <option value="">Choose sire</option>
+                <option value="">{tr("Choose sire", "ষাঁড়/সিমেন নির্বাচন করুন")}</option>
                 {sires.filter((s) => !s.is_archived).map((s) => (
                   <option key={s.sire_id} value={s.sire_id}>
-                    {s.display_name || s.semen_code || s.bull_name || "Sire"} ({s.source_type === "on_farm" ? "On-farm" : "External AI"})
+                    {s.display_name || s.semen_code || s.bull_name || tr("Sire")} ({enumLabel(s.source_type)})
                   </option>
                 ))}
               </select>
@@ -249,7 +254,7 @@ export function BreedingFormModal({
           ) : (
             <>
               <label className={ui.label}>
-                Semen code *
+                {tr("Semen code")} *
                 <input
                   required
                   value={semenCode}
@@ -259,11 +264,11 @@ export function BreedingFormModal({
                 />
               </label>
               <label className={ui.label}>
-                Semen provider
+                {tr("Semen provider")}
                 <input
                   value={semenProvider}
                   onChange={(e) => setSemenProvider(e.target.value)}
-                  placeholder="e.g. BRAC, DLS, American Dairy"
+                  placeholder={tr("e.g. BRAC, DLS, American Dairy", "যেমন: ব্র্যাক, প্রাণিসম্পদ, আমেরিকান ডেইরি")}
                   className={ui.input}
                 />
               </label>
@@ -271,25 +276,25 @@ export function BreedingFormModal({
           )}
 
           <label className={ui.label}>
-            Doctor / Technician
+            {tr("Doctor / Technician", "ডাক্তার / টেকনিশিয়ান")}
             <input value={doctorName} onChange={(e) => setDoctorName(e.target.value)} className={ui.input} />
           </label>
           <label className={ui.label}>
-            Cost (৳)
+            {tr("Cost (৳)", "খরচ (৳)")}
             <input type="number" min="0" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} className={ui.input} />
           </label>
           <label className={`${ui.label} sm:col-span-2`}>
-            Notes
+            {tr("Notes")}
             <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={ui.textarea} />
           </label>
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onClose} className={btn("secondary", "sm")}>
-            Cancel
+            {tr("Cancel")}
           </button>
           <button type="submit" disabled={saving} className={btn("primary", "sm")}>
-            {saving ? "Saving…" : isEdit ? "Update breeding" : "Save breeding"}
+            {saving ? tr("Saving…") : isEdit ? tr("Update breeding", "প্রজনন আপডেট করুন") : tr("Save breeding", "প্রজনন সংরক্ষণ করুন")}
           </button>
         </div>
       </form>
@@ -322,6 +327,7 @@ export function PregnancyCheckModal({
   initialReport = null,
   defaultBreedingId = null,
 }: PregnancyCheckModalProps) {
+  const { tr, date: fmtDate, enumLabel } = useI18n();
   const today = todayInDhaka();
   const isEdit = Boolean(initialReport);
   const [cowId, setCowId] = useState(initialReport?.cow_id ?? fixedCowId ?? "");
@@ -375,7 +381,7 @@ export function PregnancyCheckModal({
     setFormError("");
     const targetCowId = fixedCowId || cowId;
     if (!targetCowId) {
-      setFormError("Please select a cow.");
+      setFormError(tr("Please select a cow.", "দয়া করে একটি গরু নির্বাচন করুন।"));
       return;
     }
     if (
@@ -384,7 +390,7 @@ export function PregnancyCheckModal({
       (status === "confirmed" || status === "suspected") &&
       expectedCalving < reportDate
     ) {
-      setFormError("Expected calving date cannot be earlier than check date.");
+      setFormError(tr("Expected calving date cannot be earlier than check date.", "সম্ভাব্য প্রসবের তারিখ পরীক্ষার তারিখের আগে হতে পারবে না।"));
       return;
     }
 
@@ -404,18 +410,18 @@ export function PregnancyCheckModal({
           method: "PATCH",
           body,
         });
-        onNotice("Pregnancy check updated.");
+        onNotice(tr("Pregnancy check updated.", "গর্ভধারণ পরীক্ষা আপডেট হয়েছে।"));
       } else {
         await apiRequest(apiRoutes.health.pregnancy, {
           method: "POST",
           body,
         });
-        onNotice("Pregnancy check saved.");
+        onNotice(tr("Pregnancy check saved.", "গর্ভধারণ পরীক্ষা সংরক্ষণ করা হয়েছে।"));
       }
       await onSaved();
       onClose();
     } catch (cause) {
-      const msg = cause instanceof Error ? cause.message : "Could not save pregnancy check.";
+      const msg = cause instanceof Error ? cause.message : tr("Could not save pregnancy check.", "গর্ভধারণ পরীক্ষা সংরক্ষণ করা যায়নি।");
       setFormError(msg);
       onError(msg);
     } finally {
@@ -432,10 +438,10 @@ export function PregnancyCheckModal({
       >
         <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
           <h3 className="text-[15px] font-semibold text-ink">
-            {isEdit ? "Edit pregnancy check" : "Log pregnancy check"}
+            {isEdit ? tr("Edit pregnancy check", "গর্ভধারণ পরীক্ষা সম্পাদনা") : tr("Log pregnancy check", "গর্ভধারণ পরীক্ষা লিখুন")}
           </h3>
           <button type="button" onClick={onClose} className={btn("quiet", "sm")}>
-            Cancel
+            {tr("Cancel")}
           </button>
         </div>
 
@@ -448,9 +454,9 @@ export function PregnancyCheckModal({
         <div className="grid gap-3 sm:grid-cols-2">
           {!fixedCowId && !isEdit ? (
             <label className={`${ui.label} sm:col-span-2`}>
-              Cow *
+              {tr("Cow")} *
               <select required value={cowId} onChange={(e) => setCowId(e.target.value)} className={ui.select}>
-                <option value="">Choose female cow</option>
+                <option value="">{tr("Choose female cow", "গাভী/বকনা নির্বাচন করুন")}</option>
                 {femaleCows.map((c) => (
                   <option key={c.cow_id} value={c.cow_id}>
                     {c.current_tag_number}
@@ -461,26 +467,26 @@ export function PregnancyCheckModal({
           ) : null}
 
           <label className={ui.label}>
-            Check date *
+            {tr("Check date")} *
             <input type="date" required value={reportDate} onChange={(e) => setReportDate(e.target.value)} className={ui.input} />
           </label>
           <label className={ui.label}>
-            Result *
+            {tr("Result")} *
             <select value={status} onChange={(e) => setStatus(e.target.value)} className={ui.select}>
-              <option value="confirmed">Confirmed</option>
-              <option value="suspected">Suspected</option>
-              <option value="failed">Not pregnant / failed</option>
-              <option value="aborted">Aborted</option>
+              <option value="confirmed">{enumLabel("confirmed")}</option>
+              <option value="suspected">{enumLabel("suspected")}</option>
+              <option value="failed">{tr("Not pregnant / failed", "গর্ভধারণ হয়নি / ব্যর্থ")}</option>
+              <option value="aborted">{enumLabel("aborted")}</option>
             </select>
           </label>
 
           <label className={`${ui.label} sm:col-span-2`}>
-            Linked breeding attempt
+            {tr("Linked breeding attempt", "সংশ্লিষ্ট প্রজনন তথ্য")}
             <select value={breedingId} onChange={(e) => handleBreedingChange(e.target.value)} className={ui.select}>
-              <option value="">None (e.g. bought already pregnant)</option>
+              <option value="">{tr("None (e.g. bought already pregnant)", "নেই (যেমন: আগে থেকেই গর্ভবতী কেনা)")}</option>
               {cowBreedings.map((b) => (
                 <option key={b.breeding_id} value={b.breeding_id}>
-                  {b.seed_date} · {b.sire_display_name || b.semen_code || "Sire"} ({b.outcome})
+                  {fmtDate(b.seed_date)} · {b.sire_display_name || b.semen_code || tr("Sire")} ({enumLabel(b.outcome)})
                 </option>
               ))}
             </select>
@@ -488,7 +494,7 @@ export function PregnancyCheckModal({
 
           {(status === "confirmed" || status === "suspected") ? (
             <label className={`${ui.label} sm:col-span-2`}>
-              Expected calving date (auto +283d from service)
+              {tr("Expected calving date (auto +283d from service)", "সম্ভাব্য প্রসবের তারিখ (প্রজনন থেকে +২৮৩ দিন)")}
               <input
                 type="date"
                 value={expectedCalving}
@@ -499,17 +505,17 @@ export function PregnancyCheckModal({
           ) : null}
 
           <label className={`${ui.label} sm:col-span-2`}>
-            Notes
+            {tr("Notes")}
             <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={ui.textarea} />
           </label>
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onClose} className={btn("secondary", "sm")}>
-            Cancel
+            {tr("Cancel")}
           </button>
           <button type="submit" disabled={saving} className={btn("primary", "sm")}>
-            {saving ? "Saving…" : isEdit ? "Update check" : "Save check"}
+            {saving ? tr("Saving…") : isEdit ? tr("Update check", "পরীক্ষা আপডেট করুন") : tr("Save check", "পরীক্ষা সংরক্ষণ করুন")}
           </button>
         </div>
       </form>
@@ -549,6 +555,7 @@ export function CalvingDrawerModal({
   warehouses,
   defaultBreed,
 }: CalvingDrawerModalProps) {
+  const { tr, integer, enumLabel } = useI18n();
   const today = todayInDhaka();
   const defaultWarehouseId = warehouses[0]?.warehouse_id ?? "";
   const [calvingDate, setCalvingDate] = useState(today);
@@ -595,17 +602,17 @@ export function CalvingDrawerModal({
     event.preventDefault();
     setFormError("");
     if (liveCount === 0 && stillbornCount === 0) {
-      setFormError("Record at least one live or stillborn calf.");
+      setFormError(tr("Record at least one live or stillborn calf.", "কমপক্ষে ১টি জীবিত বা মৃত বাছুরের সংখ্যা লিখুন।"));
       return;
     }
     if (registerCalves && liveCount > 0) {
       for (let i = 0; i < calves.length; i += 1) {
         if (!calves[i].current_tag_number.trim()) {
-          setFormError(`Please enter a tag for calf #${i + 1}.`);
+          setFormError(tr(`Please enter a tag for calf #${i + 1}.`, `বাছুর #${integer(i + 1)}-এর ট্যাগ নম্বর লিখুন।`));
           return;
         }
         if (!calves[i].warehouse_id) {
-          setFormError(`Please select a shed for calf #${i + 1}.`);
+          setFormError(tr(`Please select a shed for calf #${i + 1}.`, `বাছুর #${integer(i + 1)}-এর জন্য শেড নির্বাচন করুন।`));
           return;
         }
       }
@@ -634,11 +641,11 @@ export function CalvingDrawerModal({
               : [],
         },
       });
-      onNotice("Calving recorded and newborn profile(s) linked.");
+      onNotice(tr("Calving recorded and newborn profile(s) linked.", "বাচ্চা প্রসবের তথ্য সংরক্ষিত হয়েছে এবং নবজাতক যুক্ত হয়েছে।"));
       await onSaved();
       onClose();
     } catch (cause) {
-      const msg = cause instanceof Error ? cause.message : "Could not record calving.";
+      const msg = cause instanceof Error ? cause.message : tr("Could not record calving.", "প্রসবের তথ্য সংরক্ষণ করা যায়নি।");
       setFormError(msg);
       onError(msg);
     } finally {
@@ -655,13 +662,13 @@ export function CalvingDrawerModal({
       >
         <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
           <div>
-            <h3 className="text-[15px] font-semibold text-ink">Record calving — Cow {damTag}</h3>
+            <h3 className="text-[15px] font-semibold text-ink">{tr("Record calving", "বাচ্চা প্রসব লিখুন")} — {tr("Cow")} {damTag}</h3>
             <p className="text-[12px] text-muted">
-              Step 1: Calving event details · Step 2: Register newborn calf profile(s)
+              {tr("Step 1: Calving event details · Step 2: Register newborn calf profile(s)", "ধাপ ১: প্রসবের বিবরণ · ধাপ ২: নবজাতক বাছুরের প্রোফাইল তৈরি করুন")}
             </p>
           </div>
           <button type="button" onClick={onClose} className={btn("quiet", "sm")}>
-            Cancel
+            {tr("Cancel")}
           </button>
         </div>
 
@@ -673,23 +680,23 @@ export function CalvingDrawerModal({
 
         <div className="grid gap-3 sm:grid-cols-4">
           <label className={ui.label}>
-            Calving date *
+            {tr("Calving date", "প্রসবের তারিখ")} *
             <input type="date" required max={today} value={calvingDate} onChange={(e) => setCalvingDate(e.target.value)} className={ui.input} />
           </label>
           <label className={ui.label}>
-            Calving ease *
+            {tr("Calving ease", "প্রসবের ধরন")} *
             <select
               value={calvingEase}
               onChange={(e) => setCalvingEase(e.target.value as "normal" | "assisted" | "c_section")}
               className={ui.select}
             >
-              <option value="normal">Normal</option>
-              <option value="assisted">Assisted</option>
-              <option value="c_section">C-section</option>
+              <option value="normal">{enumLabel("normal")}</option>
+              <option value="assisted">{enumLabel("assisted")}</option>
+              <option value="c_section">{enumLabel("c_section")}</option>
             </select>
           </label>
           <label className={ui.label}>
-            Live calves *
+            {tr("Live calves", "জীবিত বাছুর")} *
             <input
               type="number"
               min={0}
@@ -700,7 +707,7 @@ export function CalvingDrawerModal({
             />
           </label>
           <label className={ui.label}>
-            Stillborn *
+            {tr("Stillborn", "মৃত বাছুর")} *
             <input
               type="number"
               min={0}
@@ -716,7 +723,7 @@ export function CalvingDrawerModal({
           <div className="space-y-3 rounded-[8px] border border-line bg-subtle p-3.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[12.5px] font-semibold text-ink">
-                Newborn calf profiles ({liveCount})
+                {tr("Newborn calf profiles", "নবজাতক বাছুরের তথ্য")} ({integer(liveCount)})
               </span>
               <label className="flex items-center gap-2 text-[12px] text-ink">
                 <input
@@ -724,7 +731,7 @@ export function CalvingDrawerModal({
                   checked={registerCalves}
                   onChange={(e) => setRegisterCalves(e.target.checked)}
                 />
-                Create cow profile(s) now
+                {tr("Create cow profile(s) now", "এখনই বাছুরের প্রোফাইল তৈরি করুন")}
               </label>
             </div>
             {registerCalves ? (
@@ -732,7 +739,7 @@ export function CalvingDrawerModal({
                 {calves.map((calf, idx) => (
                   <div key={idx} className="grid gap-2.5 rounded-[6px] border border-line bg-surface p-3 sm:grid-cols-5">
                     <label className={ui.label}>
-                      Calf #{idx + 1} Tag *
+                      {tr("Calf", "বাছুর")} #{integer(idx + 1)} {tr("Tag")} *
                       <input
                         required
                         value={calf.current_tag_number}
@@ -746,7 +753,7 @@ export function CalvingDrawerModal({
                       />
                     </label>
                     <label className={ui.label}>
-                      Sex *
+                      {tr("Sex")} *
                       <select
                         value={calf.sex}
                         onChange={(e) =>
@@ -758,12 +765,12 @@ export function CalvingDrawerModal({
                         }
                         className={ui.select}
                       >
-                        <option value="female">Female</option>
-                        <option value="male">Male</option>
+                        <option value="female">{tr("Female")}</option>
+                        <option value="male">{tr("Male")}</option>
                       </select>
                     </label>
                     <label className={ui.label}>
-                      Breed
+                      {tr("Breed")}
                       <select
                         value={calf.breed}
                         onChange={(e) =>
@@ -773,13 +780,13 @@ export function CalvingDrawerModal({
                         }
                         className={ui.select}
                       >
-                        <option value="deshi">Deshi</option>
-                        <option value="friesian">Friesian</option>
-                        <option value="other">Other</option>
+                        <option value="deshi">{tr("Deshi")}</option>
+                        <option value="friesian">{tr("Friesian")}</option>
+                        <option value="other">{tr("Other / Unknown")}</option>
                       </select>
                     </label>
                     <label className={ui.label}>
-                      Birth wt (kg)
+                      {tr("Birth wt (kg)", "জন্ম ওজন (কেজি)")}
                       <input
                         type="number"
                         min="1"
@@ -790,12 +797,12 @@ export function CalvingDrawerModal({
                             prev.map((item, i) => (i === idx ? { ...item, birth_weight_kg: e.target.value } : item))
                           )
                         }
-                        placeholder="e.g. 28"
+                        placeholder={tr("e.g. 28", "যেমন: ২৮")}
                         className={ui.input}
                       />
                     </label>
                     <label className={ui.label}>
-                      Shed *
+                      {tr("Shed")} *
                       <select
                         required
                         value={calf.warehouse_id}
@@ -806,7 +813,7 @@ export function CalvingDrawerModal({
                         }
                         className={ui.select}
                       >
-                        <option value="">Select shed</option>
+                        <option value="">{tr("Select shed", "শেড নির্বাচন করুন")}</option>
                         {warehouses.map((w) => (
                           <option key={w.warehouse_id} value={w.warehouse_id}>
                             {w.name}
@@ -822,16 +829,16 @@ export function CalvingDrawerModal({
         ) : null}
 
         <label className={ui.label}>
-          Calving notes
+          {tr("Calving notes", "প্রসবের নোট")}
           <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={ui.textarea} />
         </label>
 
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onClose} className={btn("secondary", "sm")}>
-            Cancel
+            {tr("Cancel")}
           </button>
           <button type="submit" disabled={saving} className={btn("primary", "sm")}>
-            {saving ? "Saving…" : "Confirm calving"}
+            {saving ? tr("Saving…") : tr("Confirm calving", "প্রসব নিশ্চিত করুন")}
           </button>
         </div>
       </form>

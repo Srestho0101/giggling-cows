@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
 export type PaginatedColumn<T> = {
   key: string;
@@ -36,6 +37,7 @@ export function PaginatedTableCard<T>({
   pageSizeOptions = [5, 10, 20, 50],
   scrollHeightClass = "max-h-[260px]",
 }: PaginatedTableCardProps<T>) {
+  const { tr, integer } = useI18n();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
 
@@ -72,7 +74,7 @@ export function PaginatedTableCard<T>({
           <div className="flex items-center gap-2">
             <h3 className="text-[14px] font-semibold text-ink">{title}</h3>
             <span className="inline-flex items-center rounded-[4px] border border-line bg-subtle px-1.5 py-0.5 text-[11px] font-medium text-muted tabular-nums">
-              {total}
+              {integer(total)}
             </span>
           </div>
           {subtitle ? <p className="mt-0.5 text-[12px] text-muted">{subtitle}</p> : null}
@@ -123,11 +125,13 @@ export function PaginatedTableCard<T>({
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-subtle/70 px-4 py-2.5 text-[12px] text-muted">
         <span className="tabular-nums">
-          {total === 0 ? "0 records" : `Showing ${startItem}–${endItem} of ${total}`}
+          {total === 0
+            ? tr("0 records", "০টি রেকর্ড")
+            : tr(`Showing ${startItem}–${endItem} of ${total}`, `${integer(total)}টির মধ্যে ${integer(startItem)}–${integer(endItem)} দেখানো হচ্ছে`)}
         </span>
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5">
-            <span>Rows</span>
+            <span>{tr("Rows", "সারি")}</span>
             <select
               aria-label={`${title} rows per page`}
               value={pageSize}
@@ -139,7 +143,7 @@ export function PaginatedTableCard<T>({
             >
               {pageSizeOptions.map((size) => (
                 <option key={size} value={size}>
-                  {size}
+                  {integer(size)}
                 </option>
               ))}
             </select>
@@ -152,7 +156,7 @@ export function PaginatedTableCard<T>({
               onClick={() => setPage(Math.max(1, currentPage - 1))}
               className="h-7 rounded-[5px] border border-line bg-surface px-2 text-[12px] font-medium text-ink transition-colors hover:bg-wash disabled:cursor-not-allowed disabled:opacity-45"
             >
-              Prev
+              {tr("Prev", "আগে")}
             </button>
             {pageNumbers.map((item, idx) =>
               item === "ellipsis" ? (
@@ -171,7 +175,7 @@ export function PaginatedTableCard<T>({
                       : "border-line bg-surface text-ink hover:bg-wash"
                   }`}
                 >
-                  {item}
+                  {integer(item)}
                 </button>
               )
             )}
@@ -182,7 +186,7 @@ export function PaginatedTableCard<T>({
               onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
               className="h-7 rounded-[5px] border border-line bg-surface px-2 text-[12px] font-medium text-ink transition-colors hover:bg-wash disabled:cursor-not-allowed disabled:opacity-45"
             >
-              Next
+              {tr("Next", "পরে")}
             </button>
           </div>
         </div>

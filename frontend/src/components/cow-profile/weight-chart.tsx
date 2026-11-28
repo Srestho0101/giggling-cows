@@ -3,12 +3,12 @@
 import React, { useMemo } from "react";
 import {
   daysBetween,
-  formatDisplayDate,
-  formatNumber,
   type WeightRecord,
 } from "@/components/cow-profile/types";
+import { useI18n } from "@/lib/i18n";
 
 export function WeightTrendChart({ records }: { records: WeightRecord[] }) {
+  const { tr, num, date: fmtDate } = useI18n();
   const chronological = useMemo(
     () =>
       records
@@ -21,7 +21,10 @@ export function WeightTrendChart({ records }: { records: WeightRecord[] }) {
   if (chronological.length < 2) {
     return (
       <p className="text-[12px] text-muted">
-        Log at least 2 active weight measurements to view growth rate and trend chart.
+        {tr(
+          "Log at least 2 active weight measurements to view growth rate and trend chart.",
+          "ওজন বৃদ্ধির হার ও চার্ট দেখতে কমপক্ষে ২টি ওজনের তথ্য লিখুন।"
+        )}
       </p>
     );
   }
@@ -62,27 +65,27 @@ export function WeightTrendChart({ records }: { records: WeightRecord[] }) {
       <div className="flex flex-wrap items-center justify-between gap-3 text-[12px]">
         <div className="flex flex-wrap items-center gap-4">
           <span>
-            <span className="text-muted">Start:</span>{" "}
-            <strong className="font-semibold text-ink tabular-nums">{formatNumber(firstKg)} kg</strong>{" "}
-            <span className="text-muted">({formatDisplayDate(first.weigh_date)})</span>
+            <span className="text-muted">{tr("Start:", "শুরু:")}</span>{" "}
+            <strong className="font-semibold text-ink tabular-nums">{num(firstKg)} {tr("kg", "কেজি")}</strong>{" "}
+            <span className="text-muted">({fmtDate(first.weigh_date)})</span>
           </span>
           <span>
-            <span className="text-muted">Latest:</span>{" "}
-            <strong className="font-semibold text-ink tabular-nums">{formatNumber(latestKg)} kg</strong>
+            <span className="text-muted">{tr("Latest:", "সর্বশেষ:")}</span>{" "}
+            <strong className="font-semibold text-ink tabular-nums">{num(latestKg)} {tr("kg", "কেজি")}</strong>
           </span>
           <span>
-            <span className="text-muted">Net change:</span>{" "}
+            <span className="text-muted">{tr("Net change:", "মোট পরিবর্তন:")}</span>{" "}
             <strong className={`font-semibold tabular-nums ${netGain >= 0 ? "text-accent" : "text-warn"}`}>
               {netGain >= 0 ? "+" : ""}
-              {formatNumber(netGain)} kg
+              {num(netGain)} {tr("kg", "কেজি")}
             </strong>
           </span>
           {adg !== null ? (
             <span>
-              <span className="text-muted">Avg daily gain:</span>{" "}
+              <span className="text-muted">{tr("Avg daily gain:", "দৈনিক গড় বৃদ্ধি:")}</span>{" "}
               <strong className={`font-semibold tabular-nums ${adg >= 0 ? "text-accent" : "text-warn"}`}>
                 {adg >= 0 ? "+" : ""}
-                {formatNumber(adg, 2)} kg/day
+                {num(adg, 2)} {tr("kg/day", "কেজি/দিন")}
               </strong>
             </span>
           ) : null}
@@ -93,7 +96,7 @@ export function WeightTrendChart({ records }: { records: WeightRecord[] }) {
         viewBox={`0 0 ${width} ${height}`}
         className="h-24 w-full overflow-visible"
         role="img"
-        aria-label="Weight progression chart"
+        aria-label={tr("Weight progression chart", "ওজন বৃদ্ধির চার্ট")}
       >
         <line x1={padX} y1={padY} x2={width - padX} y2={padY} className="stroke-line" strokeDasharray="3 3" />
         <line x1={padX} y1={height - padY} x2={width - padX} y2={height - padY} className="stroke-line" />
@@ -115,7 +118,7 @@ export function WeightTrendChart({ records }: { records: WeightRecord[] }) {
             className="fill-accent stroke-surface"
             strokeWidth="1.5"
           >
-            <title>{`${formatDisplayDate(point.date)}: ${formatNumber(point.val)} kg`}</title>
+            <title>{`${fmtDate(point.date)}: ${num(point.val)} ${tr("kg", "কেজি")}`}</title>
           </circle>
         ))}
       </svg>
