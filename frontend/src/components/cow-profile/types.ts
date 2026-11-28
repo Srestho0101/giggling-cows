@@ -29,6 +29,55 @@ export type OffspringItem = {
   cow_type?: string | null;
   birth_date?: string | null;
   status: string;
+  other_parent_id?: string | null;
+  other_parent_tag?: string | null;
+  conception_method?: string | null;
+  birth_weight_kg?: string | number | null;
+};
+
+export type CowPedigreeNode = {
+  cow_id?: string | null;
+  sire_registry_id?: string | null;
+  label: string;
+  is_external: boolean;
+};
+
+export type CowPedigree = {
+  dam?: CowPedigreeNode | null;
+  sire?: CowPedigreeNode | null;
+  maternal_grand_dam?: CowPedigreeNode | null;
+  maternal_grand_sire?: CowPedigreeNode | null;
+  paternal_grand_dam?: CowPedigreeNode | null;
+  paternal_grand_sire?: CowPedigreeNode | null;
+  related_sire_ids: string[];
+  related_sire_cow_ids: string[];
+};
+
+export type CowOriginContext = {
+  calving_id: string;
+  pregnancy_id: string;
+  breeding_id?: string | null;
+  dam_id: string;
+  dam_tag?: string | null;
+  sire_display_name?: string | null;
+  conception_method?: string | null;
+  insemination_date?: string | null;
+  calving_date: string;
+  gestation_days?: number | null;
+  calving_ease: string;
+  birth_weight_kg?: string | number | null;
+  littermates: OffspringItem[];
+};
+
+export type CowReproductiveSummary = {
+  state: "open" | "bred" | "suspected_pregnant" | "pregnant" | "vwp";
+  days_pregnant?: number | null;
+  days_since_breeding?: number | null;
+  expected_calving_date?: string | null;
+  dry_off_date?: string | null;
+  next_breeding_eligible_date?: string | null;
+  active_pregnancy_id?: string | null;
+  latest_open_breeding_id?: string | null;
 };
 
 export type CowSaleRecord = {
@@ -67,6 +116,10 @@ export type CowDetail = {
   dam_tag?: string | null;
   sire_id?: string | null;
   sire_tag?: string | null;
+  sire_registry_id?: string | null;
+  sire_display_name?: string | null;
+  origin_calving_id?: string | null;
+  birth_weight_kg?: string | number | null;
   warehouse_id: string;
   warehouse_name?: string | null;
   status: "active" | "sold" | "deceased" | "archived";
@@ -88,6 +141,9 @@ export type CowDetail = {
   weight_records: WeightRecord[];
   offspring: OffspringItem[];
   sale_record?: CowSaleRecord | null;
+  origin_context?: CowOriginContext | null;
+  pedigree?: CowPedigree | null;
+  reproductive_summary?: CowReproductiveSummary | null;
 };
 
 export type HealthRecord = {
@@ -102,15 +158,32 @@ export type HealthRecord = {
   is_archived: boolean;
 };
 
+export type SireItem = {
+  sire_id: string;
+  source_type: "on_farm" | "external_semen";
+  cow_id?: string | null;
+  cow_tag_number?: string | null;
+  bull_name?: string | null;
+  semen_code?: string | null;
+  provider?: string | null;
+  breed?: string | null;
+  notes?: string | null;
+  display_name?: string | null;
+  is_archived: boolean;
+};
+
 export type BreedingRecord = {
   breeding_id: string;
   cow_id: string;
+  cow_tag_number?: string | null;
   heat_date?: string | null;
   seed_date: string;
   conception_date?: string | null;
   method: string;
   sire_id?: string | null;
+  sire_registry_id?: string | null;
   sire_tag_number?: string | null;
+  sire_display_name?: string | null;
   semen_code?: string | null;
   semen_provider?: string | null;
   doctor_name?: string | null;
@@ -123,13 +196,77 @@ export type BreedingRecord = {
 export type PregnancyReport = {
   pregnancy_id: string;
   cow_id: string;
+  cow_tag_number?: string | null;
   breeding_id?: string | null;
+  episode_id?: string | null;
   report_date: string;
   status: string;
   expected_calving_date?: string | null;
   actual_calving_date?: string | null;
   notes?: string | null;
   is_archived: boolean;
+};
+
+export type CalvingCalfSummary = {
+  cow_id: string;
+  current_tag_number: string;
+  sex: string;
+  birth_weight_kg?: string | number | null;
+  status: string;
+};
+
+export type CalvingEvent = {
+  calving_id: string;
+  pregnancy_id: string;
+  dam_id: string;
+  dam_tag_number?: string | null;
+  calving_date: string;
+  calving_ease: "normal" | "assisted" | "c_section";
+  live_count: number;
+  stillborn_count: number;
+  notes?: string | null;
+  calves: CalvingCalfSummary[];
+};
+
+export type PregnancyEpisode = {
+  pregnancy_id: string;
+  cow_id: string;
+  cow_tag_number?: string | null;
+  breeding_id?: string | null;
+  breeding_seed_date?: string | null;
+  sire_registry_id?: string | null;
+  sire_display_name?: string | null;
+  status: "suspected" | "confirmed" | "calved" | "aborted" | "failed";
+  confirmed_date?: string | null;
+  expected_calving_date?: string | null;
+  dry_off_date?: string | null;
+  ended_at?: string | null;
+  next_breeding_eligible_date?: string | null;
+  notes?: string | null;
+  is_archived: boolean;
+  checks: PregnancyReport[];
+  calving_event?: CalvingEvent | null;
+};
+
+export type BreedingActionQueueItem = {
+  cow_id: string;
+  cow_tag_number: string;
+  bucket: "due_for_check" | "due_for_dry_off" | "calving_due" | "open_over_90_days";
+  reference_date: string;
+  days_value: number;
+  breeding_id?: string | null;
+  pregnancy_id?: string | null;
+  detail: string;
+};
+
+export type BreedingSummary = {
+  conception_rate_pct?: number | null;
+  avg_services_per_conception?: number | null;
+  active_pregnant_count: number;
+  due_for_check: BreedingActionQueueItem[];
+  due_for_dry_off: BreedingActionQueueItem[];
+  calving_due: BreedingActionQueueItem[];
+  open_over_90_days: BreedingActionQueueItem[];
 };
 
 export type MilkRecord = {

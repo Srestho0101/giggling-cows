@@ -560,8 +560,14 @@ async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncCl
             deleted_urls.append(previous_url)
             stored_objects.pop(previous_url, None)
 
+    async def fake_fetch(public_url):
+        if public_url in stored_objects:
+            return stored_objects[public_url], "image/png"
+        raise AssertionError(f"Unexpected fetch for {public_url}")
+
     monkeypatch.setattr("app.api.v1.endpoints.cows.upload_profile_picture_to_storage", fake_upload)
     monkeypatch.setattr("app.api.v1.endpoints.cows.delete_profile_picture_from_storage", fake_delete)
+    monkeypatch.setattr("app.api.v1.endpoints.cows.fetch_profile_picture_from_storage", fake_fetch)
 
     # Upload profile picture
     tiny_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
@@ -574,6 +580,11 @@ async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncCl
     expected_url = f"https://example.supabase.co/storage/v1/object/public/cow-profiles/{cow_id}/123.png"
     assert upload_resp.json()["profile_picture_url"] == expected_url
     assert stored_objects[expected_url] == tiny_png
+
+    # Fetch profile picture via backend proxy endpoint
+    pic_resp = await client.get(f"/api/v1/herd/cows/{cow_id}/profile-picture")
+    assert pic_resp.status_code == 200
+    assert pic_resp.content == tiny_png
 
     # Delete profile picture
     del_resp = await client.delete(
@@ -895,6 +906,182 @@ async def test_cow_category_cow_type_milking_dam_and_days_on_farm(client: AsyncC
     assert patch_resp.status_code == 200
     assert patch_resp.json()["dam_id"] == dam_id
     assert patch_resp.json()["cow_type"] == "Cow"
+
+
+@pytest.mark.asyncio
+async def test_breeding_pregnancy_calving_and_lineage_architecture(client: AsyncClient):
+    auth = {"Authorization": "Bearer dev-user:admin"}
+    today = date.today()
+
+    wh = (
+        await client.post(
+            "/api/v1/herd/warehouses",
+            json={"name": "Breeding Shed", "housing_type": "shed", "capacity": 20},
+            headers=auth,
+        )
+    ).json()
+    wh_id = wh["warehouse_id"]
+
+    # Create dam cow
+    dam = (
+        await client.post(
+            "/api/v1/herd/cows",
+            json={
+                "current_tag_number": "BREED-DAM-208",
+                "sex": "female",
+                "category": "dairy",
+                "cow_type": "Cow",
+                "breed": "friesian",
+                "acquisition_type": "born_on_farm",
+                "acquisition_date": str(today - timedelta(days=900)),
+                "birth_date": str(today - timedelta(days=900)),
+                "warehouse_id": wh_id,
+            },
+            headers=auth,
+        )
+    ).json()
+    dam_id = dam["cow_id"]
+
+    # 1. Create external AI sire in Sire Registry
+    sire_resp = await client.post(
+        "/api/v1/health/sires",
+        json={
+            "source_type": "external_semen",
+            "bull_name": "Raja HF",
+            "semen_code": "TEST-SEM-001",
+            "provider": "BRAC AI",
+            "breed": "friesian",
+        },
+        headers=auth,
+    )
+    assert sire_resp.status_code == 201
+    sire_reg_id = sire_resp.json()["sire_id"]
+
+    # 2. Log first breeding (Day -85) and then a repeat breeding (Day -60) -> first auto-fails
+    b1 = (
+        await client.post(
+            "/api/v1/health/breeding",
+            json={
+                "cow_id": dam_id,
+                "seed_date": str(today - timedelta(days=85)),
+                "method": "artificial_insemination",
+                "sire_registry_id": sire_reg_id,
+                "cost": 1500,
+            },
+            headers=auth,
+        )
+    ).json()
+    b2 = (
+        await client.post(
+            "/api/v1/health/breeding",
+            json={
+                "cow_id": dam_id,
+                "seed_date": str(today - timedelta(days=60)),
+                "method": "artificial_insemination",
+                "sire_registry_id": sire_reg_id,
+                "cost": 1800,
+            },
+            headers=auth,
+        )
+    ).json()
+    assert b2["sire_registry_id"] == sire_reg_id
+
+    breedings_after_repeat = (
+        await client.get(f"/api/v1/health/breeding?cow_id={dam_id}", headers=auth)
+    ).json()
+    b1_after = next(b for b in breedings_after_repeat if b["breeding_id"] == b1["breeding_id"])
+    assert b1_after["outcome"] == "failed"
+
+    # 3. Log Day-30 Suspected check, then Day-60 Confirmed check -> both attach to SAME Pregnancy episode
+    chk1 = (
+        await client.post(
+            "/api/v1/health/pregnancy",
+            json={
+                "cow_id": dam_id,
+                "report_date": str(today - timedelta(days=30)),
+                "status": "suspected",
+                "notes": "Early ultrasound",
+            },
+            headers=auth,
+        )
+    ).json()
+    assert chk1["episode_id"] is not None
+    assert chk1["breeding_id"] == b2["breeding_id"]
+
+    chk2 = (
+        await client.post(
+            "/api/v1/health/pregnancy",
+            json={
+                "cow_id": dam_id,
+                "report_date": str(today - timedelta(days=5)),
+                "status": "confirmed",
+            },
+            headers=auth,
+        )
+    ).json()
+    assert chk2["episode_id"] == chk1["episode_id"]
+    assert chk2["expected_calving_date"] == str((today - timedelta(days=60)) + timedelta(days=283))
+
+    # Confirm breeding b2 auto-updated to successful!
+    breedings_after_confirm = (
+        await client.get(f"/api/v1/health/breeding?cow_id={dam_id}", headers=auth)
+    ).json()
+    b2_after = next(b for b in breedings_after_confirm if b["breeding_id"] == b2["breeding_id"])
+    assert b2_after["outcome"] == "successful"
+
+    # 4. Atomic calving with twins!
+    calve_resp = await client.post(
+        f"/api/v1/health/pregnancies/{chk1['episode_id']}/calve",
+        json={
+            "calving_date": str(today),
+            "calving_ease": "assisted",
+            "live_count": 2,
+            "stillborn_count": 0,
+            "notes": "Healthy twins",
+            "calves": [
+                {
+                    "current_tag_number": "TWIN-208-A",
+                    "sex": "female",
+                    "category": "dairy",
+                    "breed": "friesian",
+                    "birth_weight_kg": 31.5,
+                    "warehouse_id": wh_id,
+                },
+                {
+                    "current_tag_number": "TWIN-208-B",
+                    "sex": "male",
+                    "category": "beef",
+                    "breed": "friesian",
+                    "birth_weight_kg": 33.0,
+                    "warehouse_id": wh_id,
+                },
+            ],
+        },
+        headers=auth,
+    )
+    assert calve_resp.status_code == 201
+    calv_data = calve_resp.json()
+    assert len(calv_data["calves"]) == 2
+    twin_a_id = calv_data["calves"][0]["cow_id"]
+
+    # 5. Verify Dam shows both offspring & VWP, and Twin A shows derived origin_context & littermate
+    dam_detail = (await client.get(f"/api/v1/herd/cows/{dam_id}", headers=auth)).json()
+    assert len(dam_detail["offspring"]) == 2
+    assert dam_detail["reproductive_summary"]["state"] == "vwp"
+
+    twin_detail = (await client.get(f"/api/v1/herd/cows/{twin_a_id}", headers=auth)).json()
+    assert twin_detail["origin_context"]["calving_ease"] == "assisted"
+    assert twin_detail["origin_context"]["conception_method"] == "artificial_insemination"
+    assert twin_detail["origin_context"]["gestation_days"] == 60
+    assert len(twin_detail["origin_context"]["littermates"]) == 1
+    assert twin_detail["origin_context"]["littermates"][0]["current_tag_number"] == "TWIN-208-B"
+    assert sire_reg_id in twin_detail["pedigree"]["related_sire_ids"]
+
+    # 6. Verify Breeding Summary KPIs
+    summary = (await client.get("/api/v1/health/breeding/summary", headers=auth)).json()
+    assert summary["conception_rate_pct"] == 50.0
+    assert summary["avg_services_per_conception"] == 2.0
+
 
 
 

@@ -69,6 +69,17 @@ class Cow(Base, AuditMixin, ArchiveAuditMixin):
     sire_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("cows.cow_id"), nullable=True
     )
+    sire_registry_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("sires.sire_id", ondelete="SET NULL", use_alter=True, name="fk_cows_sire_registry"),
+        nullable=True,
+    )
+    origin_calving_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("calving_events.calving_id", ondelete="SET NULL", use_alter=True, name="fk_cows_origin_calving"),
+        nullable=True,
+    )
+    birth_weight_kg: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2), nullable=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("warehouses.warehouse_id"), nullable=False
     )

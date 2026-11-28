@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { apiRoutes, apiUpload, apiRequest, resolveMediaUrl } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 type CowAvatarProps = {
   cowId: string;
@@ -31,12 +32,19 @@ export function CowAvatar({
   onError,
   onNotice,
 }: CowAvatarProps) {
+  const { tr } = useI18n();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [imgFailed, setImgFailed] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  const resolvedUrl = !imgFailed ? resolveMediaUrl(profilePictureUrl) : null;
+  const imgFailed = Boolean(profilePictureUrl && failedUrl === profilePictureUrl);
+  const resolvedUrl =
+    !imgFailed && profilePictureUrl
+      ? resolveMediaUrl(
+          `/api/v1${apiRoutes.herd.profilePicture(cowId)}?v=${encodeURIComponent(profilePictureUrl)}`
+        )
+      : null;
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -50,11 +58,11 @@ export function CowAvatar({
       const formData = new FormData();
       formData.append("file", file);
       await apiUpload(apiRoutes.herd.profilePicture(cowId), formData);
-      setImgFailed(false);
-      onNotice?.("Profile picture updated.");
+      setFailedUrl(null);
+      onNotice?.(tr("Profile picture updated.", "প্রোফাইল ছবি আপডেট হয়েছে।"));
       await onUpdated?.();
     } catch (cause) {
-      onError?.(cause instanceof Error ? cause.message : "Could not upload profile picture.");
+      onError?.(cause instanceof Error ? cause.message : tr("Could not upload profile picture.", "প্রোফাইল ছবি আপলোড করা যায়নি।"));
     } finally {
       setUploading(false);
     }
@@ -67,10 +75,10 @@ export function CowAvatar({
     try {
       await apiRequest(apiRoutes.herd.profilePicture(cowId), { method: "DELETE" });
       setPreviewOpen(false);
-      onNotice?.("Profile picture removed.");
+      onNotice?.(tr("Profile picture removed.", "প্রোফাইল ছবি সরানো হয়েছে।"));
       await onUpdated?.();
     } catch (cause) {
-      onError?.(cause instanceof Error ? cause.message : "Could not remove profile picture.");
+      onError?.(cause instanceof Error ? cause.message : tr("Could not remove profile picture.", "প্রোফাইল ছবি সরানো যায়নি।"));
     } finally {
       setUploading(false);
     }
@@ -89,9 +97,9 @@ export function CowAvatar({
           }}
           title={
             resolvedUrl
-              ? `View ${tag} photo`
+              ? tr(`View ${tag} photo`, `${tag}-এর ছবি দেখুন`)
               : editable
-                ? `Upload photo for ${tag}`
+                ? tr(`Upload photo for ${tag}`, `${tag}-এর ছবি আপলোড করুন`)
                 : tag
           }
           className={`relative overflow-hidden rounded-full border-2 border-line-strong bg-subtle ring-2 ring-surface shadow-sm flex items-center justify-center font-semibold text-muted select-none transition hover:border-accent ${
@@ -103,7 +111,7 @@ export function CowAvatar({
             <img
               src={resolvedUrl}
               alt={`Cow ${tag}`}
-              onError={() => setImgFailed(true)}
+              onError={() => setFailedUrl(profilePictureUrl ?? null)}
               className="h-full w-full rounded-full object-cover"
             />
           ) : (
@@ -150,7 +158,7 @@ export function CowAvatar({
               type="button"
               disabled={uploading}
               onClick={() => inputRef.current?.click()}
-              title={resolvedUrl ? "Change profile picture" : "Upload profile picture"}
+              title={resolvedUrl ? tr("Change profile picture", "প্রোফাইল ছবি পরিবর্তন করুন") : tr("Upload profile picture", "প্রোফাইল ছবি আপলোড করুন")}
               className="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface bg-ink text-surface shadow-sm transition hover:opacity-90 disabled:opacity-50"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
@@ -176,13 +184,13 @@ export function CowAvatar({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 pb-3">
-              <h3 className="text-[14px] font-semibold text-ink">Cow {tag}</h3>
+              <h3 className="text-[14px] font-semibold text-ink">{tr("Cow")} {tag}</h3>
               <button
                 type="button"
                 onClick={() => setPreviewOpen(false)}
                 className="rounded-[6px] px-2 py-1 text-[12px] text-muted hover:bg-subtle hover:text-ink"
               >
-                Close
+                {tr("Close")}
               </button>
             </div>
             <div className="flex justify-center py-2">
@@ -204,7 +212,7 @@ export function CowAvatar({
                   }}
                   className="rounded-[6px] border border-line-strong bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-subtle"
                 >
-                  Change photo
+                  {tr("Change photo", "ছবি পরিবর্তন করুন")}
                 </button>
                 <button
                   type="button"
@@ -212,7 +220,7 @@ export function CowAvatar({
                   onClick={() => void handleRemove()}
                   className="rounded-[6px] border border-danger/30 bg-danger/10 px-3 py-1.5 text-[12.5px] font-medium text-danger hover:bg-danger/15"
                 >
-                  Remove photo
+                  {tr("Remove photo", "ছবি সরান")}
                 </button>
               </div>
             ) : null}

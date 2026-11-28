@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { btn, ui } from "@/components/ui";
 import { apiRequest, apiRoutes } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type {
   CowDetail,
   CowListOption,
@@ -28,6 +29,7 @@ export function EditProfilePanel({
   onError,
   onNotice,
 }: EditProfilePanelProps) {
+  const { tr } = useI18n();
   const [saving, setSaving] = useState(false);
   const [values, setValues] = useState({
     current_tag_number: cow.current_tag_number,
@@ -58,7 +60,7 @@ export function EditProfilePanel({
     onError("");
     onNotice("");
     if (values.birth_date && values.acquisition_date && values.acquisition_date < values.birth_date) {
-      onError("Acquisition date cannot be earlier than birth date.");
+      onError(tr("Acquisition date cannot be earlier than birth date.", "সংগ্রহের তারিখ জন্ম তারিখের আগে হতে পারবে না।"));
       setSaving(false);
       return;
     }
@@ -86,11 +88,11 @@ export function EditProfilePanel({
         notes: values.notes.trim() || null,
       };
       await apiRequest(apiRoutes.herd.cow(cow.cow_id), { method: "PATCH", body });
-      onNotice("Cow profile updated.");
+      onNotice(tr("Cow profile updated.", "গরুর প্রোফাইল আপডেট হয়েছে।"));
       await onSaved();
       onCancel();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not update cow profile.");
+      onError(cause instanceof Error ? cause.message : tr("Could not update cow profile.", "গরুর প্রোফাইল আপডেট করা যায়নি।"));
     } finally {
       setSaving(false);
     }
@@ -103,19 +105,19 @@ export function EditProfilePanel({
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
         <div>
-          <h3 className="text-[14px] font-semibold text-ink">Edit cow details</h3>
+          <h3 className="text-[14px] font-semibold text-ink">{tr("Edit cow details", "গরুর তথ্য সম্পাদনা")}</h3>
           <p className="text-[12px] text-muted">
-            Update tag, physical details, acquisition, and lineage information.
+            {tr("Update tag, physical details, acquisition, and lineage information.", "ট্যাগ, শারীরিক বিবরণ, সংগ্রহ ও বংশতালিকা আপডেট করুন।")}
           </p>
         </div>
         <button type="button" onClick={onCancel} className={btn("quiet", "sm")}>
-          Cancel
+          {tr("Cancel")}
         </button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className={ui.label}>
-          Tag *
+          {tr("Tag")} *
           <input
             required
             maxLength={50}
@@ -125,93 +127,93 @@ export function EditProfilePanel({
           />
         </label>
         <label className={ui.label}>
-          Sex *
+          {tr("Sex")} *
           <select
             value={values.sex}
             onChange={(e) => setValues((c) => ({ ...c, sex: e.target.value as "male" | "female" }))}
             className={ui.select}
           >
-            <option value="female">Female</option>
-            <option value="male">Male</option>
+            <option value="female">{tr("Female")}</option>
+            <option value="male">{tr("Male")}</option>
           </select>
         </label>
         <label className={ui.label}>
-          Category *
+          {tr("Category")} *
           <select
             required
             value={values.category}
             onChange={(e) => setValues((c) => ({ ...c, category: e.target.value }))}
             className={ui.select}
           >
-            <option value="dairy">Dairy</option>
-            <option value="beef">Beef</option>
-            <option value="duel-purpose">Dual-purpose</option>
+            <option value="dairy">{tr("Dairy")}</option>
+            <option value="beef">{tr("Beef")}</option>
+            <option value="duel-purpose">{tr("Dual-purpose")}</option>
           </select>
         </label>
         <label className={ui.label}>
-          Cow type
+          {tr("Cow type")}
           <select
             value={values.cow_type}
             onChange={(e) => setValues((c) => ({ ...c, cow_type: e.target.value }))}
             className={ui.select}
           >
-            <option value="">None / unspecified</option>
-            <option value="Bull Calf">Bull Calf</option>
-            <option value="Heifer Calf">Heifer Calf</option>
-            <option value="Bull">Bull</option>
-            <option value="Cow">Cow</option>
-            <option value="Heifer">Heifer</option>
-            <option value="Ox">Ox</option>
+            <option value="">{tr("None / unspecified", "নির্ধারিত নয়")}</option>
+            <option value="Bull Calf">{tr("Bull Calf")}</option>
+            <option value="Heifer Calf">{tr("Heifer Calf")}</option>
+            <option value="Bull">{tr("Bull")}</option>
+            <option value="Cow">{tr("Cow")}</option>
+            <option value="Heifer">{tr("Heifer")}</option>
+            <option value="Ox">{tr("Ox")}</option>
           </select>
         </label>
         {values.sex === "female" && (
           <label className={ui.label}>
-            Milking
+            {tr("Milking")}
             <select
               value={values.gives_milk ? "true" : "false"}
               onChange={(e) => setValues((c) => ({ ...c, gives_milk: e.target.value === "true" }))}
               className={ui.select}
             >
-              <option value="false">No</option>
-              <option value="true">Yes</option>
+              <option value="false">{tr("No")}</option>
+              <option value="true">{tr("Yes")}</option>
             </select>
           </label>
         )}
         <label className={ui.label}>
-          Breed / calf type
+          {tr("Breed / calf type")}
           <select
             value={values.breed}
             onChange={(e) => setValues((c) => ({ ...c, breed: e.target.value }))}
             className={ui.select}
           >
-            <option value="">Not specified</option>
-            <option value="deshi">Deshi</option>
-            <option value="friesian">Friesian</option>
-            <option value="other">Other / unknown</option>
+            <option value="">{tr("Not specified", "নির্ধারিত নয়")}</option>
+            <option value="deshi">{tr("Deshi")}</option>
+            <option value="friesian">{tr("Friesian")}</option>
+            <option value="other">{tr("Other / Unknown")}</option>
           </select>
         </label>
         <label className={ui.label}>
-          Color
+          {tr("Color")}
           <input
             maxLength={80}
-            placeholder="e.g. Black & white, Red, Brown"
+            placeholder={tr("e.g. Black & white, Red, Brown", "যেমন: সাদা-কালো, লাল, বাদামী")}
             value={values.color}
             onChange={(e) => setValues((c) => ({ ...c, color: e.target.value }))}
             className={ui.input}
           />
         </label>
         <label className={ui.label}>
-          Marking
+          {tr("Marking")}
           <input
             maxLength={200}
-            placeholder="e.g. White star on forehead, spotted"
+            placeholder={tr("e.g. White star on forehead, spotted", "যেমন: কপালে সাদা তারা, ছোপ ছোপ দাগ")}
             value={values.marking}
             onChange={(e) => setValues((c) => ({ ...c, marking: e.target.value }))}
             className={ui.input}
           />
         </label>
         <label className={ui.label}>
-          Birth date
+          {tr("Birth date")}
           <input
             type="date"
             value={values.birth_date}
@@ -228,7 +230,7 @@ export function EditProfilePanel({
           />
         </label>
         <label className={ui.label}>
-          Acquisition type *
+          {tr("Acquisition")} *
           <select
             value={values.acquisition_type}
             onChange={(e) => {
@@ -246,13 +248,13 @@ export function EditProfilePanel({
             }}
             className={ui.select}
           >
-            <option value="born_on_farm">Born on farm</option>
-            <option value="bought_from_supplier">Bought from supplier</option>
-            <option value="bought_from_bazar">Bought from bazar</option>
+            <option value="born_on_farm">{tr("Born on Farm")}</option>
+            <option value="bought_from_supplier">{tr("Bought from Supplier")}</option>
+            <option value="bought_from_bazar">{tr("Bought from Bazar")}</option>
           </select>
         </label>
         <label className={ui.label}>
-          Acquisition date *
+          {tr("Acquisition date")} *
           <input
             required
             type="date"
@@ -265,13 +267,13 @@ export function EditProfilePanel({
         </label>
 
         <label className={ui.label}>
-          Dam (Mother) {isBornOnFarm ? "" : "(optional)"}
+          {isBornOnFarm ? tr("Dam") : tr("Dam (optional)")}
           <select
             value={values.dam_id}
             onChange={(e) => setValues((c) => ({ ...c, dam_id: e.target.value }))}
             className={ui.select}
           >
-            <option value="">None / unknown</option>
+            <option value="">{tr("None / unknown", "নেই / অজানা")}</option>
             {femaleCows.map((item) => (
               <option key={item.cow_id} value={item.cow_id}>
                 {item.current_tag_number}
@@ -280,13 +282,13 @@ export function EditProfilePanel({
           </select>
         </label>
         <label className={ui.label}>
-          Sire (Father) (optional)
+          {tr("Sire (optional)")}
           <select
             value={values.sire_id}
             onChange={(e) => setValues((c) => ({ ...c, sire_id: e.target.value }))}
             className={ui.select}
           >
-            <option value="">None / unknown</option>
+            <option value="">{tr("None / unknown", "নেই / অজানা")}</option>
             {maleCows.map((item) => (
               <option key={item.cow_id} value={item.cow_id}>
                 {item.current_tag_number}
@@ -296,13 +298,13 @@ export function EditProfilePanel({
         </label>
         {!isBornOnFarm && (
           <label className={ui.label}>
-            Supplier
+            {tr("Supplier")}
             <select
               value={values.supplier_id}
               onChange={(e) => setValues((c) => ({ ...c, supplier_id: e.target.value }))}
               className={ui.select}
             >
-              <option value="">None / unspecified</option>
+              <option value="">{tr("None / unspecified", "নির্ধারিত নয়")}</option>
               {suppliers.map((item) => (
                 <option key={item.supplier_id} value={item.supplier_id}>
                   {item.name}
@@ -313,7 +315,7 @@ export function EditProfilePanel({
         )}
 
         <label className={ui.label}>
-          Purchase price (৳)
+          {tr("Purchase price ৳")}
           <input
             type="number"
             min="0"
@@ -326,12 +328,12 @@ export function EditProfilePanel({
         </label>
 
         <label className={`${ui.label} sm:col-span-2 lg:col-span-3`}>
-          Notes
+          {tr("Notes")}
           <textarea
             rows={2}
             value={values.notes}
             onChange={(e) => setValues((c) => ({ ...c, notes: e.target.value }))}
-            placeholder="Temperament, yield notes, markings, etc."
+            placeholder={tr("Temperament, yield notes, markings, etc.", "স্বভাব, দুধের পরিমাণ বা অন্যান্য তথ্য")}
             className={ui.textarea}
           />
         </label>
@@ -339,10 +341,10 @@ export function EditProfilePanel({
 
       <div className="flex justify-end gap-2 pt-1">
         <button type="button" onClick={onCancel} className={btn("secondary", "sm")}>
-          Cancel
+          {tr("Cancel")}
         </button>
         <button type="submit" disabled={saving} className={btn("primary", "sm")}>
-          {saving ? "Saving…" : "Save changes"}
+          {saving ? tr("Saving…") : tr("Save changes")}
         </button>
       </div>
     </form>

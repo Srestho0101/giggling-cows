@@ -1,17 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import React, { useMemo, useState } from "react";
 import { ConfirmActionModal, type ConfirmModalConfig } from "@/components/confirm-modal";
 import { PaginatedTableCard, type PaginatedColumn } from "@/components/paginated-scroll-table";
 import { SafeDataHistory } from "@/components/safe-data-history";
-import { Badge, btn, Segmented, statusTone, ui } from "@/components/ui";
+import {
+  BreedingFormModal,
+  CalvingDrawerModal,
+  PregnancyCheckModal,
+} from "@/components/breeding/breeding-drawers";
+import { Badge, btn, statusTone, ui } from "@/components/ui";
 import { shiftIsoDate, todayInDhaka } from "@/components/workspace-date";
 import { apiRequest, apiRoutes } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import {
-  formatDisplayDate,
-  formatMoney,
-  formatNumber,
-  sessionLabel,
   type BreedingRecord,
   type CowDetail,
   type CowExpense,
@@ -20,7 +23,10 @@ import {
   type HealthRecord,
   type MilkRecord,
   type MilkSession,
+  type PregnancyEpisode,
   type PregnancyReport,
+  type SireItem,
+  type WarehouseOption,
 } from "@/components/cow-profile/types";
 
 export function HealthCareTab({
@@ -36,6 +42,7 @@ export function HealthCareTab({
   onError: (message: string) => void;
   onNotice: (message: string) => void;
 }) {
+  const { tr, money, date: fmtDate, enumLabel } = useI18n();
   const today = todayInDhaka();
   const dueLimit = shiftIsoDate(today, 14);
   const [showArchived, setShowArchived] = useState(false);
@@ -83,10 +90,10 @@ export function HealthCareTab({
       setCost("");
       setNextDueDate("");
       setDetails("");
-      onNotice("Health record saved.");
+      onNotice(tr("Health record saved.", "স্বাস্থ্য রেকর্ড সংরক্ষণ করা হয়েছে।"));
       await reload();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not save health record.");
+      onError(cause instanceof Error ? cause.message : tr("Could not save health record.", "স্বাস্থ্য রেকর্ড সংরক্ষণ করা যায়নি।"));
     } finally {
       setSaving(false);
     }
@@ -99,9 +106,9 @@ export function HealthCareTab({
       return;
     }
     setConfirmModal({
-      title: "Archive this health record?",
+      title: tr("Archive this health record?", "এই স্বাস্থ্য রেকর্ডটি আর্কাইভ করবেন?"),
       mode: "confirm",
-      confirmLabel: "Archive",
+      confirmLabel: tr("Archive"),
       tone: "danger",
       onConfirm: () => applyToggleArchive(row, true),
     });
@@ -115,56 +122,56 @@ export function HealthCareTab({
         method: "PATCH",
         body: { is_archived: archive },
       });
-      onNotice(archive ? "Health record archived." : "Health record restored.");
+      onNotice(archive ? tr("Health record archived.", "স্বাস্থ্য রেকর্ড আর্কাইভ করা হয়েছে।") : tr("Health record restored.", "স্বাস্থ্য রেকর্ড পুনরুদ্ধার করা হয়েছে।"));
       await reload();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not update health record.");
+      onError(cause instanceof Error ? cause.message : tr("Could not update health record.", "স্বাস্থ্য রেকর্ড আপডেট করা যায়নি।"));
     }
   }
 
   const columns: PaginatedColumn<HealthRecord>[] = [
     {
       key: "record_date",
-      label: "Date",
-      render: (row) => <span className="font-medium">{formatDisplayDate(row.record_date)}</span>,
+      label: tr("Date"),
+      render: (row) => <span className="font-medium">{fmtDate(row.record_date)}</span>,
     },
     {
       key: "record_type",
-      label: "Type",
-      render: (row) => <span className="capitalize">{row.record_type}</span>,
+      label: tr("Type"),
+      render: (row) => <span>{enumLabel(row.record_type)}</span>,
     },
     {
       key: "vet_name",
-      label: "Vet",
+      label: tr("Vet"),
       render: (row) => row.vet_name || "—",
     },
     {
       key: "cost",
-      label: "Cost",
+      label: tr("Cost", "খরচ"),
       align: "right",
-      render: (row) => formatMoney(row.cost),
+      render: (row) => money(row.cost),
     },
     {
       key: "next_due_date",
-      label: "Next due",
+      label: tr("Next due"),
       render: (row) => {
         if (!row.next_due_date) return "—";
         const overdue = row.next_due_date < today;
         return (
           <Badge tone={overdue ? "bad" : row.next_due_date <= dueLimit ? "warn" : "neutral"}>
-            {formatDisplayDate(row.next_due_date)}
+            {fmtDate(row.next_due_date)}
           </Badge>
         );
       },
     },
     {
       key: "details",
-      label: "Details",
+      label: tr("Details"),
       render: (row) => <span className="text-muted">{row.details || "—"}</span>,
     },
     {
       key: "actions",
-      label: "Actions",
+      label: tr("Actions"),
       align: "right",
       render: (row) => (
         <div className="flex items-center justify-end gap-2.5 text-[12px]">
@@ -173,12 +180,12 @@ export function HealthCareTab({
             onClick={() => void toggleArchive(row)}
             className="cursor-pointer font-medium text-accent hover:underline"
           >
-            {row.is_archived ? "Restore" : "Archive"}
+            {row.is_archived ? tr("Restore") : tr("Archive")}
           </button>
           <SafeDataHistory
             entityType="health_records"
             entityId={row.health_id}
-            entityLabel={`${row.record_type} · ${formatDisplayDate(row.record_date)}`}
+            entityLabel={`${enumLabel(row.record_type)} · ${fmtDate(row.record_date)}`}
           />
         </div>
       ),
@@ -188,32 +195,32 @@ export function HealthCareTab({
   return (
     <div className="space-y-4">
       <section className="rounded-[8px] border border-line bg-surface p-4">
-        <h3 className="text-[13px] font-semibold text-ink">Due & upcoming care (next 14 days)</h3>
+        <h3 className="text-[13px] font-semibold text-ink">{tr("Due & upcoming care (next 14 days)", "আসন্ন ও মেয়াদোত্তীর্ণ চিকিৎসা (আগামী ১৪ দিন)")}</h3>
         {upcoming.length ? (
           <div className="mt-2.5 flex flex-wrap gap-2">
             {upcoming.map((row) => {
               const overdue = String(row.next_due_date) < today;
               return (
                 <Badge key={row.health_id} tone={overdue ? "bad" : "warn"}>
-                  <span className="capitalize">{row.record_type}</span> ·{" "}
-                  {overdue ? "overdue" : "due"} {formatDisplayDate(row.next_due_date)}
+                  <span>{enumLabel(row.record_type)}</span> ·{" "}
+                  {overdue ? tr("overdue", "মেয়াদোত্তীর্ণ") : tr("due", "নির্ধারিত")} {fmtDate(row.next_due_date)}
                 </Badge>
               );
             })}
           </div>
         ) : (
-          <p className="mt-1.5 text-[12.5px] text-muted">No upcoming care due within 14 days.</p>
+          <p className="mt-1.5 text-[12.5px] text-muted">{tr("No upcoming care due within 14 days.", "আগামী ১৪ দিনে কোনো নির্ধারিত চিকিৎসা নেই।")}</p>
         )}
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr] items-start">
         <PaginatedTableCard
-          title="Health records"
-          subtitle="Vaccinations, treatments, deworming, and checkups."
+          title={tr("Health records")}
+          subtitle={tr("Vaccinations, treatments, deworming, and checkups.", "টিকা, চিকিৎসা, কৃমিনাশক ও স্বাস্থ্য পরীক্ষার তথ্য।")}
           rows={visible}
           rowKey={(row) => row.health_id}
           columns={columns}
-          emptyMessage="No health records logged for this cow."
+          emptyMessage={tr("No health records logged for this cow.", "এই গরুর কোনো স্বাস্থ্য রেকর্ড নেই।")}
           defaultPageSize={10}
           scrollHeightClass="max-h-[260px]"
           headerActions={
@@ -223,7 +230,7 @@ export function HealthCareTab({
                 checked={showArchived}
                 onChange={(e) => setShowArchived(e.target.checked)}
               />
-              Show archived
+              {tr("Show archived")}
             </label>
           }
         />
@@ -233,27 +240,27 @@ export function HealthCareTab({
           className="rounded-[8px] border border-line bg-surface p-4 space-y-3"
         >
           <div>
-            <h3 className="text-[14px] font-semibold text-ink">Log health care</h3>
+            <h3 className="text-[14px] font-semibold text-ink">{tr("Log health care", "স্বাস্থ্য তথ্য যোগ করুন")}</h3>
             <p className="mt-0.5 text-[12px] text-muted">
-              Add a treatment, vaccination, deworming, or vet checkup for this cow.
+              {tr("Add a treatment, vaccination, deworming, or vet checkup for this cow.", "চিকিৎসা, টিকা, কৃমিনাশক বা ডাক্তার দেখানোর তথ্য লিখুন।")}
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className={ui.label}>
-              Type *
+              {tr("Type")} *
               <select
                 value={recordType}
                 onChange={(e) => setRecordType(e.target.value)}
                 className={ui.select}
               >
-                <option value="vaccination">Vaccination</option>
-                <option value="deworming">Deworming</option>
-                <option value="treatment">Treatment</option>
-                <option value="checkup">Checkup</option>
+                <option value="vaccination">{enumLabel("vaccination")}</option>
+                <option value="deworming">{enumLabel("deworming")}</option>
+                <option value="treatment">{enumLabel("treatment")}</option>
+                <option value="checkup">{enumLabel("checkup")}</option>
               </select>
             </label>
             <label className={ui.label}>
-              Date *
+              {tr("Date")} *
               <input
                 type="date"
                 required
@@ -263,7 +270,7 @@ export function HealthCareTab({
               />
             </label>
             <label className={ui.label}>
-              Vet name
+              {tr("Vet name", "ডাক্তারের নাম")}
               <input
                 maxLength={100}
                 value={vetName}
@@ -272,7 +279,7 @@ export function HealthCareTab({
               />
             </label>
             <label className={ui.label}>
-              Cost (৳)
+              {tr("Cost (৳)", "খরচ (৳)")}
               <input
                 type="number"
                 min="0"
@@ -283,7 +290,7 @@ export function HealthCareTab({
               />
             </label>
             <label className={`${ui.label} sm:col-span-2`}>
-              Next due date
+              {tr("Next due date", "পরবর্তী তারিখ")}
               <input
                 type="date"
                 value={nextDueDate}
@@ -292,7 +299,7 @@ export function HealthCareTab({
               />
             </label>
             <label className={`${ui.label} sm:col-span-2`}>
-              Details
+              {tr("Details")}
               <textarea
                 rows={2}
                 value={details}
@@ -302,7 +309,7 @@ export function HealthCareTab({
             </label>
           </div>
           <button type="submit" disabled={saving} className={btn("primary", "md")}>
-            {saving ? "Saving…" : "Save health record"}
+            {saving ? tr("Saving…") : tr("Save health record", "স্বাস্থ্য রেকর্ড সংরক্ষণ করুন")}
           </button>
         </form>
       </div>
@@ -315,6 +322,9 @@ export function BreedingTab({
   cow,
   breedingRecords,
   pregnancyReports,
+  pregnancyEpisodes = [],
+  sires = [],
+  warehouses = [],
   cows,
   reload,
   onError,
@@ -323,387 +333,441 @@ export function BreedingTab({
   cow: CowDetail;
   breedingRecords: BreedingRecord[];
   pregnancyReports: PregnancyReport[];
+  pregnancyEpisodes?: PregnancyEpisode[];
+  sires?: SireItem[];
+  warehouses?: WarehouseOption[];
   cows: CowListOption[];
   reload: () => Promise<void>;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
 }) {
+  const { tr, money, integer, date: fmtDate, enumLabel } = useI18n();
   const today = todayInDhaka();
-  const [sourceMode, setSourceMode] = useState<"semen" | "sire">("semen");
-  const [heatDate, setHeatDate] = useState("");
-  const [seedDate, setSeedDate] = useState(today);
-  const [method, setMethod] = useState("artificial_insemination");
-  const [sireId, setSireId] = useState("");
-  const [semenCode, setSemenCode] = useState("");
-  const [semenProvider, setSemenProvider] = useState("");
-  const [doctorName, setDoctorName] = useState("");
-  const [breedingCost, setBreedingCost] = useState("");
-  const [breedingSaving, setBreedingSaving] = useState(false);
+  const [breedingModalOpen, setBreedingModalOpen] = useState(false);
+  const [editingBreeding, setEditingBreeding] = useState<BreedingRecord | null>(null);
+  const [checkModalOpen, setCheckModalOpen] = useState(false);
+  const [editingCheck, setEditingCheck] = useState<PregnancyReport | null>(null);
+  const [calvingPregnancyId, setCalvingPregnancyId] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalConfig | null>(null);
 
-  const [reportDate, setReportDate] = useState(today);
-  const [pregStatus, setPregStatus] = useState("confirmed");
-  const [expectedCalving, setExpectedCalving] = useState("");
-  const [actualCalving, setActualCalving] = useState("");
-  const [pregNotes, setPregNotes] = useState("");
-  const [pregSaving, setPregSaving] = useState(false);
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [resolveDate, setResolveDate] = useState(today);
-  const [resolveBusy, setResolveBusy] = useState(false);
-
-  const activePregnancies = pregnancyReports.filter(
-    (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected") && !p.actual_calving_date
+  const activeEpisode = useMemo(
+    () =>
+      pregnancyEpisodes.find(
+        (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected") && !p.ended_at
+      ) ?? null,
+    [pregnancyEpisodes]
   );
-  const maleSires = cows.filter((c) => c.cow_id !== cow.cow_id && c.sex === "male" && c.status === "active");
 
-  async function resolvePregnancy(pregnancyId: string) {
-    setResolveBusy(true);
-    onError("");
-    onNotice("");
-    try {
-      await apiRequest(apiRoutes.health.pregnancyReport(pregnancyId), {
-        method: "PATCH",
-        body: {
-          status: "calved",
-          actual_calving_date: resolveDate || today,
-        },
-      });
-      setResolvingId(null);
-      onNotice("Pregnancy marked as calved and alerts resolved.");
-      await reload();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not update pregnancy report.");
-    } finally {
-      setResolveBusy(false);
+  const summary = cow.reproductive_summary;
+  const stateLabel = (() => {
+    if (!summary) return tr("Open", "খালি (প্রজননযোগ্য)");
+    if (summary.state === "pregnant") {
+      return `${tr("Pregnant", "গর্ভবতী")}${summary.days_pregnant != null ? ` · ${tr("Day", "দিন")} ${integer(summary.days_pregnant)}` : ""}${
+        summary.expected_calving_date ? ` · ${tr("Due", "সম্ভাব্য প্রসব")} ${fmtDate(summary.expected_calving_date)}` : ""
+      }`;
     }
+    if (summary.state === "suspected_pregnant") {
+      return `${tr("Suspected pregnant", "সম্ভাব্য গর্ভবতী")}${
+        summary.expected_calving_date ? ` · ${tr("Due", "সম্ভাব্য প্রসব")} ${fmtDate(summary.expected_calving_date)}` : ""
+      }`;
+    }
+    if (summary.state === "bred") {
+      const days = summary.days_since_breeding ?? 0;
+      const checkDueIn = Math.max(0, 30 - days);
+      return `${tr("Bred", "প্রজননকৃত")} (${integer(days)} ${tr("d ago", "দিন আগে")})${checkDueIn > 0 ? ` · ${tr("Check due in", "পরীক্ষার বাকি")} ${integer(checkDueIn)} ${tr("d", "দিন")}` : ` · ${tr("Check due now", "এখনই পরীক্ষা প্রয়োজন")}`}`;
+    }
+    if (summary.state === "vwp") {
+      return `${tr("Post-calving VWP", "প্রসব-পরবর্তী বিশ্রাম")}${
+        summary.next_breeding_eligible_date ? ` (${fmtDate(summary.next_breeding_eligible_date)} ${tr("until", "পর্যন্ত")})` : ""
+      }`;
+    }
+    return tr("Open", "খালি (প্রজননযোগ্য)");
+  })();
+
+  function requestArchiveBreeding(rec: BreedingRecord) {
+    setConfirmModal({
+      title: rec.is_archived ? tr("Restore breeding record?", "প্রজনন রেকর্ড পুনরুদ্ধার করবেন?") : tr("Archive breeding record?", "প্রজনন রেকর্ড আর্কাইভ করবেন?"),
+      mode: "confirm",
+      confirmLabel: rec.is_archived ? tr("Restore") : tr("Archive"),
+      tone: rec.is_archived ? "primary" : "danger",
+      onConfirm: async () => {
+        await apiRequest(apiRoutes.health.breedingRecord(rec.breeding_id), {
+          method: "PATCH",
+          body: { is_archived: !rec.is_archived },
+        });
+        onNotice(rec.is_archived ? tr("Breeding record restored.", "প্রজনন রেকর্ড পুনরুদ্ধার করা হয়েছে।") : tr("Breeding record archived.", "প্রজনন রেকর্ড আর্কাইভ করা হয়েছে।"));
+        await reload();
+      },
+    });
   }
 
-  async function submitBreeding(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onError("");
-    onNotice("");
-    if (heatDate && seedDate && seedDate < heatDate) {
-      onError("Insemination date cannot be earlier than heat date.");
-      return;
-    }
-    if (sourceMode === "sire" && !sireId) {
-      onError("Please select an on-farm sire.");
-      return;
-    }
-    if (sourceMode === "semen" && !semenCode.trim()) {
-      onError("Please enter a purchased semen code.");
-      return;
-    }
-    setBreedingSaving(true);
-    try {
-      await apiRequest(apiRoutes.health.breeding, {
-        method: "POST",
-        body: {
-          cow_id: cow.cow_id,
-          heat_date: heatDate || null,
-          seed_date: seedDate,
-          method,
-          sire_id: sourceMode === "sire" ? sireId || null : null,
-          semen_code: sourceMode === "semen" ? semenCode.trim() || null : null,
-          semen_provider: sourceMode === "semen" ? semenProvider.trim() || null : null,
-          doctor_name: doctorName.trim() || null,
-          cost: breedingCost !== "" ? Number(breedingCost) : 0,
-        },
-      });
-      setHeatDate("");
-      setSemenCode("");
-      setSemenProvider("");
-      setSireId("");
-      setDoctorName("");
-      setBreedingCost("");
-      onNotice("Breeding record saved.");
-      await reload();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not save breeding record.");
-    } finally {
-      setBreedingSaving(false);
-    }
+  function requestArchiveCheck(rep: PregnancyReport) {
+    setConfirmModal({
+      title: rep.is_archived ? tr("Restore pregnancy check?", "গর্ভধারণ পরীক্ষা পুনরুদ্ধার করবেন?") : tr("Archive pregnancy check?", "গর্ভধারণ পরীক্ষা আর্কাইভ করবেন?"),
+      mode: "confirm",
+      confirmLabel: rep.is_archived ? tr("Restore") : tr("Archive"),
+      tone: rep.is_archived ? "primary" : "danger",
+      onConfirm: async () => {
+        await apiRequest(apiRoutes.health.pregnancyReport(rep.pregnancy_id), {
+          method: "PATCH",
+          body: { is_archived: !rep.is_archived },
+        });
+        onNotice(rep.is_archived ? tr("Pregnancy check restored.", "গর্ভধারণ পরীক্ষা পুনরুদ্ধার করা হয়েছে।") : tr("Pregnancy check archived.", "গর্ভধারণ পরীক্ষা আর্কাইভ করা হয়েছে।"));
+        await reload();
+      },
+    });
   }
 
-  async function submitPregnancy(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onError("");
-    onNotice("");
-    if (
-      reportDate &&
-      expectedCalving &&
-      !actualCalving &&
-      (pregStatus === "confirmed" || pregStatus === "suspected") &&
-      expectedCalving < reportDate
-    ) {
-      onError("Expected calving date cannot be earlier than check date.");
-      return;
-    }
-    setPregSaving(true);
-    try {
-      await apiRequest(apiRoutes.health.pregnancy, {
-        method: "POST",
-        body: {
-          cow_id: cow.cow_id,
-          report_date: reportDate,
-          status: pregStatus,
-          expected_calving_date: expectedCalving || null,
-          actual_calving_date: actualCalving || null,
-          notes: pregNotes.trim() || null,
-        },
-      });
-      setExpectedCalving("");
-      setActualCalving("");
-      setPregNotes("");
-      onNotice("Pregnancy report saved.");
-      await reload();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not save pregnancy report.");
-    } finally {
-      setPregSaving(false);
-    }
+  function requestAbortPregnancy(ep: PregnancyEpisode) {
+    setConfirmModal({
+      title: tr(`Mark pregnancy as aborted for ${cow.current_tag_number}?`, `${cow.current_tag_number}-এর গর্ভপাত হিসেবে চিহ্নিত করবেন?`),
+      description: tr("Closes the active pregnancy episode, clears calving alerts, and returns the cow to Open.", "সক্রিয় গর্ভধারণ পর্ব বন্ধ করবে, প্রসব সতর্কতা সরাবে এবং গরুকে প্রজননযোগ্য অবস্থায় ফিরিয়ে আনবে।"),
+      mode: "reason",
+      confirmLabel: tr("Confirm abortion", "গর্ভপাত নিশ্চিত করুন"),
+      tone: "danger",
+      onConfirm: async (reason) => {
+        await apiRequest(apiRoutes.health.pregnancyEpisode(ep.pregnancy_id), {
+          method: "PATCH",
+          body: { status: "aborted", ended_at: today, notes: reason || ep.notes || null },
+        });
+        onNotice(tr("Pregnancy marked as aborted and cow returned to Open.", "গর্ভপাত হিসেবে চিহ্নিত হয়েছে এবং গরু প্রজননযোগ্য অবস্থায় ফিরেছে।"));
+        await reload();
+      },
+    });
   }
 
   const breedingColumns: PaginatedColumn<BreedingRecord>[] = [
-    { key: "seed_date", label: "Insemination", render: (r) => formatDisplayDate(r.seed_date) },
-    { key: "heat_date", label: "Heat", render: (r) => formatDisplayDate(r.heat_date) },
+    { key: "seed_date", label: tr("Insemination"), render: (r) => fmtDate(r.seed_date) },
+    { key: "heat_date", label: tr("Heat", "হিট"), render: (r) => fmtDate(r.heat_date) },
     {
       key: "source",
-      label: "Source",
-      render: (r) => r.sire_tag_number ? `Sire ${r.sire_tag_number}` : r.semen_code || "—",
+      label: tr("Sire / Semen", "ষাঁড় / সিমেন"),
+      render: (r) => r.sire_display_name || (r.sire_tag_number ? `${tr("Sire")} ${r.sire_tag_number}` : r.semen_code || "—"),
     },
-    { key: "doctor_name", label: "Doctor", render: (r) => r.doctor_name || "—" },
-    { key: "cost", label: "Cost", align: "right", render: (r) => formatMoney(r.cost) },
+    { key: "doctor_name", label: tr("Doctor"), render: (r) => r.doctor_name || "—" },
+    { key: "cost", label: tr("Cost", "খরচ"), align: "right", render: (r) => money(r.cost) },
     {
       key: "outcome",
-      label: "Outcome",
+      label: tr("Outcome"),
       render: (r) => (
         <Badge tone={statusTone(r.outcome)}>
-          <span className="capitalize">{r.outcome}</span>
+          <span>{enumLabel(r.outcome)}</span>
         </Badge>
+      ),
+    },
+    {
+      key: "actions",
+      label: tr("Actions"),
+      render: (r) => (
+        <div className="flex items-center gap-2 text-[12px]">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingBreeding(r);
+              setBreedingModalOpen(true);
+            }}
+            className="font-medium text-accent hover:underline"
+          >
+            {tr("Edit")}
+          </button>
+          <button
+            type="button"
+            onClick={() => requestArchiveBreeding(r)}
+            className="font-medium text-muted hover:underline"
+          >
+            {r.is_archived ? tr("Restore") : tr("Archive")}
+          </button>
+          <SafeDataHistory entityType="breeding_records" entityId={r.breeding_id} entityLabel={`${tr("Breeding")} ${fmtDate(r.seed_date)}`} />
+        </div>
       ),
     },
   ];
 
   const pregnancyColumns: PaginatedColumn<PregnancyReport>[] = [
-    { key: "report_date", label: "Check date", render: (r) => formatDisplayDate(r.report_date) },
+    { key: "report_date", label: tr("Check date"), render: (r) => fmtDate(r.report_date) },
     {
       key: "status",
-      label: "Result",
+      label: tr("Result"),
       render: (r) => (
         <Badge tone={statusTone(r.status)}>
-          <span className="capitalize">{r.status}</span>
+          <span>{enumLabel(r.status)}</span>
         </Badge>
       ),
     },
     {
       key: "expected_calving_date",
-      label: "Expected calving",
-      render: (r) => formatDisplayDate(r.expected_calving_date),
+      label: tr("Expected calving"),
+      render: (r) => fmtDate(r.expected_calving_date),
     },
     {
       key: "actual_calving_date",
-      label: "Actual calving",
-      render: (r) => formatDisplayDate(r.actual_calving_date),
+      label: tr("Actual calving"),
+      render: (r) => fmtDate(r.actual_calving_date),
     },
-    { key: "notes", label: "Notes", render: (r) => <span className="text-muted">{r.notes || "—"}</span> },
+    { key: "notes", label: tr("Notes"), render: (r) => <span className="text-muted">{r.notes || "—"}</span> },
+    {
+      key: "actions",
+      label: tr("Actions"),
+      render: (r) => (
+        <div className="flex items-center gap-2 text-[12px]">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingCheck(r);
+              setCheckModalOpen(true);
+            }}
+            className="font-medium text-accent hover:underline"
+          >
+            {tr("Edit")}
+          </button>
+          <button
+            type="button"
+            onClick={() => requestArchiveCheck(r)}
+            className="font-medium text-muted hover:underline"
+          >
+            {r.is_archived ? tr("Restore") : tr("Archive")}
+          </button>
+          <SafeDataHistory entityType="pregnancy_reports" entityId={r.pregnancy_id} entityLabel={`${tr("Check", "পরীক্ষা")} ${fmtDate(r.report_date)}`} />
+        </div>
+      ),
+    },
   ];
+
+  const activeBreedings = breedingRecords.filter((r) => !r.is_archived);
+  const activeChecks = pregnancyReports.filter((r) => !r.is_archived);
+  const activeEpisodes = pregnancyEpisodes.filter((p) => !p.is_archived);
 
   return (
     <div className="space-y-5">
-      {activePregnancies.length > 0 ? (
-        <section className="rounded-[8px] border border-accent/35 bg-accent-soft p-4 space-y-2.5">
-          <h3 className="text-[13px] font-semibold text-accent">Active pregnancy tracking</h3>
-          <div className="space-y-2 text-[13px] text-ink">
-            {activePregnancies.map((item) => (
-              <div key={item.pregnancy_id} className="flex flex-wrap items-center justify-between gap-3">
-                <span>
-                  <strong className="capitalize">{item.status}</strong> (checked {formatDisplayDate(item.report_date)})
-                  {item.expected_calving_date
-                    ? ` · Expected calving: ${formatDisplayDate(item.expected_calving_date)}`
-                    : ""}
-                </span>
-                {resolvingId === item.pregnancy_id ? (
+      {/* Single Reproductive Status Header with Next Logical Action */}
+      <section className="rounded-[8px] border border-accent/35 bg-accent-soft p-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[11.5px] font-medium uppercase tracking-wider text-muted">{tr("Reproductive status", "প্রজনন অবস্থা")}</p>
+          <h3 className="mt-0.5 text-[15px] font-semibold text-ink">{stateLabel}</h3>
+          {activeEpisode?.dry_off_date ? (
+            <p className="mt-0.5 text-[12px] text-muted">
+              {tr("Dry-off target:", "দুধ শুকানোর তারিখ:")} {fmtDate(activeEpisode.dry_off_date)}
+              {activeEpisode.sire_display_name ? ` · ${tr("Sire")}: ${activeEpisode.sire_display_name}` : ""}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {activeEpisode ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setCalvingPregnancyId(activeEpisode.pregnancy_id)}
+                className={btn("primary", "sm")}
+              >
+                {tr("Record calving", "বাচ্চা প্রসব লিখুন")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCheck(null);
+                  setCheckModalOpen(true);
+                }}
+                className={btn("secondary", "sm")}
+              >
+                {tr("Log check", "পরীক্ষা লিখুন")}
+              </button>
+              <button
+                type="button"
+                onClick={() => requestAbortPregnancy(activeEpisode)}
+                className={btn("danger", "sm")}
+              >
+                {tr("Mark aborted", "গর্ভপাত হিসেবে চিহ্নিত করুন")}
+              </button>
+            </>
+          ) : summary?.state === "bred" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCheck(null);
+                  setCheckModalOpen(true);
+                }}
+                className={btn("primary", "sm")}
+              >
+                {tr("Log pregnancy check", "গর্ভধারণ পরীক্ষা লিখুন")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingBreeding(null);
+                  setBreedingModalOpen(true);
+                }}
+                className={btn("secondary", "sm")}
+              >
+                {tr("Log repeat breeding", "পুনরায় প্রজনন লিখুন")}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingBreeding(null);
+                  setBreedingModalOpen(true);
+                }}
+                className={btn("primary", "sm")}
+              >
+                {tr("Log breeding", "প্রজনন তথ্য লিখুন")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCheck(null);
+                  setCheckModalOpen(true);
+                }}
+                className={btn("secondary", "sm")}
+              >
+                {tr("Log check / Bought pregnant", "পরীক্ষা / গর্ভবতী কেনা")}
+              </button>
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Grouped Reproductive Cycles */}
+      {activeEpisodes.length > 0 ? (
+        <section className="space-y-3">
+          <h3 className="text-[13px] font-semibold text-ink">{tr("Pregnancy & calving cycles", "গর্ভধারণ ও প্রসব চক্র")} ({integer(activeEpisodes.length)})</h3>
+          <div className="space-y-3">
+            {activeEpisodes.map((ep, idx) => (
+              <div key={ep.pregnancy_id} className="rounded-[8px] border border-line bg-surface p-4 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="date"
-                      max={today}
-                      value={resolveDate}
-                      onChange={(e) => setResolveDate(e.target.value)}
-                      className={`${ui.input} !h-8 w-auto`}
-                    />
-                    <button
-                      type="button"
-                      disabled={resolveBusy}
-                      onClick={() => void resolvePregnancy(item.pregnancy_id)}
-                      className={btn("primary", "sm")}
-                    >
-                      {resolveBusy ? "Saving…" : "Confirm calving"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={resolveBusy}
-                      onClick={() => setResolvingId(null)}
-                      className={btn("secondary", "sm")}
-                    >
-                      Cancel
-                    </button>
+                    <span className="text-[13px] font-semibold text-ink">
+                      {tr("Cycle", "চক্র")} #{integer(activeEpisodes.length - idx)}
+                    </span>
+                    <Badge tone={statusTone(ep.status)}>
+                      <span>{enumLabel(ep.status)}</span>
+                    </Badge>
+                    {ep.breeding_seed_date ? (
+                      <span className="text-[12px] text-muted">
+                        {tr("Bred", "প্রজনন")} {fmtDate(ep.breeding_seed_date)}
+                      </span>
+                    ) : (
+                      <span className="text-[12px] text-muted">{tr("External / bought pregnant", "বাইরে থেকে গর্ভবতী কেনা")}</span>
+                    )}
+                    {ep.sire_display_name ? (
+                      <span className="text-[12px] text-muted">· {ep.sire_display_name}</span>
+                    ) : null}
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setResolvingId(item.pregnancy_id);
-                      setResolveDate(today);
-                    }}
-                    className={btn("secondary", "sm")}
-                  >
-                    Record calving / Mark resolved
-                  </button>
-                )}
+                  <div className="text-[12px] text-muted">
+                    {ep.expected_calving_date ? `${tr("Due:", "সম্ভাব্য প্রসব:")} ${fmtDate(ep.expected_calving_date)}` : ""}
+                    {ep.ended_at ? ` · ${tr("Ended:", "সমাপ্ত:")} ${fmtDate(ep.ended_at)}` : ""}
+                  </div>
+                </div>
+
+                {ep.checks.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 text-[11.5px]">
+                    {ep.checks.map((chk) => (
+                      <span key={chk.pregnancy_id} className="rounded-[4px] border border-line bg-subtle px-2 py-0.5 text-ink">
+                        {tr("Check", "পরীক্ষা")} {fmtDate(chk.report_date)}: <strong>{enumLabel(chk.status)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {ep.calving_event ? (
+                  <div className="rounded-[6px] border border-line bg-subtle p-2.5 text-[12px] flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      {tr("Calved on", "প্রসবের তারিখ")} <strong>{fmtDate(ep.calving_event.calving_date)}</strong> (
+                      <span>{enumLabel(ep.calving_event.calving_ease)}</span> ·{" "}
+                      {integer(ep.calving_event.live_count)} {tr("live", "জীবিত")}, {integer(ep.calving_event.stillborn_count)} {tr("stillborn", "মৃত")})
+                    </span>
+                    {ep.calving_event.calves.length > 0 ? (
+                      <span className="flex flex-wrap gap-1.5">
+                        {ep.calving_event.calves.map((calf) => (
+                          <Link
+                            key={calf.cow_id}
+                            href={`/herd/${calf.cow_id}`}
+                            className="rounded-[4px] border border-accent/40 bg-surface px-2 py-0.5 font-medium text-accent hover:underline"
+                          >
+                            {tr("Calf", "বাছুর")} {calf.current_tag_number} ({enumLabel(calf.sex)})
+                          </Link>
+                        ))}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
         </section>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr] items-start">
-        <PaginatedTableCard
-          title="Breeding history"
-          rows={breedingRecords.filter((r) => !r.is_archived)}
-          rowKey={(r) => r.breeding_id}
-          columns={breedingColumns}
-          emptyMessage="No breeding records for this cow."
-          defaultPageSize={10}
-          scrollHeightClass="max-h-[240px]"
-        />
+      <PaginatedTableCard
+        title={tr("Breeding history", "প্রজনন ইতিহাস")}
+        rows={activeBreedings}
+        rowKey={(r) => r.breeding_id}
+        columns={breedingColumns}
+        emptyMessage={tr("No breeding records for this cow.", "এই গরুর কোনো প্রজনন রেকর্ড নেই।")}
+        defaultPageSize={10}
+        scrollHeightClass="max-h-[260px]"
+      />
 
-        <form
-          onSubmit={(event) => void submitBreeding(event)}
-          className="rounded-[8px] border border-line bg-surface p-4 space-y-3"
-        >
-          <h3 className="text-[14px] font-semibold text-ink">Log breeding</h3>
-          {cow.sex === "male" ? (
-            <p className="text-[12px] text-muted">
-              This animal is male; breeding records normally apply to female cows.
-            </p>
-          ) : null}
-          <div>
-            <span className="mb-1.5 block text-[12px] font-medium text-muted">Breeding source</span>
-            <Segmented
-              name="breeding_source"
-              size="sm"
-              value={sourceMode}
-              onChange={setSourceMode}
-              options={[
-                { value: "semen", label: "Purchased semen" },
-                { value: "sire", label: "On-farm sire" },
-              ]}
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className={ui.label}>
-              Heat date
-              <input type="date" value={heatDate} onChange={(e) => setHeatDate(e.target.value)} className={ui.input} />
-            </label>
-            <label className={ui.label}>
-              Insemination date *
-              <input type="date" required value={seedDate} onChange={(e) => setSeedDate(e.target.value)} className={ui.input} />
-            </label>
-            <label className={`${ui.label} sm:col-span-2`}>
-              Method *
-              <select value={method} onChange={(e) => setMethod(e.target.value)} className={ui.select}>
-                <option value="artificial_insemination">Artificial insemination</option>
-                <option value="natural">Natural</option>
-              </select>
-            </label>
-            {sourceMode === "sire" ? (
-              <label className={ui.label}>
-                On-farm sire *
-                <select required value={sireId} onChange={(e) => setSireId(e.target.value)} className={ui.select}>
-                  <option value="">Choose sire</option>
-                  {maleSires.map((s) => (
-                    <option key={s.cow_id} value={s.cow_id}>
-                      {s.current_tag_number}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <>
-                <label className={ui.label}>
-                  Semen code *
-                  <input required value={semenCode} onChange={(e) => setSemenCode(e.target.value)} className={ui.input} />
-                </label>
-                <label className={ui.label}>
-                  Semen provider
-                  <input value={semenProvider} onChange={(e) => setSemenProvider(e.target.value)} className={ui.input} />
-                </label>
-              </>
-            )}
-            <label className={ui.label}>
-              Doctor
-              <input value={doctorName} onChange={(e) => setDoctorName(e.target.value)} className={ui.input} />
-            </label>
-            <label className={ui.label}>
-              Cost (৳)
-              <input type="number" min="0" step="0.01" value={breedingCost} onChange={(e) => setBreedingCost(e.target.value)} className={ui.input} />
-            </label>
-          </div>
-          <button type="submit" disabled={breedingSaving} className={btn("primary", "md")}>
-            {breedingSaving ? "Saving…" : "Save breeding"}
-          </button>
-        </form>
-      </div>
+      <PaginatedTableCard
+        title={tr("Pregnancy checks")}
+        rows={activeChecks}
+        rowKey={(r) => r.pregnancy_id}
+        columns={pregnancyColumns}
+        emptyMessage={tr("No pregnancy checks recorded.", "কোনো গর্ভধারণ পরীক্ষার তথ্য নেই।")}
+        defaultPageSize={10}
+        scrollHeightClass="max-h-[260px]"
+      />
 
-      <div className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr] items-start">
-        <PaginatedTableCard
-          title="Pregnancy checks"
-          rows={pregnancyReports.filter((r) => !r.is_archived)}
-          rowKey={(r) => r.pregnancy_id}
-          columns={pregnancyColumns}
-          emptyMessage="No pregnancy checks recorded."
-          defaultPageSize={10}
-          scrollHeightClass="max-h-[240px]"
-        />
+      <BreedingFormModal
+        key={`bf-${cow.cow_id}-${editingBreeding?.breeding_id ?? "new"}-${breedingModalOpen}`}
+        open={breedingModalOpen}
+        onClose={() => {
+          setBreedingModalOpen(false);
+          setEditingBreeding(null);
+        }}
+        onSaved={reload}
+        onError={onError}
+        onNotice={onNotice}
+        fixedCowId={cow.cow_id}
+        cows={cows}
+        sires={sires}
+        initialRecord={editingBreeding}
+        relatedSireIds={cow.pedigree?.related_sire_ids ?? []}
+        relatedSireCowIds={cow.pedigree?.related_sire_cow_ids ?? []}
+      />
 
-        <form
-          onSubmit={(event) => void submitPregnancy(event)}
-          className="rounded-[8px] border border-line bg-surface p-4 space-y-3"
-        >
-          <h3 className="text-[14px] font-semibold text-ink">Log pregnancy check</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className={ui.label}>
-              Report date *
-              <input type="date" required value={reportDate} onChange={(e) => setReportDate(e.target.value)} className={ui.input} />
-            </label>
-            <label className={ui.label}>
-              Result *
-              <select value={pregStatus} onChange={(e) => setPregStatus(e.target.value)} className={ui.select}>
-                <option value="confirmed">Confirmed</option>
-                <option value="suspected">Suspected</option>
-                <option value="failed">Not pregnant / failed</option>
-                <option value="calved">Calved</option>
-                <option value="aborted">Aborted</option>
-              </select>
-            </label>
-            <label className={ui.label}>
-              Expected calving
-              <input type="date" value={expectedCalving} onChange={(e) => setExpectedCalving(e.target.value)} className={ui.input} />
-            </label>
-            <label className={ui.label}>
-              Actual calving
-              <input type="date" value={actualCalving} onChange={(e) => setActualCalving(e.target.value)} className={ui.input} />
-            </label>
-            <label className={`${ui.label} sm:col-span-2`}>
-              Notes
-              <textarea rows={2} value={pregNotes} onChange={(e) => setPregNotes(e.target.value)} className={ui.textarea} />
-            </label>
-          </div>
-          <button type="submit" disabled={pregSaving} className={btn("primary", "md")}>
-            {pregSaving ? "Saving…" : "Save pregnancy check"}
-          </button>
-        </form>
-      </div>
+      <PregnancyCheckModal
+        key={`pc-${cow.cow_id}-${editingCheck?.pregnancy_id ?? "new"}-${checkModalOpen}`}
+        open={checkModalOpen}
+        onClose={() => {
+          setCheckModalOpen(false);
+          setEditingCheck(null);
+        }}
+        onSaved={reload}
+        onError={onError}
+        onNotice={onNotice}
+        fixedCowId={cow.cow_id}
+        cows={cows}
+        breedingRecords={breedingRecords}
+        initialReport={editingCheck}
+        defaultBreedingId={summary?.latest_open_breeding_id ?? null}
+      />
+
+      <CalvingDrawerModal
+        key={`calv-${calvingPregnancyId ?? "closed"}`}
+        open={Boolean(calvingPregnancyId)}
+        onClose={() => setCalvingPregnancyId(null)}
+        onSaved={reload}
+        onError={onError}
+        onNotice={onNotice}
+        pregnancyId={calvingPregnancyId ?? ""}
+        damTag={cow.current_tag_number}
+        warehouses={warehouses}
+        defaultBreed={cow.breed}
+      />
+
+      <ConfirmActionModal config={confirmModal} onClose={() => setConfirmModal(null)} />
     </div>
   );
 }
@@ -731,6 +795,7 @@ export function MilkCostsTab({
   onError: (message: string) => void;
   onNotice: (message: string) => void;
 }) {
+  const { tr, money, num, date: fmtDate, enumLabel } = useI18n();
   const [givesMilk, setGivesMilk] = useState(Boolean(cow.gives_milk));
   const [sessions, setSessions] = useState<MilkSession[]>(cow.milking_sessions ?? []);
   const [savingSchedule, setSavingSchedule] = useState(false);
@@ -753,10 +818,10 @@ export function MilkCostsTab({
           ],
         },
       });
-      onNotice("Milking schedule saved.");
+      onNotice(tr("Milking schedule saved.", "দোহন সময়সূচী সংরক্ষণ করা হয়েছে।"));
       await reload();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not save milking schedule.");
+      onError(cause instanceof Error ? cause.message : tr("Could not save milking schedule.", "দোহন সময়সূচী সংরক্ষণ করা যায়নি।"));
     } finally {
       setSavingSchedule(false);
     }
@@ -794,8 +859,8 @@ export function MilkCostsTab({
         .map((e) => ({
           id: `exp-${e.expense_id}`,
           date: e.expense_date,
-          kind: "Expense",
-          label: e.category_name ?? "General expense",
+          kind: tr("Expense", "খরচ"),
+          label: e.category_name ?? tr("General expense", "সাধারণ খরচ"),
           amount: Number(e.amount ?? 0),
           note: e.description ?? "—",
         })),
@@ -804,8 +869,8 @@ export function MilkCostsTab({
         .map((f) => ({
           id: `feed-${f.feeding_id}`,
           date: f.feeding_date,
-          kind: "Feeding",
-          label: `${f.feed_name ?? "Feed"} (${formatNumber(f.quantity)} ${f.unit ?? ""})`.trim(),
+          kind: tr("Feeding", "খাদ্য"),
+          label: `${f.feed_name ?? tr("Feed", "খাদ্য")} (${num(f.quantity)} ${f.unit ?? ""})`.trim(),
           amount: Number(f.cost ?? 0),
           note: f.notes ?? "—",
         })),
@@ -814,8 +879,8 @@ export function MilkCostsTab({
         .map((h) => ({
           id: `health-${h.health_id}`,
           date: h.record_date,
-          kind: "Health",
-          label: h.record_type,
+          kind: tr("Health"),
+          label: enumLabel(h.record_type),
           amount: Number(h.cost ?? 0),
           note: h.details ?? h.vet_name ?? "—",
         })),
@@ -824,51 +889,51 @@ export function MilkCostsTab({
         .map((b) => ({
           id: `breed-${b.breeding_id}`,
           date: b.seed_date,
-          kind: "Breeding",
-          label: b.method.replaceAll("_", " "),
+          kind: tr("Breeding"),
+          label: enumLabel(b.method),
           amount: Number(b.cost ?? 0),
           note: b.semen_code ?? b.doctor_name ?? "—",
         })),
     ];
     return items.sort((a, b) => b.date.localeCompare(a.date));
-  }, [expenses, feedingRecords, healthRecords, breedingRecords]);
+  }, [expenses, feedingRecords, healthRecords, breedingRecords, tr, num, enumLabel]);
 
   const milkColumns: PaginatedColumn<MilkRecord>[] = [
-    { key: "production_date", label: "Date", render: (r) => formatDisplayDate(r.production_date) },
-    { key: "session", label: "Session", render: (r) => sessionLabel(r.session) },
+    { key: "production_date", label: tr("Date"), render: (r) => fmtDate(r.production_date) },
+    { key: "session", label: tr("Session"), render: (r) => enumLabel(r.session) },
     {
       key: "liters",
-      label: "Est. liters",
+      label: tr("Est. liters", "আনুমানিক লিটার"),
       align: "right",
-      render: (r) => <span className="font-semibold tabular-nums">{formatNumber(r.liters)} L</span>,
+      render: (r) => <span className="font-semibold tabular-nums">{num(r.liters)} {tr("L", "লিটার")}</span>,
     },
     {
       key: "status",
-      label: "Status",
+      label: tr("Status"),
       render: (r) => (
-        <Badge tone={r.is_void ? "bad" : "good"}>{r.is_void ? "Voided" : "Recorded"}</Badge>
+        <Badge tone={r.is_void ? "bad" : "good"}>{r.is_void ? tr("Voided") : tr("Recorded", "রেকর্ডকৃত")}</Badge>
       ),
     },
   ];
 
   const costColumns: PaginatedColumn<CostLedgerRow>[] = [
-    { key: "date", label: "Date", render: (r) => formatDisplayDate(r.date) },
-    { key: "kind", label: "Module", render: (r) => <Badge tone="neutral">{r.kind}</Badge> },
-    { key: "label", label: "Item", render: (r) => <span className="capitalize">{r.label}</span> },
-    { key: "amount", label: "Amount", align: "right", render: (r) => formatMoney(r.amount) },
-    { key: "note", label: "Notes", render: (r) => <span className="text-muted">{r.note}</span> },
+    { key: "date", label: tr("Date"), render: (r) => fmtDate(r.date) },
+    { key: "kind", label: tr("Module", "খাত"), render: (r) => <Badge tone="neutral">{r.kind}</Badge> },
+    { key: "label", label: tr("Item"), render: (r) => <span>{r.label}</span> },
+    { key: "amount", label: tr("Amount", "পরিমাণ"), align: "right", render: (r) => money(r.amount) },
+    { key: "note", label: tr("Notes"), render: (r) => <span className="text-muted">{r.note}</span> },
   ];
 
   return (
     <div className="space-y-5">
       <div className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr] items-start">
         <PaginatedTableCard
-          title="Milk production log"
-          subtitle={`Group-averaged per-cow estimates · Total active: ${formatNumber(totalLiters)} L`}
+          title={tr("Milk production log", "দুধ উৎপাদনের লগ")}
+          subtitle={`${tr("Group-averaged per-cow estimates", "দলগত গড় হিসাব অনুযায়ী গরু প্রতি আনুমানিক")} · ${tr("Total active:", "মোট সক্রিয়:")} ${num(totalLiters)} ${tr("L", "লিটার")}`}
           rows={milkRecords}
           rowKey={(r) => r.milk_id}
           columns={milkColumns}
-          emptyMessage="No milk production records for this cow."
+          emptyMessage={tr("No milk production records for this cow.", "এই গরুর দুধ উৎপাদনের কোনো রেকর্ড নেই।")}
           defaultPageSize={10}
           scrollHeightClass="max-h-[240px]"
         />
@@ -878,9 +943,9 @@ export function MilkCostsTab({
           className="rounded-[8px] border border-line bg-surface p-4 space-y-3"
         >
           <div>
-            <h3 className="text-[14px] font-semibold text-ink">Milking schedule</h3>
+            <h3 className="text-[14px] font-semibold text-ink">{tr("Milking schedule", "দোহন সময়সূচী")}</h3>
             <p className="mt-0.5 text-[12px] text-muted">
-              Controls whether this cow appears in daily milking session rosters.
+              {tr("Controls whether this cow appears in daily milking session rosters.", "দৈনিক দুধ দোহনের তালিকায় এই গরু থাকবে কিনা তা নির্ধারণ করে।")}
             </p>
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
@@ -889,7 +954,7 @@ export function MilkCostsTab({
               checked={givesMilk}
               onChange={(e) => setGivesMilk(e.target.checked)}
             />
-            Currently giving milk
+            {tr("Currently giving milk", "বর্তমানে দুধ দিচ্ছে")}
           </label>
           {givesMilk ? (
             <div className="flex flex-wrap gap-2">
@@ -913,25 +978,25 @@ export function MilkCostsTab({
                         )
                       }
                     />
-                    {sessionLabel(s)}
+                    {enumLabel(s)}
                   </label>
                 );
               })}
             </div>
           ) : null}
           <button type="submit" disabled={savingSchedule} className={btn("primary", "md")}>
-            {savingSchedule ? "Saving…" : "Save schedule"}
+            {savingSchedule ? tr("Saving…") : tr("Save schedule", "সময়সূচী সংরক্ষণ করুন")}
           </button>
         </form>
       </div>
 
       <PaginatedTableCard
-        title="Direct expenses & cow-linked costs"
-        subtitle={`Health (${formatMoney(healthCost)}) · Breeding (${formatMoney(breedingCost)}) · Expenses (${formatMoney(directExpenseCost)}) · Feeding (${formatMoney(feedingCost)})`}
+        title={tr("Direct expenses & cow-linked costs", "সরাসরি খরচ ও গরু-সংশ্লিষ্ট ব্যয়")}
+        subtitle={`${tr("Health")} (${money(healthCost)}) · ${tr("Breeding")} (${money(breedingCost)}) · ${tr("Expenses")} (${money(directExpenseCost)}) · ${tr("Feeding", "খাদ্য")} (${money(feedingCost)})`}
         rows={costRows}
         rowKey={(r) => r.id}
         columns={costColumns}
-        emptyMessage="No direct cow-linked costs recorded yet."
+        emptyMessage={tr("No direct cow-linked costs recorded yet.", "এখনও কোনো সরাসরি খরচের রেকর্ড নেই।")}
         defaultPageSize={10}
         scrollHeightClass="max-h-[260px]"
       />

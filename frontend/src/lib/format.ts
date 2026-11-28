@@ -119,11 +119,22 @@ const ENUM_LABELS: Record<string, { en: string; bn: string }> = {
   beef: { en: "Beef", bn: "মাংস উৎপাদন" },
   "duel-purpose": { en: "Dual-purpose", bn: "দ্বৈত-উদ্দেশ্য" },
   "dual-purpose": { en: "Dual-purpose", bn: "দ্বৈত-উদ্দেশ্য" },
-  female: { en: "Female", bn: "গাভী/বকনা" },
-  male: { en: "Male", bn: "ষাঁড়/বাছুর" },
+  female: { en: "Female", bn: "গাভী / বকনা" },
+  male: { en: "Male", bn: "ষাঁড় / বাছুর" },
   deshi: { en: "Deshi", bn: "দেশি" },
   friesian: { en: "Friesian", bn: "ফ্রিজিয়ান" },
-  other: { en: "Other / Unknown", bn: "অন্যান্য" },
+  other: { en: "Other / Unknown", bn: "অন্যান্য / অজানা" },
+  "bull calf": { en: "Bull Calf", bn: "এঁড়ে বাছুর" },
+  "heifer calf": { en: "Heifer Calf", bn: "বকনা বাছুর" },
+  bull: { en: "Bull", bn: "ষাঁড়" },
+  cow: { en: "Cow", bn: "গাভী" },
+  heifer: { en: "Heifer", bn: "বকনা" },
+  ox: { en: "Ox", bn: "বলদ" },
+  "deshi calf": { en: "Deshi Calf", bn: "দেশি বাছুর" },
+  "friesian calf": { en: "Friesian Calf", bn: "ফ্রিজিয়ান বাছুর" },
+  calf: { en: "Calf", bn: "বাছুর" },
+  medium: { en: "Medium", bn: "মাঝারি" },
+  adult: { en: "Adult", bn: "প্রাপ্তবয়স্ক" },
   // Customer / supplier types
   individual: { en: "Individual", bn: "ব্যক্তিগত ক্রেতা" },
   dairy_shop: { en: "Dairy Shop", bn: "দুগ্ধ দোকান" },
@@ -133,11 +144,16 @@ const ENUM_LABELS: Record<string, { en: string; bn: string }> = {
   market: { en: "Market", bn: "বাজার" },
   // Acquisition types
   born_on_farm: { en: "Born on Farm", bn: "খামারে জন্ম" },
-  bought_from_supplier: { en: "Bought from Supplier", bn: "সরবরাহকারী থেকে ক্রয়" },
-  bought_from_bazar: { en: "Bought from Bazar", bn: "বাজার থেকে ক্রয়" },
+  bought_from_supplier: { en: "Bought from Supplier", bn: "সরবরাহকারী থেকে কেনা" },
+  bought_from_bazar: { en: "Bought from Bazar", bn: "হাট/বাজার থেকে কেনা" },
   // Breeding & health
   artificial_insemination: { en: "Artificial Insemination", bn: "কৃত্রিম প্রজনন" },
   natural: { en: "Natural", bn: "স্বাভাবিক প্রজনন" },
+  on_farm: { en: "On-farm", bn: "খামারের ষাঁড়" },
+  external_semen: { en: "External AI", bn: "বাইরের সিমেন" },
+  normal: { en: "Normal", bn: "স্বাভাবিক" },
+  assisted: { en: "Assisted", bn: "সহায়তাপ্রাপ্ত" },
+  c_section: { en: "C-section", bn: "সিজারিয়ান" },
   treatment: { en: "Treatment", bn: "চিকিৎসা" },
   vaccination: { en: "Vaccination", bn: "টিকা" },
   deworming: { en: "Deworming", bn: "কৃমিনাশক" },
@@ -188,6 +204,23 @@ export function formatDaysOnFarm(
   const numStr = formatInteger(n, lang);
   if (lang === "bn") return `${numStr} দিন`;
   return `${numStr} ${n === 1 ? "day" : "days"}`;
+}
+
+export function formatAgeDisplay(
+  value: string | null | undefined,
+  lang: AppLanguage = "en"
+): string {
+  if (!value) return "—";
+  const trimmed = value.trim();
+  if (!trimmed) return "—";
+  if (lang !== "bn") return trimmed;
+  return toDisplayDigits(
+    trimmed
+      .replace(/\byears?\b/gi, "বছর")
+      .replace(/\bmonths?\b/gi, "মাস")
+      .replace(/\bdays?\b/gi, "দিন"),
+    "bn"
+  );
 }
 
 export const isMoneyKey = (key: string): boolean =>

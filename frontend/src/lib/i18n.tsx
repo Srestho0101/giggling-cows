@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { usePreference } from "@/lib/preferences";
 import {
   type AppLanguage,
+  formatAgeDisplay,
   formatDateDisplay,
   formatDaysOnFarm,
   formatEnumLabel,
@@ -116,6 +117,7 @@ const BN_DICTIONARY: Record<string, string> = {
 
   // Herd & Sheds
   Cows: "গরুসমূহ",
+  "Search and register animals. Select a tag to open its record.": "গরু খুঁজুন এবং নতুন গরু যোগ করুন। বিস্তারিত দেখতে ট্যাগে ক্লিক করুন।",
   "Search by tag": "ট্যাগ দিয়ে খুঁজুন",
   "All sheds": "সকল শেড",
   "All statuses": "সকল অবস্থা",
@@ -124,28 +126,49 @@ const BN_DICTIONARY: Record<string, string> = {
   Tag: "ট্যাগ",
   "Tag number": "ট্যাগ নম্বর",
   Category: "ধরন",
-  "Cow type": "গরুর প্রকৃতি",
+  "Cow type": "গরুর শ্রেণি",
   Breed: "জাত",
   "Breed / calf type": "জাত / বাছুরের ধরন",
+  Color: "রং",
+  Marking: "দাগ বা চিহ্ন",
+  "e.g. Black & white, Red": "যেমন: সাদা-কালো, লাল",
+  "e.g. White star on forehead": "যেমন: কপালে সাদা তারা",
   Sex: "লিঙ্গ",
+  Female: "গাভী / বকনা",
+  Male: "ষাঁড় / বাছুর",
+  Dairy: "দুগ্ধবতী",
+  Beef: "মাংস উৎপাদন",
+  "Bull Calf": "এঁড়ে বাছুর",
+  "Heifer Calf": "বকনা বাছুর",
+  Bull: "ষাঁড়",
+  Heifer: "বকনা",
+  Ox: "বলদ",
+  Deshi: "দেশি",
+  Friesian: "ফ্রিজিয়ান",
+  "Other / Unknown": "অন্যান্য / অজানা",
+  "Born on Farm": "খামারে জন্ম",
+  "Bought from Supplier": "সরবরাহকারী থেকে কেনা",
+  "Bought from Bazar": "হাট/বাজার থেকে কেনা",
   "Days on farm": "খামারে দিন",
   "Birth date": "জন্ম তারিখ",
   Age: "বয়স",
-  "Age group": "বয়সের গ্রুপ",
-  Dam: "মা (দাম)",
-  Sire: "বাবা (সায়ার)",
+  "Age group": "বয়সের ধাপ",
+  Dam: "মা",
+  Sire: "বাবা",
+  "Dam (optional)": "মা (ঐচ্ছিক)",
+  "Sire (optional)": "বাবা (ঐচ্ছিক)",
   Shed: "শেড",
   Sheds: "শেডসমূহ",
   Status: "অবস্থা",
   "Latest kg": "সর্বশেষ ওজন (কেজি)",
   "Milking": "দুধ দেয়",
-  Acquisition: "সংগ্রহের ধরন",
+  Acquisition: "সংগ্রহের মাধ্যম",
   "Acquisition date": "সংগ্রহের তারিখ",
   Supplier: "সরবরাহকারী",
   Suppliers: "সরবরাহকারীরা",
-  "Purchase price ৳": "ক্রয়মূল্য ৳",
+  "Purchase price ৳": "ক্রয়মূল্য (৳)",
   "Dual-purpose": "দ্বৈত-উদ্দেশ্য",
-  "Back to herd": "পালে ফিরে যান",
+  "Back to herd": "পালের তালিকায় ফিরে যান",
   "Cow profile": "গরুর প্রোফাইল",
   "Edit profile": "প্রোফাইল সম্পাদনা",
   "Close edit": "সম্পাদনা বন্ধ করুন",
@@ -196,6 +219,12 @@ const BN_DICTIONARY: Record<string, string> = {
   "Due and overdue care": "আসন্ন ও মেয়াদোত্তীর্ণ চিকিৎসা",
   "No care due in the next 14 days.": "আগামী ১৪ দিনে কোনো চিকিৎসা নির্ধারিত নেই।",
   "Health records": "স্বাস্থ্য রেকর্ড",
+  "Health record": "স্বাস্থ্য রেকর্ড",
+  "Vaccinations, deworming, treatment, and checkups.": "টিকা, কৃমিনাশক, চিকিৎসা ও স্বাস্থ্য পরীক্ষার তথ্য।",
+  Treatment: "চিকিৎসা",
+  Vaccination: "টিকা",
+  Deworming: "কৃমিনাশক",
+  Checkup: "স্বাস্থ্য পরীক্ষা",
   Type: "ধরন",
   Vet: "পশুচিকিৎসক",
   "Next due": "পরবর্তী তারিখ",
@@ -370,6 +399,11 @@ export function useI18n() {
     [lang]
   );
 
+  const age = useCallback(
+    (value: string | null | undefined) => formatAgeDisplay(value, lang),
+    [lang]
+  );
+
   const digits = useCallback(
     (text: string) => toDisplayDigits(text, lang),
     [lang]
@@ -386,6 +420,7 @@ export function useI18n() {
     date,
     enumLabel,
     daysOnFarm,
+    age,
     digits,
   };
 }

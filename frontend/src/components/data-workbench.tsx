@@ -116,7 +116,7 @@ export function DataWorkbench({
   refreshKey = 0,
   invalidateKeys,
 }: DataWorkbenchProps) {
-  const { lang, tr, money, num, date: fmtDate, enumLabel, daysOnFarm } = useI18n();
+  const { lang, tr, money, num, integer, date: fmtDate, enumLabel, daysOnFarm, age: fmtAge } = useI18n();
   const [values, setValues] = useState<Record<string, string>>({});
   const [remoteOptions, setRemoteOptions] = useState<
     Record<string, { value: string; label: string }[]>
@@ -405,7 +405,10 @@ export function DataWorkbench({
             .join(", ")
         : tr("None");
     }
-    if (typeof value === "object") return Array.isArray(value) ? `${value.length} items` : "—";
+    if (typeof value === "object") return Array.isArray(value) ? `${integer(value.length)} ${tr("items", "টি")}` : "—";
+    if (key === "age") {
+      return fmtAge(String(value));
+    }
     if (/_date$/i.test(key) || key === "pay_month") {
       return fmtDate(String(value));
     }
@@ -416,7 +419,7 @@ export function DataWorkbench({
       return num(value);
     }
     if (
-      /^(category|breed|sex|status|outcome|decision|customer_type|charge_type|record_type|method|price_basis|housing_type|category_group|acquisition_type)$/i.test(
+      /^(category|cow_type|age_group|breed|sex|status|outcome|decision|customer_type|charge_type|record_type|method|price_basis|housing_type|category_group|acquisition_type)$/i.test(
         key
       )
     ) {
@@ -602,7 +605,7 @@ export function DataWorkbench({
                       rows={3}
                       required={required}
                       aria-invalid={Boolean(fieldErrors[field.name])}
-                      placeholder={field.placeholder}
+                      placeholder={field.placeholder ? tr(field.placeholder) : undefined}
                       value={values[field.name] ?? field.defaultValue ?? ""}
                       onChange={(event) => {
                         setFieldErrors((prev) => {
@@ -654,7 +657,7 @@ export function DataWorkbench({
                       step={field.step ?? (field.type === "number" ? "0.01" : undefined)}
                       required={required}
                       aria-invalid={Boolean(fieldErrors[field.name])}
-                      placeholder={field.placeholder}
+                      placeholder={field.placeholder ? tr(field.placeholder) : undefined}
                       value={values[field.name] ?? field.defaultValue ?? ""}
                       onChange={(event) => {
                         setFieldErrors((prev) => {
