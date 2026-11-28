@@ -34,9 +34,15 @@ export function CowAvatar({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [imgFailed, setImgFailed] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  const resolvedUrl = !imgFailed ? resolveMediaUrl(profilePictureUrl) : null;
+  const imgFailed = Boolean(profilePictureUrl && failedUrl === profilePictureUrl);
+  const resolvedUrl =
+    !imgFailed && profilePictureUrl
+      ? resolveMediaUrl(
+          `/api/v1${apiRoutes.herd.profilePicture(cowId)}?v=${encodeURIComponent(profilePictureUrl)}`
+        )
+      : null;
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -50,7 +56,7 @@ export function CowAvatar({
       const formData = new FormData();
       formData.append("file", file);
       await apiUpload(apiRoutes.herd.profilePicture(cowId), formData);
-      setImgFailed(false);
+      setFailedUrl(null);
       onNotice?.("Profile picture updated.");
       await onUpdated?.();
     } catch (cause) {
@@ -103,7 +109,7 @@ export function CowAvatar({
             <img
               src={resolvedUrl}
               alt={`Cow ${tag}`}
-              onError={() => setImgFailed(true)}
+              onError={() => setFailedUrl(profilePictureUrl ?? null)}
               className="h-full w-full rounded-full object-cover"
             />
           ) : (

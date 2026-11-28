@@ -560,8 +560,14 @@ async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncCl
             deleted_urls.append(previous_url)
             stored_objects.pop(previous_url, None)
 
+    async def fake_fetch(public_url):
+        if public_url in stored_objects:
+            return stored_objects[public_url], "image/png"
+        raise AssertionError(f"Unexpected fetch for {public_url}")
+
     monkeypatch.setattr("app.api.v1.endpoints.cows.upload_profile_picture_to_storage", fake_upload)
     monkeypatch.setattr("app.api.v1.endpoints.cows.delete_profile_picture_from_storage", fake_delete)
+    monkeypatch.setattr("app.api.v1.endpoints.cows.fetch_profile_picture_from_storage", fake_fetch)
 
     # Upload profile picture
     tiny_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
@@ -574,6 +580,11 @@ async def test_cow_profile_picture_color_marking_and_sale_record(client: AsyncCl
     expected_url = f"https://example.supabase.co/storage/v1/object/public/cow-profiles/{cow_id}/123.png"
     assert upload_resp.json()["profile_picture_url"] == expected_url
     assert stored_objects[expected_url] == tiny_png
+
+    # Fetch profile picture via backend proxy endpoint
+    pic_resp = await client.get(f"/api/v1/herd/cows/{cow_id}/profile-picture")
+    assert pic_resp.status_code == 200
+    assert pic_resp.content == tiny_png
 
     # Delete profile picture
     del_resp = await client.delete(

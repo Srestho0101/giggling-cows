@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 import uuid
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -33,6 +33,7 @@ from app.schemas.herd import (
 from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 from app.services.storage_service import (
     delete_cow_profile_picture as delete_profile_picture_from_storage,
+    fetch_cow_profile_picture as fetch_profile_picture_from_storage,
     upload_cow_profile_picture as upload_profile_picture_to_storage,
 )
 
@@ -665,6 +666,23 @@ async def move_cow_warehouse(
 
 
 # ---------------------- PROFILE PICTURE ----------------------
+@router.get("/cows/{cow_id}/profile-picture")
+async def get_cow_profile_picture(
+    cow_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    cow = await db.get(Cow, cow_id)
+    if not cow or not cow.profile_picture_url:
+        raise HTTPException(status_code=404, detail="Profile picture not found")
+
+    data, content_type = await fetch_profile_picture_from_storage(cow.profile_picture_url)
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @router.post("/cows/{cow_id}/profile-picture", response_model=CowDetailRead)
 async def upload_cow_profile_picture(
     cow_id: uuid.UUID,

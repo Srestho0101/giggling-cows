@@ -74,6 +74,33 @@ async def delete_cow_profile_picture(previous_url: Optional[str]) -> None:
     await _delete_object(supabase_url, service_key, bucket, object_path)
 
 
+async def fetch_cow_profile_picture(public_url: Optional[str]) -> tuple[bytes, str]:
+    if not public_url:
+        raise HTTPException(status_code=404, detail="Profile picture not found")
+    supabase_url, service_key, bucket = _require_storage_config()
+    object_path = _extract_object_path(public_url, supabase_url, bucket)
+    if not object_path:
+        raise HTTPException(status_code=404, detail="Profile picture not found")
+
+    fetch_url = f"{supabase_url}/storage/v1/object/{bucket}/{object_path}"
+    headers = {
+        "Authorization": f"Bearer {service_key}",
+        "apikey": service_key,
+    }
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(fetch_url, headers=headers)
+
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail="Profile picture not found")
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to fetch profile picture from Supabase Storage ({response.status_code}).",
+        )
+    content_type = response.headers.get("content-type") or "image/jpeg"
+    return response.content, content_type
+
+
 async def _delete_object(supabase_url: str, service_key: str, bucket: str, object_path: str) -> None:
     delete_url = f"{supabase_url}/storage/v1/object/{bucket}/{object_path}"
     headers = {
