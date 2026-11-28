@@ -23,7 +23,9 @@ import {
   type CowListOption,
   type HealthRecord,
   type MilkRecord,
+  type PregnancyEpisode,
   type PregnancyReport,
+  type SireItem,
   type SupplierOption,
   type WarehouseOption,
 } from "@/components/cow-profile/types";
@@ -70,6 +72,17 @@ export default function CowProfilePage() {
     queryFn: () => apiRequest<PregnancyReport[]>(`${apiRoutes.health.pregnancy}?cow_id=${cowId}&include_archived=true`),
   });
 
+  const pregnanciesQuery = useQuery({
+    queryKey: ["cow-pregnancies", cowId],
+    queryFn: () => apiRequest<PregnancyEpisode[]>(`${apiRoutes.health.pregnancies}?cow_id=${cowId}&include_archived=true`),
+  });
+
+  const siresQuery = useQuery({
+    queryKey: ["sires"],
+    queryFn: () => apiRequest<SireItem[]>(apiRoutes.health.sires),
+    staleTime: 60_000,
+  });
+
   const milkQuery = useQuery({
     queryKey: ["cow-milk", cowId],
     queryFn: () => apiRequest<MilkRecord[]>(`${apiRoutes.sales.milk}?cow_id=${cowId}`),
@@ -109,6 +122,9 @@ export default function CowProfilePage() {
       queryClient.invalidateQueries({ queryKey: ["cow-health", cowId] }),
       queryClient.invalidateQueries({ queryKey: ["cow-breeding", cowId] }),
       queryClient.invalidateQueries({ queryKey: ["cow-pregnancy", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["cow-pregnancies", cowId] }),
+      queryClient.invalidateQueries({ queryKey: ["breeding-summary"] }),
+      queryClient.invalidateQueries({ queryKey: ["sires"] }),
       queryClient.invalidateQueries({ queryKey: ["cow-milk", cowId] }),
       queryClient.invalidateQueries({ queryKey: ["cow-expenses", cowId] }),
       queryClient.invalidateQueries({ queryKey: ["cow-feeding", cowId] }),
@@ -125,6 +141,8 @@ export default function CowProfilePage() {
   const healthRecords = useMemo(() => healthQuery.data ?? [], [healthQuery.data]);
   const breedingRecords = useMemo(() => breedingQuery.data ?? [], [breedingQuery.data]);
   const pregnancyReports = useMemo(() => pregnancyQuery.data ?? [], [pregnancyQuery.data]);
+  const pregnancyEpisodes = useMemo(() => pregnanciesQuery.data ?? [], [pregnanciesQuery.data]);
+  const sires = siresQuery.data ?? [];
   const milkRecords = useMemo(() => milkQuery.data ?? [], [milkQuery.data]);
   const expenses = useMemo(() => expenseQuery.data ?? [], [expenseQuery.data]);
   const feedingRecords = useMemo(() => feedingQuery.data ?? [], [feedingQuery.data]);
@@ -500,6 +518,9 @@ export default function CowProfilePage() {
               cow={cow}
               breedingRecords={breedingRecords}
               pregnancyReports={pregnancyReports}
+              pregnancyEpisodes={pregnancyEpisodes}
+              sires={sires}
+              warehouses={warehouses}
               cows={allCows}
               reload={reloadAll}
               onError={setError}

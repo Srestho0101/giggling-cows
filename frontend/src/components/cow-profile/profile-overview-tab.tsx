@@ -102,7 +102,7 @@ export function ProfileOverviewTab({
         </section>
 
         <section className="rounded-[8px] border border-line bg-surface p-4">
-          <h3 className="text-[13px] font-semibold text-ink">Family & lineage</h3>
+          <h3 className="text-[13px] font-semibold text-ink">Family &amp; lineage</h3>
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[12.5px]">
             <div>
               <dt className="text-[11.5px] text-muted">Dam (Mother)</dt>
@@ -121,20 +121,105 @@ export function ProfileOverviewTab({
               <dd className="mt-0.5 font-medium text-ink">
                 {cow.sire_id ? (
                   <Link href={`/herd/${cow.sire_id}`} className="text-accent hover:underline">
-                    {cow.sire_tag ?? "View sire"}
+                    {cow.sire_tag ?? cow.sire_display_name ?? "View sire"}
                   </Link>
                 ) : (
-                  cow.sire_tag ?? "—"
+                  cow.sire_display_name ?? cow.sire_tag ?? "—"
                 )}
               </dd>
             </div>
+
+            {cow.pedigree &&
+            (cow.pedigree.maternal_grand_dam ||
+              cow.pedigree.maternal_grand_sire ||
+              cow.pedigree.paternal_grand_dam ||
+              cow.pedigree.paternal_grand_sire) ? (
+              <div className="col-span-2 border-t border-line pt-2.5 text-[11.5px]">
+                <dt className="text-muted">Grandparents (2-gen pedigree)</dt>
+                <dd className="mt-1 grid grid-cols-2 gap-2 text-ink">
+                  <div>
+                    <span className="text-muted">Maternal: </span>
+                    {cow.pedigree.maternal_grand_dam ? (
+                      <Link href={`/herd/${cow.pedigree.maternal_grand_dam.cow_id}`} className="text-accent hover:underline">
+                        {cow.pedigree.maternal_grand_dam.label}
+                      </Link>
+                    ) : "—"}
+                    {" × "}
+                    {cow.pedigree.maternal_grand_sire?.cow_id ? (
+                      <Link href={`/herd/${cow.pedigree.maternal_grand_sire.cow_id}`} className="text-accent hover:underline">
+                        {cow.pedigree.maternal_grand_sire.label}
+                      </Link>
+                    ) : (
+                      cow.pedigree.maternal_grand_sire?.label ?? "—"
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-muted">Paternal: </span>
+                    {cow.pedigree.paternal_grand_dam ? (
+                      <Link href={`/herd/${cow.pedigree.paternal_grand_dam.cow_id}`} className="text-accent hover:underline">
+                        {cow.pedigree.paternal_grand_dam.label}
+                      </Link>
+                    ) : "—"}
+                    {" × "}
+                    {cow.pedigree.paternal_grand_sire?.cow_id ? (
+                      <Link href={`/herd/${cow.pedigree.paternal_grand_sire.cow_id}`} className="text-accent hover:underline">
+                        {cow.pedigree.paternal_grand_sire.label}
+                      </Link>
+                    ) : (
+                      cow.pedigree.paternal_grand_sire?.label ?? "—"
+                    )}
+                  </div>
+                </dd>
+              </div>
+            ) : null}
+
+            {cow.origin_context ? (
+              <div className="col-span-2 border-t border-line pt-2.5 text-[11.5px] space-y-1">
+                <dt className="text-muted">Origin &amp; conception (derived)</dt>
+                <dd className="text-ink space-y-1">
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                    {cow.origin_context.conception_method ? (
+                      <span className="capitalize">
+                        Method: <strong>{cow.origin_context.conception_method.replaceAll("_", " ")}</strong>
+                      </span>
+                    ) : null}
+                    {cow.origin_context.insemination_date ? (
+                      <span>Service: <strong>{formatDisplayDate(cow.origin_context.insemination_date)}</strong></span>
+                    ) : null}
+                    {cow.origin_context.gestation_days != null ? (
+                      <span>Gestation: <strong>{cow.origin_context.gestation_days}d</strong></span>
+                    ) : null}
+                    <span className="capitalize">
+                      Calving: <strong>{cow.origin_context.calving_ease.replaceAll("_", " ")}</strong>
+                    </span>
+                    {cow.origin_context.birth_weight_kg != null ? (
+                      <span>Birth wt: <strong>{formatNumber(cow.origin_context.birth_weight_kg)} kg</strong></span>
+                    ) : null}
+                  </div>
+                  {cow.origin_context.littermates?.length ? (
+                    <div>
+                      <span className="text-muted">Twin / Littermate: </span>
+                      {cow.origin_context.littermates.map((lm, i) => (
+                        <React.Fragment key={lm.cow_id}>
+                          {i > 0 ? ", " : ""}
+                          <Link href={`/herd/${lm.cow_id}`} className="text-accent hover:underline font-medium">
+                            {lm.current_tag_number}
+                          </Link>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  ) : null}
+                </dd>
+              </div>
+            ) : null}
+
             <div className="col-span-2 border-t border-line pt-2.5">
               <dt className="text-[11.5px] text-muted">
                 Offspring ({cow.offspring?.length ?? 0})
               </dt>
               <dd className="mt-1.5">
                 {cow.offspring?.length ? (
-                  <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
+                  <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
                     {cow.offspring.map((child) => (
                       <Link
                         key={child.cow_id}
@@ -143,7 +228,10 @@ export function ProfileOverviewTab({
                       >
                         <span>{child.current_tag_number}</span>
                         <span className="text-[11px] text-muted capitalize">
-                          ({child.sex}{child.birth_date ? ` · ${formatDisplayDate(child.birth_date)}` : ""})
+                          ({child.sex}
+                          {child.birth_date ? ` · ${formatDisplayDate(child.birth_date)}` : ""}
+                          {child.other_parent_tag ? ` · × ${child.other_parent_tag}` : ""}
+                          {child.status !== "active" ? ` · ${child.status}` : ""})
                         </span>
                       </Link>
                     ))}

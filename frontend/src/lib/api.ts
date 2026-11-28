@@ -203,7 +203,12 @@ export const apiRoutes = {
   health: {
     records: "/health/records", record: (id: string) => `/health/records/${id}`,
     breeding: "/health/breeding", breedingRecord: (id: string) => `/health/breeding/${id}`,
+    breedingSummary: "/health/breeding/summary",
     pregnancy: "/health/pregnancy", pregnancyReport: (id: string) => `/health/pregnancy/${id}`,
+    pregnancies: "/health/pregnancies",
+    pregnancyEpisode: (id: string) => `/health/pregnancies/${id}`,
+    calve: (id: string) => `/health/pregnancies/${id}/calve`,
+    sires: "/health/sires", sire: (id: string) => `/health/sires/${id}`,
   },
   sales: {
     customers: "/sales/customers", customer: (id: string) => `/sales/customers/${id}`,

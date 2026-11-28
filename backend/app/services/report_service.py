@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import exists, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.health import BreedingRecord, HealthRecord, PregnancyReport
+from app.models.health import BreedingRecord, HealthRecord, Pregnancy, PregnancyReport
 from app.models.evaluation import PurchaseEvaluation
 from app.models.feeding import Expense, FeedingRecord
 from app.models.herd import Cow, Warehouse
@@ -192,7 +192,38 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
             )
         )
 
-    # Upcoming calvings within next 14 days — exclude already-calved pregnancies
+    # Upcoming calvings within next 14 days — prefer Pregnancy episodes, fall back to unlinked PregnancyReports
+    ep_alerts_stmt = (
+        select(Pregnancy, Cow.current_tag_number)
+        .join(Cow, Pregnancy.cow_id == Cow.cow_id)
+        .where(
+            Pregnancy.status.in_(["confirmed", "suspected"]),
+            Pregnancy.expected_calving_date.is_not(None),
+            Pregnancy.expected_calving_date <= today + timedelta(days=14),
+            Pregnancy.ended_at.is_(None),
+            Pregnancy.is_archived == False,
+            Cow.status == "active",
+            Cow.is_archived == False,
+        )
+        .order_by(Pregnancy.expected_calving_date.asc())
+        .limit(10)
+    )
+    ep_rows = (await session.execute(ep_alerts_stmt)).all()
+    alerted_cow_ids = set()
+    for ep, tag in ep_rows:
+        overdue_days = max(0, (today - ep.expected_calving_date).days)
+        alerted_cow_ids.add(ep.cow_id)
+        alerts.append(
+            DashboardAlertItem(
+                id=ep.pregnancy_id,
+                cow_tag=tag,
+                item_type="expected_calving",
+                due_date=ep.expected_calving_date,
+                days_overdue=overdue_days,
+                description=f"Expected Calving for {tag} (Status: {ep.status})",
+            )
+        )
+
     calved_sibling = PregnancyReport.__table__.alias("calved_sibling")
     has_subsequent_calving = exists(
         select(calved_sibling.c.pregnancy_id).where(
@@ -209,6 +240,7 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
         select(PregnancyReport, Cow.current_tag_number)
         .join(Cow, PregnancyReport.cow_id == Cow.cow_id)
         .where(
+            PregnancyReport.episode_id.is_(None),
             PregnancyReport.status.in_(["confirmed", "suspected"]),
             PregnancyReport.expected_calving_date.is_not(None),
             PregnancyReport.expected_calving_date <= today + timedelta(days=14),
@@ -223,6 +255,8 @@ async def get_dashboard_overview(session: AsyncSession) -> DashboardOverviewResp
     )
     preg_rows = (await session.execute(preg_alerts_stmt)).all()
     for pr, tag in preg_rows:
+        if pr.cow_id in alerted_cow_ids:
+            continue
         overdue_days = max(0, (today - pr.expected_calving_date).days)
         alerts.append(
             DashboardAlertItem(

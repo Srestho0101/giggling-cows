@@ -1,7 +1,8 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 import uuid
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,13 +10,18 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_db
 from app.core.security import AuthUser, UserRole, get_current_user, require_roles
+from app.models.health import BreedingRecord, CalvingEvent, Pregnancy, Sire
 from app.models.herd import Cow, CowWarehouseHistory, Supplier, Warehouse, WeightRecord
 from app.models.sales import Customer, SalesInvoice, SalesInvoiceLine
 from app.schemas.herd import (
     CowCreate,
     CowDetailRead,
     CowOffspringRead,
+    CowOriginContextRead,
+    CowPedigreeNode,
+    CowPedigreeRead,
     CowRead,
+    CowReproductiveSummaryRead,
     CowSaleRecordRead,
     CowUpdate,
     CowWarehouseHistoryCreate,
@@ -30,6 +36,7 @@ from app.schemas.herd import (
     WeightRecordRead,
     WeightRecordUpdate,
 )
+from app.services.breeding_service import sire_display_name
 from app.services.safe_data_operations import capture_lifecycle_state, record_lifecycle_changes
 from app.services.storage_service import (
     delete_cow_profile_picture as delete_profile_picture_from_storage,
@@ -321,16 +328,251 @@ async def get_cow_detail(
         for m in sorted_warehouse_history
     ]
 
+    offspring_conditions = [Cow.dam_id == cow_id, Cow.sire_id == cow_id]
+    cow_sire_entry = (
+        await db.execute(select(Sire).where(Sire.source_type == "on_farm", Sire.cow_id == cow_id))
+    ).scalar_one_or_none()
+    if cow_sire_entry:
+        offspring_conditions.append(Cow.sire_registry_id == cow_sire_entry.sire_id)
+
     offspring_stmt = (
         select(Cow)
+        .options(joinedload(Cow.dam), joinedload(Cow.sire))
         .where(
             Cow.is_archived == False,
-            or_(Cow.dam_id == cow_id, Cow.sire_id == cow_id),
+            or_(*offspring_conditions),
         )
         .order_by(Cow.birth_date.desc(), Cow.acquisition_date.desc())
     )
-    offspring_rows = (await db.execute(offspring_stmt)).scalars().all()
-    detail.offspring = [CowOffspringRead.model_validate(child) for child in offspring_rows]
+    offspring_rows = (await db.execute(offspring_stmt)).scalars().unique().all()
+
+    # Preload origin calvings for offspring to show conception method
+    offspring_calving_ids = [c.origin_calving_id for c in offspring_rows if c.origin_calving_id]
+    conception_by_calving: dict[uuid.UUID, str] = {}
+    if offspring_calving_ids:
+        calv_rows = (
+            await db.execute(
+                select(CalvingEvent)
+                .options(joinedload(CalvingEvent.pregnancy).joinedload(Pregnancy.breeding_record))
+                .where(CalvingEvent.calving_id.in_(offspring_calving_ids))
+            )
+        ).scalars().unique().all()
+        for ce in calv_rows:
+            if ce.pregnancy and ce.pregnancy.breeding_record:
+                conception_by_calving[ce.calving_id] = ce.pregnancy.breeding_record.method
+
+    enriched_offspring: List[CowOffspringRead] = []
+    for child in offspring_rows:
+        is_dam = child.dam_id == cow_id
+        other_id = child.sire_id if is_dam else child.dam_id
+        other_tag = (
+            (child.sire.current_tag_number if child.sire else None)
+            if is_dam
+            else (child.dam.current_tag_number if child.dam else None)
+        )
+        enriched_offspring.append(
+            CowOffspringRead(
+                cow_id=child.cow_id,
+                current_tag_number=child.current_tag_number,
+                sex=child.sex,
+                category=child.category,
+                cow_type=child.cow_type,
+                birth_date=child.birth_date,
+                status=child.status,
+                other_parent_id=other_id,
+                other_parent_tag=other_tag,
+                conception_method=conception_by_calving.get(child.origin_calving_id) if child.origin_calving_id else None,
+                birth_weight_kg=child.birth_weight_kg,
+            )
+        )
+    detail.offspring = enriched_offspring
+
+    # Sire display name
+    if cow.sire_registry_id:
+        sire_entry = (
+            await db.execute(select(Sire).options(joinedload(Sire.cow)).where(Sire.sire_id == cow.sire_registry_id))
+        ).scalar_one_or_none()
+        detail.sire_display_name = sire_display_name(sire_entry)
+    elif cow.sire:
+        detail.sire_display_name = f"Sire {cow.sire.current_tag_number}"
+
+    # Derived origin & conception context from origin_calving_id
+    if cow.origin_calving_id:
+        origin_calv = (
+            await db.execute(
+                select(CalvingEvent)
+                .options(
+                    joinedload(CalvingEvent.dam),
+                    joinedload(CalvingEvent.pregnancy).joinedload(Pregnancy.breeding_record).joinedload(BreedingRecord.sire),
+                    joinedload(CalvingEvent.pregnancy).joinedload(Pregnancy.breeding_record).joinedload(BreedingRecord.sire_entry).joinedload(Sire.cow),
+                    joinedload(CalvingEvent.pregnancy).joinedload(Pregnancy.sire_entry).joinedload(Sire.cow),
+                )
+                .where(CalvingEvent.calving_id == cow.origin_calving_id)
+            )
+        ).scalar_one_or_none()
+        if origin_calv:
+            preg = origin_calv.pregnancy
+            br = preg.breeding_record if preg else None
+            gestation_days = (origin_calv.calving_date - br.seed_date).days if br else None
+            origin_sire_label = None
+            if preg and preg.sire_entry:
+                origin_sire_label = sire_display_name(preg.sire_entry)
+            elif br:
+                origin_sire_label = sire_display_name(br.sire_entry) or (
+                    f"Sire {br.sire.current_tag_number}" if br.sire else br.semen_code
+                )
+            littermates = (
+                await db.execute(
+                    select(Cow).where(
+                        Cow.origin_calving_id == origin_calv.calving_id,
+                        Cow.cow_id != cow_id,
+                        Cow.is_archived == False,
+                    )
+                )
+            ).scalars().all()
+            detail.origin_context = CowOriginContextRead(
+                calving_id=origin_calv.calving_id,
+                pregnancy_id=origin_calv.pregnancy_id,
+                breeding_id=br.breeding_id if br else None,
+                dam_id=origin_calv.dam_id,
+                dam_tag=origin_calv.dam.current_tag_number if origin_calv.dam else detail.dam_tag,
+                sire_display_name=origin_sire_label or detail.sire_display_name,
+                conception_method=br.method if br else None,
+                insemination_date=br.seed_date if br else None,
+                calving_date=origin_calv.calving_date,
+                gestation_days=gestation_days,
+                calving_ease=origin_calv.calving_ease,
+                birth_weight_kg=cow.birth_weight_kg,
+                littermates=[CowOffspringRead.model_validate(lm) for lm in littermates],
+            )
+
+    # 2-generation pedigree & inbreeding guard IDs
+    async def _node_for_cow(target_id: Optional[uuid.UUID]) -> Optional[CowPedigreeNode]:
+        if not target_id:
+            return None
+        c = await db.get(Cow, target_id)
+        if not c:
+            return None
+        return CowPedigreeNode(cow_id=c.cow_id, label=c.current_tag_number, is_external=False)
+
+    dam_node = await _node_for_cow(cow.dam_id)
+    sire_node = await _node_for_cow(cow.sire_id)
+    if not sire_node and cow.sire_registry_id:
+        sire_entry = (
+            await db.execute(select(Sire).options(joinedload(Sire.cow)).where(Sire.sire_id == cow.sire_registry_id))
+        ).scalar_one_or_none()
+        if sire_entry:
+            sire_node = CowPedigreeNode(
+                cow_id=sire_entry.cow_id,
+                sire_registry_id=sire_entry.sire_id,
+                label=sire_display_name(sire_entry) or "External AI Sire",
+                is_external=sire_entry.source_type == "external_semen",
+            )
+
+    mg_dam = await _node_for_cow(cow.dam.dam_id) if cow.dam else None
+    mg_sire = await _node_for_cow(cow.dam.sire_id) if cow.dam else None
+    if not mg_sire and cow.dam and cow.dam.sire_registry_id:
+        ms_entry = (
+            await db.execute(select(Sire).options(joinedload(Sire.cow)).where(Sire.sire_id == cow.dam.sire_registry_id))
+        ).scalar_one_or_none()
+        if ms_entry:
+            mg_sire = CowPedigreeNode(
+                cow_id=ms_entry.cow_id,
+                sire_registry_id=ms_entry.sire_id,
+                label=sire_display_name(ms_entry) or "External AI Sire",
+                is_external=ms_entry.source_type == "external_semen",
+            )
+    pg_dam = await _node_for_cow(cow.sire.dam_id) if cow.sire else None
+    pg_sire = await _node_for_cow(cow.sire.sire_id) if cow.sire else None
+
+    related_sire_ids = list({
+        nid for nid in [cow.sire_registry_id, cow.dam.sire_registry_id if cow.dam else None] if nid is not None
+    })
+    related_sire_cow_ids = list({
+        nid for nid in [
+            cow.sire_id,
+            cow.dam.sire_id if cow.dam else None,
+            cow.sire.sire_id if cow.sire else None,
+        ] if nid is not None
+    })
+    detail.pedigree = CowPedigreeRead(
+        dam=dam_node,
+        sire=sire_node,
+        maternal_grand_dam=mg_dam,
+        maternal_grand_sire=mg_sire,
+        paternal_grand_dam=pg_dam,
+        paternal_grand_sire=pg_sire,
+        related_sire_ids=related_sire_ids,
+        related_sire_cow_ids=related_sire_cow_ids,
+    )
+
+    # Reproductive state summary for female cows
+    if cow.sex == "female":
+        today = datetime.now(ZoneInfo("Asia/Dhaka")).date()
+        active_preg = (
+            await db.execute(
+                select(Pregnancy)
+                .options(joinedload(Pregnancy.breeding_record))
+                .where(
+                    Pregnancy.cow_id == cow_id,
+                    Pregnancy.is_archived == False,
+                    Pregnancy.status.in_(["suspected", "confirmed"]),
+                    Pregnancy.ended_at.is_(None),
+                )
+                .order_by(Pregnancy.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        latest_open_br = (
+            await db.execute(
+                select(BreedingRecord)
+                .where(
+                    BreedingRecord.cow_id == cow_id,
+                    BreedingRecord.is_archived == False,
+                    BreedingRecord.outcome == "pending",
+                )
+                .order_by(BreedingRecord.seed_date.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        latest_calved_preg = (
+            await db.execute(
+                select(Pregnancy)
+                .where(
+                    Pregnancy.cow_id == cow_id,
+                    Pregnancy.is_archived == False,
+                    Pregnancy.status == "calved",
+                    Pregnancy.next_breeding_eligible_date.is_not(None),
+                )
+                .order_by(Pregnancy.ended_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+        if active_preg:
+            seed_dt = active_preg.breeding_record.seed_date if active_preg.breeding_record else None
+            days_preg = (today - seed_dt).days if seed_dt else None
+            detail.reproductive_summary = CowReproductiveSummaryRead(
+                state="pregnant" if active_preg.status == "confirmed" else "suspected_pregnant",
+                days_pregnant=days_preg,
+                expected_calving_date=active_preg.expected_calving_date,
+                dry_off_date=active_preg.dry_off_date,
+                active_pregnancy_id=active_preg.pregnancy_id,
+                latest_open_breeding_id=latest_open_br.breeding_id if latest_open_br else None,
+            )
+        elif latest_open_br:
+            detail.reproductive_summary = CowReproductiveSummaryRead(
+                state="bred",
+                days_since_breeding=(today - latest_open_br.seed_date).days,
+                latest_open_breeding_id=latest_open_br.breeding_id,
+            )
+        elif latest_calved_preg and latest_calved_preg.next_breeding_eligible_date and today < latest_calved_preg.next_breeding_eligible_date:
+            detail.reproductive_summary = CowReproductiveSummaryRead(
+                state="vwp",
+                next_breeding_eligible_date=latest_calved_preg.next_breeding_eligible_date,
+            )
+        else:
+            detail.reproductive_summary = CowReproductiveSummaryRead(state="open")
 
     sale_stmt = (
         select(SalesInvoiceLine, SalesInvoice, Customer)
@@ -416,6 +658,9 @@ async def create_cow(
         supplier_id=data.supplier_id,
         dam_id=data.dam_id,
         sire_id=data.sire_id,
+        sire_registry_id=data.sire_registry_id,
+        origin_calving_id=data.origin_calving_id,
+        birth_weight_kg=data.birth_weight_kg,
         warehouse_id=data.warehouse_id,
         status=data.status,
         gives_milk=bool(data.gives_milk) if data.sex == "female" and data.status == "active" else False,

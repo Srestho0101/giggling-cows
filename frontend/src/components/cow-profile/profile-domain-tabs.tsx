@@ -1,10 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import React, { useMemo, useState } from "react";
 import { ConfirmActionModal, type ConfirmModalConfig } from "@/components/confirm-modal";
 import { PaginatedTableCard, type PaginatedColumn } from "@/components/paginated-scroll-table";
 import { SafeDataHistory } from "@/components/safe-data-history";
-import { Badge, btn, Segmented, statusTone, ui } from "@/components/ui";
+import {
+  BreedingFormModal,
+  CalvingDrawerModal,
+  PregnancyCheckModal,
+} from "@/components/breeding/breeding-drawers";
+import { Badge, btn, statusTone, ui } from "@/components/ui";
 import { shiftIsoDate, todayInDhaka } from "@/components/workspace-date";
 import { apiRequest, apiRoutes } from "@/lib/api";
 import {
@@ -20,7 +26,10 @@ import {
   type HealthRecord,
   type MilkRecord,
   type MilkSession,
+  type PregnancyEpisode,
   type PregnancyReport,
+  type SireItem,
+  type WarehouseOption,
 } from "@/components/cow-profile/types";
 
 export function HealthCareTab({
@@ -315,6 +324,9 @@ export function BreedingTab({
   cow,
   breedingRecords,
   pregnancyReports,
+  pregnancyEpisodes = [],
+  sires = [],
+  warehouses = [],
   cows,
   reload,
   onError,
@@ -323,144 +335,106 @@ export function BreedingTab({
   cow: CowDetail;
   breedingRecords: BreedingRecord[];
   pregnancyReports: PregnancyReport[];
+  pregnancyEpisodes?: PregnancyEpisode[];
+  sires?: SireItem[];
+  warehouses?: WarehouseOption[];
   cows: CowListOption[];
   reload: () => Promise<void>;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
 }) {
   const today = todayInDhaka();
-  const [sourceMode, setSourceMode] = useState<"semen" | "sire">("semen");
-  const [heatDate, setHeatDate] = useState("");
-  const [seedDate, setSeedDate] = useState(today);
-  const [method, setMethod] = useState("artificial_insemination");
-  const [sireId, setSireId] = useState("");
-  const [semenCode, setSemenCode] = useState("");
-  const [semenProvider, setSemenProvider] = useState("");
-  const [doctorName, setDoctorName] = useState("");
-  const [breedingCost, setBreedingCost] = useState("");
-  const [breedingSaving, setBreedingSaving] = useState(false);
+  const [breedingModalOpen, setBreedingModalOpen] = useState(false);
+  const [editingBreeding, setEditingBreeding] = useState<BreedingRecord | null>(null);
+  const [checkModalOpen, setCheckModalOpen] = useState(false);
+  const [editingCheck, setEditingCheck] = useState<PregnancyReport | null>(null);
+  const [calvingPregnancyId, setCalvingPregnancyId] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalConfig | null>(null);
 
-  const [reportDate, setReportDate] = useState(today);
-  const [pregStatus, setPregStatus] = useState("confirmed");
-  const [expectedCalving, setExpectedCalving] = useState("");
-  const [actualCalving, setActualCalving] = useState("");
-  const [pregNotes, setPregNotes] = useState("");
-  const [pregSaving, setPregSaving] = useState(false);
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [resolveDate, setResolveDate] = useState(today);
-  const [resolveBusy, setResolveBusy] = useState(false);
-
-  const activePregnancies = pregnancyReports.filter(
-    (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected") && !p.actual_calving_date
+  const activeEpisode = useMemo(
+    () =>
+      pregnancyEpisodes.find(
+        (p) => !p.is_archived && (p.status === "confirmed" || p.status === "suspected") && !p.ended_at
+      ) ?? null,
+    [pregnancyEpisodes]
   );
-  const maleSires = cows.filter((c) => c.cow_id !== cow.cow_id && c.sex === "male" && c.status === "active");
 
-  async function resolvePregnancy(pregnancyId: string) {
-    setResolveBusy(true);
-    onError("");
-    onNotice("");
-    try {
-      await apiRequest(apiRoutes.health.pregnancyReport(pregnancyId), {
-        method: "PATCH",
-        body: {
-          status: "calved",
-          actual_calving_date: resolveDate || today,
-        },
-      });
-      setResolvingId(null);
-      onNotice("Pregnancy marked as calved and alerts resolved.");
-      await reload();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not update pregnancy report.");
-    } finally {
-      setResolveBusy(false);
+  const summary = cow.reproductive_summary;
+  const stateLabel = (() => {
+    if (!summary) return "Open";
+    if (summary.state === "pregnant") {
+      return `Pregnant${summary.days_pregnant != null ? ` · Day ${summary.days_pregnant}` : ""}${
+        summary.expected_calving_date ? ` · Due ${formatDisplayDate(summary.expected_calving_date)}` : ""
+      }`;
     }
+    if (summary.state === "suspected_pregnant") {
+      return `Suspected pregnant${
+        summary.expected_calving_date ? ` · Due ${formatDisplayDate(summary.expected_calving_date)}` : ""
+      }`;
+    }
+    if (summary.state === "bred") {
+      const days = summary.days_since_breeding ?? 0;
+      const checkDueIn = Math.max(0, 30 - days);
+      return `Bred (${days}d ago)${checkDueIn > 0 ? ` · Check due in ${checkDueIn}d` : " · Check due now"}`;
+    }
+    if (summary.state === "vwp") {
+      return `Post-calving VWP${
+        summary.next_breeding_eligible_date ? ` until ${formatDisplayDate(summary.next_breeding_eligible_date)}` : ""
+      }`;
+    }
+    return "Open";
+  })();
+
+  function requestArchiveBreeding(rec: BreedingRecord) {
+    setConfirmModal({
+      title: rec.is_archived ? "Restore breeding record?" : "Archive breeding record?",
+      mode: "confirm",
+      confirmLabel: rec.is_archived ? "Restore" : "Archive",
+      tone: rec.is_archived ? "primary" : "danger",
+      onConfirm: async () => {
+        await apiRequest(apiRoutes.health.breedingRecord(rec.breeding_id), {
+          method: "PATCH",
+          body: { is_archived: !rec.is_archived },
+        });
+        onNotice(rec.is_archived ? "Breeding record restored." : "Breeding record archived.");
+        await reload();
+      },
+    });
   }
 
-  async function submitBreeding(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onError("");
-    onNotice("");
-    if (heatDate && seedDate && seedDate < heatDate) {
-      onError("Insemination date cannot be earlier than heat date.");
-      return;
-    }
-    if (sourceMode === "sire" && !sireId) {
-      onError("Please select an on-farm sire.");
-      return;
-    }
-    if (sourceMode === "semen" && !semenCode.trim()) {
-      onError("Please enter a purchased semen code.");
-      return;
-    }
-    setBreedingSaving(true);
-    try {
-      await apiRequest(apiRoutes.health.breeding, {
-        method: "POST",
-        body: {
-          cow_id: cow.cow_id,
-          heat_date: heatDate || null,
-          seed_date: seedDate,
-          method,
-          sire_id: sourceMode === "sire" ? sireId || null : null,
-          semen_code: sourceMode === "semen" ? semenCode.trim() || null : null,
-          semen_provider: sourceMode === "semen" ? semenProvider.trim() || null : null,
-          doctor_name: doctorName.trim() || null,
-          cost: breedingCost !== "" ? Number(breedingCost) : 0,
-        },
-      });
-      setHeatDate("");
-      setSemenCode("");
-      setSemenProvider("");
-      setSireId("");
-      setDoctorName("");
-      setBreedingCost("");
-      onNotice("Breeding record saved.");
-      await reload();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not save breeding record.");
-    } finally {
-      setBreedingSaving(false);
-    }
+  function requestArchiveCheck(rep: PregnancyReport) {
+    setConfirmModal({
+      title: rep.is_archived ? "Restore pregnancy check?" : "Archive pregnancy check?",
+      mode: "confirm",
+      confirmLabel: rep.is_archived ? "Restore" : "Archive",
+      tone: rep.is_archived ? "primary" : "danger",
+      onConfirm: async () => {
+        await apiRequest(apiRoutes.health.pregnancyReport(rep.pregnancy_id), {
+          method: "PATCH",
+          body: { is_archived: !rep.is_archived },
+        });
+        onNotice(rep.is_archived ? "Pregnancy check restored." : "Pregnancy check archived.");
+        await reload();
+      },
+    });
   }
 
-  async function submitPregnancy(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onError("");
-    onNotice("");
-    if (
-      reportDate &&
-      expectedCalving &&
-      !actualCalving &&
-      (pregStatus === "confirmed" || pregStatus === "suspected") &&
-      expectedCalving < reportDate
-    ) {
-      onError("Expected calving date cannot be earlier than check date.");
-      return;
-    }
-    setPregSaving(true);
-    try {
-      await apiRequest(apiRoutes.health.pregnancy, {
-        method: "POST",
-        body: {
-          cow_id: cow.cow_id,
-          report_date: reportDate,
-          status: pregStatus,
-          expected_calving_date: expectedCalving || null,
-          actual_calving_date: actualCalving || null,
-          notes: pregNotes.trim() || null,
-        },
-      });
-      setExpectedCalving("");
-      setActualCalving("");
-      setPregNotes("");
-      onNotice("Pregnancy report saved.");
-      await reload();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Could not save pregnancy report.");
-    } finally {
-      setPregSaving(false);
-    }
+  function requestAbortPregnancy(ep: PregnancyEpisode) {
+    setConfirmModal({
+      title: `Mark pregnancy as aborted for ${cow.current_tag_number}?`,
+      description: "Closes the active pregnancy episode, clears calving alerts, and returns the cow to Open.",
+      mode: "reason",
+      confirmLabel: "Confirm abortion",
+      tone: "danger",
+      onConfirm: async (reason) => {
+        await apiRequest(apiRoutes.health.pregnancyEpisode(ep.pregnancy_id), {
+          method: "PATCH",
+          body: { status: "aborted", ended_at: today, notes: reason || ep.notes || null },
+        });
+        onNotice("Pregnancy marked as aborted and cow returned to Open.");
+        await reload();
+      },
+    });
   }
 
   const breedingColumns: PaginatedColumn<BreedingRecord>[] = [
@@ -468,8 +442,8 @@ export function BreedingTab({
     { key: "heat_date", label: "Heat", render: (r) => formatDisplayDate(r.heat_date) },
     {
       key: "source",
-      label: "Source",
-      render: (r) => r.sire_tag_number ? `Sire ${r.sire_tag_number}` : r.semen_code || "—",
+      label: "Sire / Semen",
+      render: (r) => r.sire_display_name || (r.sire_tag_number ? `Sire ${r.sire_tag_number}` : r.semen_code || "—"),
     },
     { key: "doctor_name", label: "Doctor", render: (r) => r.doctor_name || "—" },
     { key: "cost", label: "Cost", align: "right", render: (r) => formatMoney(r.cost) },
@@ -480,6 +454,32 @@ export function BreedingTab({
         <Badge tone={statusTone(r.outcome)}>
           <span className="capitalize">{r.outcome}</span>
         </Badge>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (r) => (
+        <div className="flex items-center gap-2 text-[12px]">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingBreeding(r);
+              setBreedingModalOpen(true);
+            }}
+            className="font-medium text-accent hover:underline"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => requestArchiveBreeding(r)}
+            className="font-medium text-muted hover:underline"
+          >
+            {r.is_archived ? "Restore" : "Archive"}
+          </button>
+          <SafeDataHistory entityType="breeding_records" entityId={r.breeding_id} entityLabel={`Breeding ${r.seed_date}`} />
+        </div>
       ),
     },
   ];
@@ -506,204 +506,269 @@ export function BreedingTab({
       render: (r) => formatDisplayDate(r.actual_calving_date),
     },
     { key: "notes", label: "Notes", render: (r) => <span className="text-muted">{r.notes || "—"}</span> },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (r) => (
+        <div className="flex items-center gap-2 text-[12px]">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingCheck(r);
+              setCheckModalOpen(true);
+            }}
+            className="font-medium text-accent hover:underline"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => requestArchiveCheck(r)}
+            className="font-medium text-muted hover:underline"
+          >
+            {r.is_archived ? "Restore" : "Archive"}
+          </button>
+          <SafeDataHistory entityType="pregnancy_reports" entityId={r.pregnancy_id} entityLabel={`Check ${r.report_date}`} />
+        </div>
+      ),
+    },
   ];
+
+  const activeBreedings = breedingRecords.filter((r) => !r.is_archived);
+  const activeChecks = pregnancyReports.filter((r) => !r.is_archived);
+  const activeEpisodes = pregnancyEpisodes.filter((p) => !p.is_archived);
 
   return (
     <div className="space-y-5">
-      {activePregnancies.length > 0 ? (
-        <section className="rounded-[8px] border border-accent/35 bg-accent-soft p-4 space-y-2.5">
-          <h3 className="text-[13px] font-semibold text-accent">Active pregnancy tracking</h3>
-          <div className="space-y-2 text-[13px] text-ink">
-            {activePregnancies.map((item) => (
-              <div key={item.pregnancy_id} className="flex flex-wrap items-center justify-between gap-3">
-                <span>
-                  <strong className="capitalize">{item.status}</strong> (checked {formatDisplayDate(item.report_date)})
-                  {item.expected_calving_date
-                    ? ` · Expected calving: ${formatDisplayDate(item.expected_calving_date)}`
-                    : ""}
-                </span>
-                {resolvingId === item.pregnancy_id ? (
+      {/* Single Reproductive Status Header with Next Logical Action */}
+      <section className="rounded-[8px] border border-accent/35 bg-accent-soft p-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[11.5px] font-medium uppercase tracking-wider text-muted">Reproductive status</p>
+          <h3 className="mt-0.5 text-[15px] font-semibold text-ink">{stateLabel}</h3>
+          {activeEpisode?.dry_off_date ? (
+            <p className="mt-0.5 text-[12px] text-muted">
+              Dry-off target: {formatDisplayDate(activeEpisode.dry_off_date)}
+              {activeEpisode.sire_display_name ? ` · Sire: ${activeEpisode.sire_display_name}` : ""}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {activeEpisode ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setCalvingPregnancyId(activeEpisode.pregnancy_id)}
+                className={btn("primary", "sm")}
+              >
+                Record calving
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCheck(null);
+                  setCheckModalOpen(true);
+                }}
+                className={btn("secondary", "sm")}
+              >
+                Log check
+              </button>
+              <button
+                type="button"
+                onClick={() => requestAbortPregnancy(activeEpisode)}
+                className={btn("danger", "sm")}
+              >
+                Mark aborted
+              </button>
+            </>
+          ) : summary?.state === "bred" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCheck(null);
+                  setCheckModalOpen(true);
+                }}
+                className={btn("primary", "sm")}
+              >
+                Log pregnancy check
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingBreeding(null);
+                  setBreedingModalOpen(true);
+                }}
+                className={btn("secondary", "sm")}
+              >
+                Log repeat breeding
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingBreeding(null);
+                  setBreedingModalOpen(true);
+                }}
+                className={btn("primary", "sm")}
+              >
+                Log breeding
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCheck(null);
+                  setCheckModalOpen(true);
+                }}
+                className={btn("secondary", "sm")}
+              >
+                Log check / Bought pregnant
+              </button>
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Grouped Reproductive Cycles */}
+      {activeEpisodes.length > 0 ? (
+        <section className="space-y-3">
+          <h3 className="text-[13px] font-semibold text-ink">Pregnancy &amp; calving cycles ({activeEpisodes.length})</h3>
+          <div className="space-y-3">
+            {activeEpisodes.map((ep, idx) => (
+              <div key={ep.pregnancy_id} className="rounded-[8px] border border-line bg-surface p-4 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="date"
-                      max={today}
-                      value={resolveDate}
-                      onChange={(e) => setResolveDate(e.target.value)}
-                      className={`${ui.input} !h-8 w-auto`}
-                    />
-                    <button
-                      type="button"
-                      disabled={resolveBusy}
-                      onClick={() => void resolvePregnancy(item.pregnancy_id)}
-                      className={btn("primary", "sm")}
-                    >
-                      {resolveBusy ? "Saving…" : "Confirm calving"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={resolveBusy}
-                      onClick={() => setResolvingId(null)}
-                      className={btn("secondary", "sm")}
-                    >
-                      Cancel
-                    </button>
+                    <span className="text-[13px] font-semibold text-ink">
+                      Cycle #{activeEpisodes.length - idx}
+                    </span>
+                    <Badge tone={statusTone(ep.status)}>
+                      <span className="capitalize">{ep.status}</span>
+                    </Badge>
+                    {ep.breeding_seed_date ? (
+                      <span className="text-[12px] text-muted">
+                        Bred {formatDisplayDate(ep.breeding_seed_date)}
+                      </span>
+                    ) : (
+                      <span className="text-[12px] text-muted">External / bought pregnant</span>
+                    )}
+                    {ep.sire_display_name ? (
+                      <span className="text-[12px] text-muted">· {ep.sire_display_name}</span>
+                    ) : null}
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setResolvingId(item.pregnancy_id);
-                      setResolveDate(today);
-                    }}
-                    className={btn("secondary", "sm")}
-                  >
-                    Record calving / Mark resolved
-                  </button>
-                )}
+                  <div className="text-[12px] text-muted">
+                    {ep.expected_calving_date ? `Due: ${formatDisplayDate(ep.expected_calving_date)}` : ""}
+                    {ep.ended_at ? ` · Ended: ${formatDisplayDate(ep.ended_at)}` : ""}
+                  </div>
+                </div>
+
+                {ep.checks.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 text-[11.5px]">
+                    {ep.checks.map((chk) => (
+                      <span key={chk.pregnancy_id} className="rounded-[4px] border border-line bg-subtle px-2 py-0.5 text-ink">
+                        Check {formatDisplayDate(chk.report_date)}: <strong className="capitalize">{chk.status}</strong>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {ep.calving_event ? (
+                  <div className="rounded-[6px] border border-line bg-subtle p-2.5 text-[12px] flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      Calved on <strong>{formatDisplayDate(ep.calving_event.calving_date)}</strong> (
+                      <span className="capitalize">{ep.calving_event.calving_ease.replaceAll("_", " ")}</span> ·{" "}
+                      {ep.calving_event.live_count} live, {ep.calving_event.stillborn_count} stillborn)
+                    </span>
+                    {ep.calving_event.calves.length > 0 ? (
+                      <span className="flex flex-wrap gap-1.5">
+                        {ep.calving_event.calves.map((calf) => (
+                          <Link
+                            key={calf.cow_id}
+                            href={`/herd/${calf.cow_id}`}
+                            className="rounded-[4px] border border-accent/40 bg-surface px-2 py-0.5 font-medium text-accent hover:underline"
+                          >
+                            Calf {calf.current_tag_number} ({calf.sex})
+                          </Link>
+                        ))}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
         </section>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr] items-start">
-        <PaginatedTableCard
-          title="Breeding history"
-          rows={breedingRecords.filter((r) => !r.is_archived)}
-          rowKey={(r) => r.breeding_id}
-          columns={breedingColumns}
-          emptyMessage="No breeding records for this cow."
-          defaultPageSize={10}
-          scrollHeightClass="max-h-[240px]"
-        />
+      <PaginatedTableCard
+        title="Breeding history"
+        rows={activeBreedings}
+        rowKey={(r) => r.breeding_id}
+        columns={breedingColumns}
+        emptyMessage="No breeding records for this cow."
+        defaultPageSize={10}
+        scrollHeightClass="max-h-[260px]"
+      />
 
-        <form
-          onSubmit={(event) => void submitBreeding(event)}
-          className="rounded-[8px] border border-line bg-surface p-4 space-y-3"
-        >
-          <h3 className="text-[14px] font-semibold text-ink">Log breeding</h3>
-          {cow.sex === "male" ? (
-            <p className="text-[12px] text-muted">
-              This animal is male; breeding records normally apply to female cows.
-            </p>
-          ) : null}
-          <div>
-            <span className="mb-1.5 block text-[12px] font-medium text-muted">Breeding source</span>
-            <Segmented
-              name="breeding_source"
-              size="sm"
-              value={sourceMode}
-              onChange={setSourceMode}
-              options={[
-                { value: "semen", label: "Purchased semen" },
-                { value: "sire", label: "On-farm sire" },
-              ]}
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className={ui.label}>
-              Heat date
-              <input type="date" value={heatDate} onChange={(e) => setHeatDate(e.target.value)} className={ui.input} />
-            </label>
-            <label className={ui.label}>
-              Insemination date *
-              <input type="date" required value={seedDate} onChange={(e) => setSeedDate(e.target.value)} className={ui.input} />
-            </label>
-            <label className={`${ui.label} sm:col-span-2`}>
-              Method *
-              <select value={method} onChange={(e) => setMethod(e.target.value)} className={ui.select}>
-                <option value="artificial_insemination">Artificial insemination</option>
-                <option value="natural">Natural</option>
-              </select>
-            </label>
-            {sourceMode === "sire" ? (
-              <label className={ui.label}>
-                On-farm sire *
-                <select required value={sireId} onChange={(e) => setSireId(e.target.value)} className={ui.select}>
-                  <option value="">Choose sire</option>
-                  {maleSires.map((s) => (
-                    <option key={s.cow_id} value={s.cow_id}>
-                      {s.current_tag_number}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <>
-                <label className={ui.label}>
-                  Semen code *
-                  <input required value={semenCode} onChange={(e) => setSemenCode(e.target.value)} className={ui.input} />
-                </label>
-                <label className={ui.label}>
-                  Semen provider
-                  <input value={semenProvider} onChange={(e) => setSemenProvider(e.target.value)} className={ui.input} />
-                </label>
-              </>
-            )}
-            <label className={ui.label}>
-              Doctor
-              <input value={doctorName} onChange={(e) => setDoctorName(e.target.value)} className={ui.input} />
-            </label>
-            <label className={ui.label}>
-              Cost (৳)
-              <input type="number" min="0" step="0.01" value={breedingCost} onChange={(e) => setBreedingCost(e.target.value)} className={ui.input} />
-            </label>
-          </div>
-          <button type="submit" disabled={breedingSaving} className={btn("primary", "md")}>
-            {breedingSaving ? "Saving…" : "Save breeding"}
-          </button>
-        </form>
-      </div>
+      <PaginatedTableCard
+        title="Pregnancy checks"
+        rows={activeChecks}
+        rowKey={(r) => r.pregnancy_id}
+        columns={pregnancyColumns}
+        emptyMessage="No pregnancy checks recorded."
+        defaultPageSize={10}
+        scrollHeightClass="max-h-[260px]"
+      />
 
-      <div className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr] items-start">
-        <PaginatedTableCard
-          title="Pregnancy checks"
-          rows={pregnancyReports.filter((r) => !r.is_archived)}
-          rowKey={(r) => r.pregnancy_id}
-          columns={pregnancyColumns}
-          emptyMessage="No pregnancy checks recorded."
-          defaultPageSize={10}
-          scrollHeightClass="max-h-[240px]"
-        />
+      <BreedingFormModal
+        key={`bf-${cow.cow_id}-${editingBreeding?.breeding_id ?? "new"}-${breedingModalOpen}`}
+        open={breedingModalOpen}
+        onClose={() => {
+          setBreedingModalOpen(false);
+          setEditingBreeding(null);
+        }}
+        onSaved={reload}
+        onError={onError}
+        onNotice={onNotice}
+        fixedCowId={cow.cow_id}
+        cows={cows}
+        sires={sires}
+        initialRecord={editingBreeding}
+        relatedSireIds={cow.pedigree?.related_sire_ids ?? []}
+        relatedSireCowIds={cow.pedigree?.related_sire_cow_ids ?? []}
+      />
 
-        <form
-          onSubmit={(event) => void submitPregnancy(event)}
-          className="rounded-[8px] border border-line bg-surface p-4 space-y-3"
-        >
-          <h3 className="text-[14px] font-semibold text-ink">Log pregnancy check</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className={ui.label}>
-              Report date *
-              <input type="date" required value={reportDate} onChange={(e) => setReportDate(e.target.value)} className={ui.input} />
-            </label>
-            <label className={ui.label}>
-              Result *
-              <select value={pregStatus} onChange={(e) => setPregStatus(e.target.value)} className={ui.select}>
-                <option value="confirmed">Confirmed</option>
-                <option value="suspected">Suspected</option>
-                <option value="failed">Not pregnant / failed</option>
-                <option value="calved">Calved</option>
-                <option value="aborted">Aborted</option>
-              </select>
-            </label>
-            <label className={ui.label}>
-              Expected calving
-              <input type="date" value={expectedCalving} onChange={(e) => setExpectedCalving(e.target.value)} className={ui.input} />
-            </label>
-            <label className={ui.label}>
-              Actual calving
-              <input type="date" value={actualCalving} onChange={(e) => setActualCalving(e.target.value)} className={ui.input} />
-            </label>
-            <label className={`${ui.label} sm:col-span-2`}>
-              Notes
-              <textarea rows={2} value={pregNotes} onChange={(e) => setPregNotes(e.target.value)} className={ui.textarea} />
-            </label>
-          </div>
-          <button type="submit" disabled={pregSaving} className={btn("primary", "md")}>
-            {pregSaving ? "Saving…" : "Save pregnancy check"}
-          </button>
-        </form>
-      </div>
+      <PregnancyCheckModal
+        key={`pc-${cow.cow_id}-${editingCheck?.pregnancy_id ?? "new"}-${checkModalOpen}`}
+        open={checkModalOpen}
+        onClose={() => {
+          setCheckModalOpen(false);
+          setEditingCheck(null);
+        }}
+        onSaved={reload}
+        onError={onError}
+        onNotice={onNotice}
+        fixedCowId={cow.cow_id}
+        cows={cows}
+        breedingRecords={breedingRecords}
+        initialReport={editingCheck}
+        defaultBreedingId={summary?.latest_open_breeding_id ?? null}
+      />
+
+      <CalvingDrawerModal
+        key={`calv-${calvingPregnancyId ?? "closed"}`}
+        open={Boolean(calvingPregnancyId)}
+        onClose={() => setCalvingPregnancyId(null)}
+        onSaved={reload}
+        onError={onError}
+        onNotice={onNotice}
+        pregnancyId={calvingPregnancyId ?? ""}
+        damTag={cow.current_tag_number}
+        warehouses={warehouses}
+        defaultBreed={cow.breed}
+      />
+
+      <ConfirmActionModal config={confirmModal} onClose={() => setConfirmModal(null)} />
     </div>
   );
 }

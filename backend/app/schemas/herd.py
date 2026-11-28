@@ -126,6 +126,9 @@ class CowBase(BaseModel):
     supplier_id: Optional[uuid.UUID] = None
     dam_id: Optional[uuid.UUID] = None
     sire_id: Optional[uuid.UUID] = None
+    sire_registry_id: Optional[uuid.UUID] = None
+    origin_calving_id: Optional[uuid.UUID] = None
+    birth_weight_kg: Optional[Decimal] = Field(None, gt=0, max_digits=8, decimal_places=2)
     warehouse_id: uuid.UUID
     status: str = Field("active", pattern="^(active|sold|deceased|archived)$")
     gives_milk: Optional[bool] = None
@@ -182,6 +185,8 @@ class CowUpdate(BaseModel):
     supplier_id: Optional[uuid.UUID] = None
     dam_id: Optional[uuid.UUID] = None
     sire_id: Optional[uuid.UUID] = None
+    sire_registry_id: Optional[uuid.UUID] = None
+    birth_weight_kg: Optional[Decimal] = Field(None, gt=0, max_digits=8, decimal_places=2)
     warehouse_id: Optional[uuid.UUID] = None
     status: Optional[str] = Field(None, pattern="^(active|sold|deceased|archived)$")
     gives_milk: Optional[bool] = None
@@ -270,8 +275,57 @@ class CowOffspringRead(BaseModel):
     cow_type: Optional[str] = None
     birth_date: Optional[date] = None
     status: str
+    other_parent_id: Optional[uuid.UUID] = None
+    other_parent_tag: Optional[str] = None
+    conception_method: Optional[str] = None
+    birth_weight_kg: Optional[Decimal] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CowPedigreeNode(BaseModel):
+    cow_id: Optional[uuid.UUID] = None
+    sire_registry_id: Optional[uuid.UUID] = None
+    label: str
+    is_external: bool = False
+
+
+class CowPedigreeRead(BaseModel):
+    dam: Optional[CowPedigreeNode] = None
+    sire: Optional[CowPedigreeNode] = None
+    maternal_grand_dam: Optional[CowPedigreeNode] = None
+    maternal_grand_sire: Optional[CowPedigreeNode] = None
+    paternal_grand_dam: Optional[CowPedigreeNode] = None
+    paternal_grand_sire: Optional[CowPedigreeNode] = None
+    related_sire_ids: List[uuid.UUID] = Field(default_factory=list)
+    related_sire_cow_ids: List[uuid.UUID] = Field(default_factory=list)
+
+
+class CowOriginContextRead(BaseModel):
+    calving_id: uuid.UUID
+    pregnancy_id: uuid.UUID
+    breeding_id: Optional[uuid.UUID] = None
+    dam_id: uuid.UUID
+    dam_tag: Optional[str] = None
+    sire_display_name: Optional[str] = None
+    conception_method: Optional[str] = None
+    insemination_date: Optional[date] = None
+    calving_date: date
+    gestation_days: Optional[int] = None
+    calving_ease: str
+    birth_weight_kg: Optional[Decimal] = None
+    littermates: List[CowOffspringRead] = Field(default_factory=list)
+
+
+class CowReproductiveSummaryRead(BaseModel):
+    state: str = "open"  # open | bred | suspected_pregnant | pregnant | vwp
+    days_pregnant: Optional[int] = None
+    days_since_breeding: Optional[int] = None
+    expected_calving_date: Optional[date] = None
+    dry_off_date: Optional[date] = None
+    next_breeding_eligible_date: Optional[date] = None
+    active_pregnancy_id: Optional[uuid.UUID] = None
+    latest_open_breeding_id: Optional[uuid.UUID] = None
 
 
 class CowSaleRecordRead(BaseModel):
@@ -291,7 +345,11 @@ class CowSaleRecordRead(BaseModel):
 
 
 class CowDetailRead(CowRead):
+    sire_display_name: Optional[str] = None
     warehouse_history: List[CowWarehouseHistoryRead] = []
     weight_records: List[WeightRecordRead] = []
     offspring: List[CowOffspringRead] = []
     sale_record: Optional[CowSaleRecordRead] = None
+    origin_context: Optional[CowOriginContextRead] = None
+    pedigree: Optional[CowPedigreeRead] = None
+    reproductive_summary: Optional[CowReproductiveSummaryRead] = None
